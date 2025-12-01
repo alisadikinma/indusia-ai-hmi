@@ -1,0 +1,43 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git commit:*)",
+      "Bash(php artisan make:migration:*)",
+      "Bash(php artisan:*)",
+      "Bash(findstr \"add_credential_fields_to_awards_table\")",
+      "Bash(findstr:*)",
+      "Bash(npm run dev)",
+      "Bash(timeout:*)",
+      "Bash(curl:*)",
+      "Bash(env)",
+      "Bash(del \"database\\migrations\\2025_10_15_100000_update_projects_table_for_new_fields.php\")",
+      "Bash(npm install:*)",
+      "Bash(dir:*)",
+      "Bash(php -r:*)",
+      "Bash(php verify_projects.php:*)",
+      "Bash(php verify_project_detail.php:*)",
+      "Bash(php fix_og_image.php:*)",
+      "Bash(del verify_projects.php verify_project_detail.php fix_og_image.php)",
+      "Bash(if exist verify_projects.php del verify_projects.php)",
+      "Bash(if exist verify_project_detail.php del verify_project_detail.php)",
+      "Bash(if exist fix_og_image.php del fix_og_image.php)",
+      "Bash(php import_summary.php:*)",
+      "Bash(php check_content_size.php:*)",
+      "Bash(php verify_empty.php:*)",
+      "Bash(php final_content_verification.php:*)",
+      "Bash(php check_project_48.php:*)",
+      "Bash(if exist check_project_48.php del check_project_48.php)",
+      "Bash(php populate_descriptions.php:*)",
+      "Bash(awk:*)",
+      "Bash(mkdir:*)",
+      "Bash(node process-images.js:*)",
+      "Bash(powershell -Command \"(Get-ChildItem -Path ''frontend/public/storage/projects'' -Filter ''*.webp'' -File).Count\")",
+      "Bash(powershell -Command:*)",
+      "Bash(cat:*)",
+      "Bash(nul)",
+      "Bash(php verify_fields.php:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
