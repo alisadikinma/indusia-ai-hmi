@@ -1,19 +1,33 @@
 'use client';
 
 import { useState } from 'react';
-import { X, AlertTriangle, CheckCircle } from 'lucide-react';
+import { X, AlertTriangle, CheckCircle, Loader2 } from 'lucide-react';
+import { useAuth } from '@/context/AuthContext';
+import { useOverrides } from '@/hooks/useOverrides';
+import { useImageUpload } from '@/hooks/useImageUpload';
+import { logOverrideSubmit } from '@/lib/eventLogger';
+import { notifyManagersNewOverride } from '@/lib/notificationHelper';
+import { InlineImageUploader } from '@/components/ui/ImageUploader';
 
 export default function FalseCallOverrideModal({
   isOpen,
   onClose,
   onConfirm,
+  onSuccess,
   defect,
   boardId,
   timestamp,
+  sectionId,
+  customerId,
 }) {
+  const { user } = useAuth();
+  const { createOverride } = useOverrides();
+  const { uploadImages, uploading: uploadingImages } = useImageUpload();
   const [selectedReason, setSelectedReason] = useState('');
   const [notes, setNotes] = useState('');
+  const [selectedFiles, setSelectedFiles] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState(null);
 
   if (!isOpen || !defect) return null;
 
@@ -29,23 +43,85 @@ export default function FalseCallOverrideModal({
     if (!selectedReason) return;
 
     setIsSubmitting(true);
+    setError(null);
 
-    setTimeout(() => {
-      onConfirm({
-        defectId: defect.id,
+    try {
+      // Create override via API
+      const overrideData = {
+        boardId: boardId,
+        defectType: defect.type,
+        location: defect.location || 'N/A',
+        confidence: defect.confidence,
+        reason: reasons.find(r => r.value === selectedReason)?.label || selectedReason,
+        operatorNotes: notes,
+        operatorId: user?.id,
+        operatorName: user?.name,
+        sectionId: sectionId || user?.selectedSectionId,
+        customerId: customerId || user?.selectedCustomerId,
+      };
+
+      const result = await createOverride(overrideData);
+
+      // Upload images if any (non-blocking - don't fail override if image upload fails)
+      if (selectedFiles.length > 0 && result?.id) {
+        uploadImages(selectedFiles, {
+          overrideId: result.id,
+          sectionId: sectionId || user?.selectedSectionId,
+          boardId: boardId,
+          userId: user?.id
+        }).catch(err => {
+          console.error('Image upload failed (non-blocking):', err);
+        });
+      }
+
+      // Log event (non-blocking)
+      logOverrideSubmit(user?.id, {
+        overrideId: result?.id,
+        boardId: boardId,
+        defectType: defect.type,
         reason: selectedReason,
-        notes,
+        imageCount: selectedFiles.length,
       });
-      setIsSubmitting(false);
+
+      // Notify managers (non-blocking)
+      notifyManagersNewOverride({
+        boardId: boardId,
+        operatorName: user?.name,
+      });
+
+      // Call legacy onConfirm if provided (backward compatibility)
+      if (onConfirm) {
+        onConfirm({
+          defectId: defect.id,
+          reason: selectedReason,
+          notes,
+        });
+      }
+
+      // Call onSuccess callback
+      if (onSuccess) {
+        onSuccess(result);
+      }
+
+      // Reset and close
       setSelectedReason('');
       setNotes('');
-    }, 150);
+      setSelectedFiles([]);
+      onClose();
+    } catch (err) {
+      console.error('Failed to submit override:', err);
+      setError(err.message || 'Failed to submit override');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleClose = () => {
     if (isSubmitting) return;
     setSelectedReason('');
     setNotes('');
+    setSelectedFiles([]);
+    setError(null);
     onClose();
   };
 
@@ -59,7 +135,7 @@ export default function FalseCallOverrideModal({
             </div>
             <div>
               <h2 className="text-xl font-bold text-indusia-text">
-                Operator Override – False Call Report
+                Operator Override - False Call Report
               </h2>
               <div className="mt-2 space-y-1">
                 <p className="text-sm text-indusia-textMuted">
@@ -82,6 +158,12 @@ export default function FalseCallOverrideModal({
         </div>
 
         <div className="px-8 py-6 space-y-6 max-h-[70vh] overflow-y-auto scrollbar-thin">
+          {error && (
+            <div className="bg-red-500/10 border border-red-500/30 rounded-lg px-4 py-3">
+              <p className="text-sm text-red-400">{error}</p>
+            </div>
+          )}
+
           <div>
             <h3 className="text-sm font-semibold text-indusia-text mb-4 uppercase tracking-wide">
               Select Override Reason
@@ -161,6 +243,22 @@ export default function FalseCallOverrideModal({
             </div>
           </div>
 
+          {/* Image Upload Section */}
+          <div>
+            <h3 className="text-sm font-semibold text-indusia-text mb-3 uppercase tracking-wide">
+              Attach Evidence Images (Optional)
+            </h3>
+            <p className="text-xs text-indusia-textMuted mb-3">
+              Upload photos showing why this is a false call. Max 5 images, 10MB each.
+            </p>
+            <InlineImageUploader
+              files={selectedFiles}
+              onFilesChange={setSelectedFiles}
+              uploading={isSubmitting || uploadingImages}
+              maxFiles={5}
+            />
+          </div>
+
           <div>
             <h3 className="text-sm font-semibold text-indusia-text mb-3 uppercase tracking-wide">
               Additional Notes
@@ -178,6 +276,11 @@ export default function FalseCallOverrideModal({
           <div className="bg-indusia-surfaceMuted border border-indusia-border rounded-lg px-4 py-3">
             <p className="text-xs text-indusia-textMuted leading-relaxed">
               This data will be logged for model improvement and quality records.
+              {selectedFiles.length > 0 && (
+                <span className="block mt-1 text-indusia-primary">
+                  {selectedFiles.length} image{selectedFiles.length !== 1 ? 's' : ''} will be uploaded for ML training.
+                </span>
+              )}
             </p>
           </div>
         </div>
@@ -198,13 +301,13 @@ export default function FalseCallOverrideModal({
           >
             {isSubmitting ? (
               <>
-                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                <Loader2 className="w-4 h-4 animate-spin" />
                 Processing...
               </>
             ) : (
               <>
                 <CheckCircle className="w-5 h-5" />
-                CONFIRM OVERRIDE → MARK AS PASS
+                CONFIRM OVERRIDE - MARK AS PASS
               </>
             )}
           </button>
