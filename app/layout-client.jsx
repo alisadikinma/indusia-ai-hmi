@@ -10,6 +10,8 @@ import SideNav from '@/components/layout/SideNav';
 import TopNav from '@/components/layout/TopNav';
 import SystemHealthBar from '@/components/system/SystemHealthBar';
 import HelpOverlay from '@/components/help/HelpOverlay';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { OfflineBanner } from '@/components/OfflineBanner';
 import { useEffect } from 'react';
 
 function LayoutContent({ children }) {
@@ -69,27 +71,32 @@ function LayoutContent({ children }) {
   };
 
   return (
-    <I18nProvider>
-      <HelpOverlayProvider defaultContext={getContextFromPath()}>
-        <NotificationProvider>
-          <SystemHealthProvider>
-            <div className="flex h-screen bg-indusia-bg">
-              <SideNav />
+    <ErrorBoundary>
+      <I18nProvider>
+        <HelpOverlayProvider defaultContext={getContextFromPath()}>
+          <NotificationProvider>
+            <SystemHealthProvider>
+              <OfflineBanner />
+              <div className="flex h-screen bg-indusia-bg">
+                <SideNav />
 
-              <div className="flex-1 ml-64 flex flex-col">
-                <TopNav />
-                <SystemHealthBar />
+                <div className="flex-1 ml-64 flex flex-col">
+                  <TopNav />
+                  <SystemHealthBar />
 
-                <main className="flex-1 overflow-y-auto px-8 py-6">
-                  {children}
-                </main>
+                  <main className="flex-1 overflow-y-auto px-8 py-6">
+                    <ErrorBoundary>
+                      {children}
+                    </ErrorBoundary>
+                  </main>
+                </div>
               </div>
-            </div>
-            <HelpOverlay />
-          </SystemHealthProvider>
-        </NotificationProvider>
-      </HelpOverlayProvider>
-    </I18nProvider>
+              <HelpOverlay />
+            </SystemHealthProvider>
+          </NotificationProvider>
+        </HelpOverlayProvider>
+      </I18nProvider>
+    </ErrorBoundary>
   );
 }
 

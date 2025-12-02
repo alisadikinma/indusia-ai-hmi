@@ -2,6 +2,8 @@
 
 import { createContext, useContext, useState, useMemo, useCallback, useEffect } from 'react';
 import { mockNotifications } from '@/data/mockNotifications';
+import { subscribeToNotifications } from '@/lib/realtime/subscriptions';
+import { useToast } from '@/hooks/useToast';
 
 const NotificationContext = createContext(null);
 
@@ -46,6 +48,42 @@ export function NotificationProvider({ children, userId }) {
   useEffect(() => {
     fetchNotifications();
   }, [fetchNotifications]);
+
+  // Real-time subscription for new notifications
+  useEffect(() => {
+    if (!userId) return;
+
+    const unsubscribe = subscribeToNotifications(userId, (newNotif) => {
+      // Add new notification to the list
+      setNotifications((prev) => {
+        // Prevent duplicates
+        if (prev.some((n) => n.id === newNotif.id)) {
+          return prev;
+        }
+        return [newNotif, ...prev];
+      });
+
+      // Show toast notification for real-time updates
+      try {
+        // Note: Toast context may not be available in all contexts
+        // This is a graceful fallback pattern
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('indusia-notification', {
+            detail: {
+              title: newNotif.title,
+              description: newNotif.message,
+              variant: newNotif.severity === 'error' ? 'error' :
+                       newNotif.severity === 'warning' ? 'warning' : 'info'
+            }
+          }));
+        }
+      } catch (err) {
+        console.warn('[NotificationContext] Could not show toast:', err);
+      }
+    });
+
+    return unsubscribe;
+  }, [userId]);
 
   const unreadCount = useMemo(() => {
     return notifications.filter((n) => !n.read).length;

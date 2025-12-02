@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useState, useCallback } from 'react';
+import { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { X } from 'lucide-react';
 
 const ToastContext = createContext(null);
@@ -20,6 +20,21 @@ export function ToastProvider({ children }) {
       setToasts((prev) => prev.filter((toast) => toast.id !== id));
     }, 5000);
   }, []);
+
+  // Listen for custom notification events (from realtime subscriptions, etc.)
+  useEffect(() => {
+    const handleNotificationEvent = (event) => {
+      const { title, description, variant } = event.detail || {};
+      if (title || description) {
+        showToast({ title, description, variant });
+      }
+    };
+
+    window.addEventListener('indusia-notification', handleNotificationEvent);
+    return () => {
+      window.removeEventListener('indusia-notification', handleNotificationEvent);
+    };
+  }, [showToast]);
 
   const dismissToast = useCallback((id) => {
     setToasts((prev) => prev.filter((toast) => toast.id !== id));

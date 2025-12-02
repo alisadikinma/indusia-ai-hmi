@@ -35,7 +35,9 @@
       "Bash(powershell -Command:*)",
       "Bash(cat:*)",
       "Bash(nul)",
-      "Bash(php verify_fields.php:*)"
+      "Bash(php verify_fields.php:*)",
+      "Bash(npm run build:*)",
+      "Bash(npm test:*)"
     ],
     "deny": [],
     "ask": []
