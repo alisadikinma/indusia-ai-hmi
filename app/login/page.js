@@ -1,110 +1,62 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
-import { customers, sections, customerSections, lines, userProfiles } from '@/data/masterData';
-import { LogIn, Eye, EyeOff } from 'lucide-react';
+import { LogIn, Eye, EyeOff, Loader2 } from 'lucide-react';
 
 export default function LoginPage() {
   const router = useRouter();
-  const { loginWithProfile } = useAuth();
+  const { login } = useAuth();
 
-  const [selectedUserId, setSelectedUserId] = useState('');
-  const [selectedProfile, setSelectedProfile] = useState(null);
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [passwordError, setPasswordError] = useState('');
+  const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
-  const [selectedSectionId, setSelectedSectionId] = useState('');
-  const [selectedCustomerId, setSelectedCustomerId] = useState('');
-  const [selectedLineId, setSelectedLineId] = useState('');
-
-  const allowedSections = useMemo(() => {
-    if (!selectedProfile || selectedProfile.role !== 'operator') return [];
-    return sections.filter(s => selectedProfile.sections.includes(s.id));
-  }, [selectedProfile]);
-
-  const allowedCustomers = useMemo(() => {
-    if (!selectedSectionId) return [];
-    const customerIdsForSection = customerSections
-      .filter(cs => cs.sectionId === selectedSectionId)
-      .map(cs => cs.customerId);
-    return customers.filter(c => customerIdsForSection.includes(c.id));
-  }, [selectedSectionId]);
-
-  const allowedLines = useMemo(() => {
-    if (!selectedCustomerId || !selectedSectionId) return [];
-    return lines.filter(l => l.customerId === selectedCustomerId && l.sectionId === selectedSectionId);
-  }, [selectedCustomerId, selectedSectionId]);
-
-  const handleUserChange = (e) => {
-    const id = e.target.value;
-    const profile = userProfiles.find(u => u.id === id) || null;
-
-    setSelectedUserId(id);
-    setSelectedProfile(profile);
-    setPassword('');
-    setPasswordError('');
-    setSelectedSectionId('');
-    setSelectedCustomerId('');
-    setSelectedLineId('');
-  };
-
-  const handleSectionChange = (sectionId) => {
-    setSelectedSectionId(sectionId);
-    setSelectedCustomerId('');
-    setSelectedLineId('');
-  };
-
-  const handleCustomerChange = (customerId) => {
-    setSelectedCustomerId(customerId);
-    setSelectedLineId('');
-  };
-
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    setPasswordError('');
+    setError('');
 
-    if (!selectedProfile) {
-      setPasswordError('Please select a user.');
+    if (!email) {
+      setError('Please enter your email.');
       return;
     }
 
     if (!password) {
-      setPasswordError('Please enter password.');
+      setError('Please enter your password.');
       return;
     }
 
-    if (password !== selectedProfile.password) {
-      setPasswordError('Incorrect password.');
-      return;
-    }
+    setIsLoading(true);
 
-    if (selectedProfile.role === 'operator') {
-      if (!selectedSectionId || !selectedCustomerId || !selectedLineId) {
-        setPasswordError('Please select Section, Customer, and Line.');
+    try {
+      const result = await login(email, password);
+
+      if (!result.success) {
+        setError(result.error || 'Login failed');
+        setIsLoading(false);
         return;
       }
 
-      loginWithProfile(selectedProfile, {
-        sectionId: selectedSectionId,
-        customerId: selectedCustomerId,
-        lineId: selectedLineId,
-      });
-
-      router.push('/inspection/result/current');
-      return;
-    }
-
-    loginWithProfile(selectedProfile);
-
-    if (selectedProfile.role === 'manager') {
-      router.push('/inspection/overrides');
-    } else if (selectedProfile.role === 'engineer') {
-      router.push('/engineering/master-data');
-    } else if (selectedProfile.role === 'superadmin') {
-      router.push('/engineering/master-data');
+      // Redirect based on role
+      const user = result.user;
+      if (user.role === 'operator' || user.role_id === 'operator') {
+        router.push('/inspection/result/current');
+      } else if (user.role === 'manager' || user.role_id === 'manager') {
+        router.push('/inspection/overrides');
+      } else if (user.role === 'engineer' || user.role_id === 'engineer') {
+        router.push('/engineering/master-data');
+      } else if (user.role === 'superadmin' || user.role_id === 'superadmin') {
+        router.push('/engineering/master-data');
+      } else {
+        router.push('/');
+      }
+    } catch (err) {
+      console.error('Login error:', err);
+      setError('An error occurred. Please try again.');
+      setIsLoading(false);
     }
   };
 
@@ -112,6 +64,7 @@ export default function LoginPage() {
     <div className="min-h-screen bg-indusia-bg flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         <div className="bg-indusia-surface rounded-xl shadow-2xl border border-indusia-border overflow-hidden">
+          {/* Header */}
           <div className="bg-gradient-to-r from-indusia-primary to-indusia-primary/80 px-8 py-6">
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 bg-white/20 rounded-lg flex items-center justify-center">
@@ -124,141 +77,95 @@ export default function LoginPage() {
             </div>
           </div>
 
+          {/* Form */}
           <div className="px-8 py-8">
             <div className="mb-6">
-              <h2 className="text-lg font-semibold text-indusia-text mb-2">
-                {selectedProfile?.role === 'operator' ? 'Operator Login' : 'User Login'}
-              </h2>
+              <h2 className="text-lg font-semibold text-indusia-text mb-2">User Login</h2>
               <p className="text-sm text-indusia-textMuted">
-                {selectedProfile?.role === 'operator'
-                  ? 'Select your profile, workstation context, and enter credentials.'
-                  : 'Select your profile and enter your password.'}
+                Enter your email and password to continue.
               </p>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-5">
+              {/* Email */}
               <div>
-                <label className="block text-sm font-medium text-indusia-text mb-2">Username</label>
-                <select
-                  value={selectedUserId}
-                  onChange={handleUserChange}
+                <label className="block text-sm font-medium text-indusia-text mb-2">
+                  Email
+                </label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="Enter your email"
                   className="w-full px-4 py-3 bg-indusia-bg border border-indusia-border rounded-lg text-indusia-text focus:outline-none focus:ring-2 focus:ring-indusia-primary focus:border-transparent"
-                >
-                  <option value="">Select username...</option>
-                  {userProfiles.map((profile) => (
-                    <option key={profile.id} value={profile.id}>
-                      {profile.name} ({profile.role})
-                    </option>
-                  ))}
-                </select>
+                  disabled={isLoading}
+                />
               </div>
 
-              {selectedProfile && (
-                <>
-                  <div>
-                    <label className="block text-sm font-medium text-indusia-text mb-2">Password</label>
-                    <div className="relative">
-                      <input
-                        type={showPassword ? 'text' : 'password'}
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        placeholder="Enter your password"
-                        className="w-full px-4 py-3 bg-indusia-bg border border-indusia-border rounded-lg text-indusia-text focus:outline-none focus:ring-2 focus:ring-indusia-primary focus:border-transparent pr-12"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword(!showPassword)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-indusia-textMuted hover:text-indusia-text transition-colors"
-                      >
-                        {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                      </button>
-                    </div>
-                  </div>
+              {/* Password */}
+              <div>
+                <label className="block text-sm font-medium text-indusia-text mb-2">
+                  Password
+                </label>
+                <div className="relative">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Enter your password"
+                    className="w-full px-4 py-3 bg-indusia-bg border border-indusia-border rounded-lg text-indusia-text focus:outline-none focus:ring-2 focus:ring-indusia-primary focus:border-transparent pr-12"
+                    disabled={isLoading}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-indusia-textMuted hover:text-indusia-text transition-colors"
+                  >
+                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  </button>
+                </div>
+              </div>
 
-                  {selectedProfile.role === 'operator' && (
-                    <>
-                      <div className="pt-2 border-t border-indusia-border">
-                        <p className="text-xs font-semibold text-indusia-textMuted uppercase mb-3">
-                          Workstation Context
-                        </p>
-
-                        <div className="space-y-4">
-                          <div>
-                            <label className="block text-sm font-medium text-indusia-text mb-2">Section</label>
-                            <select
-                              value={selectedSectionId}
-                              onChange={(e) => handleSectionChange(e.target.value)}
-                              className="w-full px-4 py-3 bg-indusia-bg border border-indusia-border rounded-lg text-indusia-text focus:outline-none focus:ring-2 focus:ring-indusia-primary focus:border-transparent"
-                            >
-                              <option value="">Select section...</option>
-                              {allowedSections.map((section) => (
-                                <option key={section.id} value={section.id}>
-                                  {section.name}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-
-                          {selectedSectionId && (
-                            <div>
-                              <label className="block text-sm font-medium text-indusia-text mb-2">Customer</label>
-                              <select
-                                value={selectedCustomerId}
-                                onChange={(e) => handleCustomerChange(e.target.value)}
-                                className="w-full px-4 py-3 bg-indusia-bg border border-indusia-border rounded-lg text-indusia-text focus:outline-none focus:ring-2 focus:ring-indusia-primary focus:border-transparent"
-                              >
-                                <option value="">Select customer...</option>
-                                {allowedCustomers.map((customer) => (
-                                  <option key={customer.id} value={customer.id}>
-                                    {customer.name}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
-                          )}
-
-                          {selectedCustomerId && (
-                            <div>
-                              <label className="block text-sm font-medium text-indusia-text mb-2">
-                                Production Line
-                              </label>
-                              <select
-                                value={selectedLineId}
-                                onChange={(e) => setSelectedLineId(e.target.value)}
-                                className="w-full px-4 py-3 bg-indusia-bg border border-indusia-border rounded-lg text-indusia-text focus:outline-none focus:ring-2 focus:ring-indusia-primary focus:border-transparent"
-                              >
-                                <option value="">Select line...</option>
-                                {allowedLines.map((line) => (
-                                  <option key={line.id} value={line.id}>
-                                    {line.name}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </>
-                  )}
-                </>
-              )}
-
-              {passwordError && (
+              {/* Error Message */}
+              {error && (
                 <div className="bg-indusia-fail/10 border border-indusia-fail rounded-lg px-4 py-3">
-                  <p className="text-indusia-fail text-sm">{passwordError}</p>
+                  <p className="text-indusia-fail text-sm">{error}</p>
                 </div>
               )}
 
+              {/* Submit Button */}
               <button
                 type="submit"
-                className="w-full px-6 py-4 bg-indusia-primary text-white rounded-lg font-semibold text-base hover:opacity-90 transition-all flex items-center justify-center gap-2"
+                disabled={isLoading}
+                className="w-full px-6 py-4 bg-indusia-primary text-white rounded-lg font-semibold text-base hover:opacity-90 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <LogIn className="w-5 h-5" />
-                Login
+                {isLoading ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    Logging in...
+                  </>
+                ) : (
+                  <>
+                    <LogIn className="w-5 h-5" />
+                    Login
+                  </>
+                )}
               </button>
             </form>
+
+            {/* Dev Credentials Hint */}
+            <div className="mt-6 p-4 bg-indusia-bg rounded-lg border border-indusia-border">
+              <p className="text-xs text-indusia-textMuted mb-2 font-semibold">Development Credentials:</p>
+              <div className="text-xs text-indusia-textMuted space-y-1">
+                <p><span className="text-indusia-text">Super Admin:</span> admin@indusia.com / admin123</p>
+                <p><span className="text-indusia-text">Manager:</span> manager@indusia.com / manager123</p>
+                <p><span className="text-indusia-text">Operator:</span> operator@indusia.com / operator123</p>
+                <p><span className="text-indusia-text">Engineer:</span> engineer@indusia.com / engineer123</p>
+              </div>
+            </div>
           </div>
 
+          {/* Footer */}
           <div className="px-8 py-4 bg-indusia-surfaceMuted border-t border-indusia-border">
             <p className="text-xs text-indusia-textMuted text-center">
               INDUSIA AI Visual Inspection System v1.0

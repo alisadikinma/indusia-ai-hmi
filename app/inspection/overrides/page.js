@@ -98,7 +98,10 @@ export default function OverrideApprovalsPage() {
     }
   }, [apiOverrides, loading]);
 
-  if (!user || !['manager', 'superadmin'].includes(user.role)) {
+  // Support roleId (API camelCase), role_id (raw), and role (mock)
+  const userRole = user?.roleId || user?.role_id || user?.role;
+
+  if (!user || !['manager', 'superadmin'].includes(userRole)) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center">
         <div className="bg-indusia-surface rounded-xl shadow-xl border border-indusia-border p-8 max-w-md text-center">
@@ -123,7 +126,7 @@ export default function OverrideApprovalsPage() {
 
   const filteredOverrides = overrides
     .filter((override) => {
-      if (user.role === 'manager') {
+      if (userRole === 'manager') {
         return allowedSectionIds.includes(override.sectionId);
       }
       return true;

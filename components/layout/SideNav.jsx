@@ -11,6 +11,10 @@ export default function SideNav() {
   const { user } = useAuth();
   const { t } = useI18n();
 
+  // DEBUG: Log user data
+  console.log('[SideNav] user:', user);
+  console.log('[SideNav] roleId:', user?.roleId, 'role_id:', user?.role_id, 'role:', user?.role);
+
   const navItems = [
     {
       labelKey: 'nav.hmi',
@@ -66,11 +70,14 @@ export default function SideNav() {
     return pathname.startsWith(href.split('/').slice(0, 3).join('/'));
   };
 
+  // Support roleId (API camelCase), role_id (raw), and role (mock)
+  const userRole = user?.roleId || user?.role_id || user?.role;
+
   const visibleItems = navItems.filter((item) =>
-    user && item.roles.includes(user.role)
+    user && item.roles.includes(userRole)
   );
 
-  const isSuperAdmin = user?.role === 'superadmin';
+  const isSuperAdmin = userRole === 'superadmin';
 
   return (
     <aside className="fixed left-0 top-0 h-full w-64 bg-indusia-surface border-r border-indusia-border flex flex-col">
@@ -148,7 +155,7 @@ export default function SideNav() {
             Signed in as: <span className="text-indusia-text font-medium">{user.name}</span>
           </p>
           <p className="text-xs text-indusia-textMuted">
-            Role: <span className="text-indusia-text font-medium capitalize">{user.role}</span>
+            Role: <span className="text-indusia-text font-medium capitalize">{user.roleId || user.role_id || user.role}</span>
           </p>
           <p className="text-xs text-indusia-textMuted mt-3 pt-3 border-t border-indusia-border">
             Version 1.0.0

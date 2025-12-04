@@ -6,6 +6,23 @@ import { sanitizeRequestBody, sanitizeEmail } from '@/lib/utils/sanitize'
 import { withRateLimitType } from '@/lib/rateLimit'
 import { auditLogin, auditLoginFailed } from '@/lib/audit'
 
+// Mock users for fallback when Supabase is not configured
+const mockUsers = [
+  { id: 'u1', name: 'Admin User', email: 'admin@indusia.com', password: 'admin123', role_id: 'superadmin', role: 'superadmin', status: 'active', sections: [] },
+  { id: 'u2', name: 'Manager User', email: 'manager@indusia.com', password: 'manager123', role_id: 'manager', role: 'manager', status: 'active', sections: ['sec-smt', 'sec-mi'] },
+  { id: 'u3', name: 'Operator User', email: 'operator@indusia.com', password: 'operator123', role_id: 'operator', role: 'operator', status: 'active', sections: ['sec-smt'] },
+  { id: 'u4', name: 'Engineer User', email: 'engineer@indusia.com', password: 'engineer123', role_id: 'engineer', role: 'engineer', status: 'active', sections: [] },
+]
+
+/**
+ * Check if Supabase is properly configured
+ */
+function isSupabaseConfigured() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  return url && key && !url.includes('your-project-id') && !key.includes('your-anon-key')
+}
+
 /**
  * POST /api/auth/login
  * Body: { email, password }
@@ -31,12 +48,43 @@ async function handleLogin(request) {
 
     const { email, password } = validation.data
 
-    // Find user by email
+    // Check if Supabase is configured
+    if (!isSupabaseConfigured()) {
+      console.warn('[auth/login] Supabase not configured, using mock authentication')
+      
+      // Use mock users
+      const mockUser = mockUsers.find(u => u.email === email && u.password === password)
+      
+      if (!mockUser) {
+        return NextResponse.json(
+          { success: false, error: 'Invalid email or password' },
+          { status: 401 }
+        )
+      }
+
+      if (mockUser.status !== 'active') {
+        return NextResponse.json(
+          { success: false, error: 'Account is not active. Please contact administrator.' },
+          { status: 403 }
+        )
+      }
+
+      // Remove password before returning
+      const { password: _, ...safeUser } = mockUser
+
+      return NextResponse.json({
+        success: true,
+        data: { user: safeUser },
+        _mock: true // Indicate this is mock data
+      })
+    }
+
+    // Try Supabase authentication
     const result = await usersRepo.getByEmail(email)
 
     if (result.error || !result.data) {
       // Log failed login attempt
-      await auditLoginFailed(email, 'User not found', request)
+      await auditLoginFailed(email, 'User not found', request).catch(() => {})
 
       // Use generic error message to prevent user enumeration
       return NextResponse.json(
@@ -51,7 +99,7 @@ async function handleLogin(request) {
     // In production, use bcrypt.compare()
     if (user.password !== password) {
       // Log failed login attempt
-      await auditLoginFailed(email, 'Invalid password', request)
+      await auditLoginFailed(email, 'Invalid password', request).catch(() => {})
 
       return NextResponse.json(
         { success: false, error: 'Invalid email or password' },
@@ -62,7 +110,7 @@ async function handleLogin(request) {
     // Check user status
     if (user.status !== 'active') {
       // Log failed login attempt
-      await auditLoginFailed(email, 'Account inactive', request)
+      await auditLoginFailed(email, 'Account inactive', request).catch(() => {})
 
       return NextResponse.json(
         { success: false, error: 'Account is not active. Please contact administrator.' },
@@ -74,7 +122,7 @@ async function handleLogin(request) {
     const { password: _, ...safeUser } = user
 
     // Log successful login
-    await auditLogin(safeUser, request)
+    await auditLogin(safeUser, request).catch(() => {})
 
     return NextResponse.json({
       success: true,
@@ -84,6 +132,25 @@ async function handleLogin(request) {
     })
   } catch (error) {
     console.error('[auth/login]', error)
+    
+    // Fallback to mock if Supabase fails
+    try {
+      const body = await request.clone().json()
+      const mockUser = mockUsers.find(u => u.email === body.email && u.password === body.password)
+      
+      if (mockUser && mockUser.status === 'active') {
+        const { password: _, ...safeUser } = mockUser
+        return NextResponse.json({
+          success: true,
+          data: { user: safeUser },
+          _mock: true,
+          _fallback: true
+        })
+      }
+    } catch (e) {
+      // Ignore fallback errors
+    }
+
     return NextResponse.json(
       { success: false, error: 'An error occurred during login' },
       { status: 500 }
