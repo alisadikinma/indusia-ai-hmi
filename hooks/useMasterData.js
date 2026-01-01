@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { authFetch } from '@/lib/utils/authFetch';
 import {
   customers as mockCustomers,
   sections as mockSections,
@@ -23,7 +24,7 @@ export function useMasterData() {
 
     const fetchWithFallback = async (endpoint, fallbackData, setter) => {
       try {
-        const res = await fetch(endpoint);
+        const res = await authFetch(endpoint);
         if (!res.ok) throw new Error('API request failed');
         const json = await res.json();
         if (!json.success) throw new Error(json.error);
@@ -68,7 +69,7 @@ export function useMasterData() {
 
   const getSectionsByCustomer = useCallback(async (customerId) => {
     try {
-      const res = await fetch(`/api/master-data/sections?customer_id=${customerId}`);
+      const res = await authFetch(`/api/master-data/sections?customer_id=${customerId}`);
       if (!res.ok) throw new Error('API request failed');
       const json = await res.json();
       if (!json.success) throw new Error(json.error);

@@ -23,6 +23,16 @@ npm run lint
 
 # Type checking
 npm run typecheck
+
+# Unit tests (Jest)
+npm test                  # Run all tests
+npm run test:watch        # Watch mode
+npm run test:coverage     # With coverage report
+
+# E2E tests (Playwright)
+npm run test:e2e          # Headless
+npm run test:e2e:headed   # With browser
+npm run test:e2e:ui       # Interactive UI mode
 ```
 
 ## Architecture
@@ -95,19 +105,29 @@ indusia: {
 
 Use these color tokens instead of arbitrary colors to maintain design consistency.
 
-### Data Layer (Current State)
+### Data Layer Architecture
 
-**Important**: The app currently uses mock data from `data/` directory:
-- `data/masterData.js` - Customers, sections, lines, boards
-- `data/mockEvents.js` - Event log data
-- `data/mockNotifications.js` - Notification data
+The app uses a three-tier data architecture:
 
-All custom hooks in `hooks/` currently use this mock data. The planned migration is:
-1. Create repository layer in `lib/repos/`
-2. Create API routes in `app/api/`
-3. Update hooks to use Supabase client instead of mock data
+```
+Hooks (hooks/) → API Routes (app/api/) → Repositories (lib/repos/) → Supabase
+```
 
-When modifying data-related code, be aware that hooks will need to be refactored for Supabase integration.
+**Repository Layer** (`lib/repos/`):
+- Direct Supabase queries with error handling
+- Case conversion utilities: `toCamelCase()`, `toSnakeCase()` in `lib/repos/index.js`
+- Key repos: `overridesRepo`, `usersRepo`, `rolesRepo`, `masterDataRepo`, `notificationsRepo`, `modelsRepo`, `eventLogRepo`, `dashboardRepo`, `inspectionFramesRepo`
+
+**API Routes** (`app/api/`):
+- RESTful endpoints with authentication/authorization via `withAuth()` middleware
+- Input validation using Zod schemas from `lib/validations/schemas.js`
+- Section-based access control via `lib/auth/sectionAccess.js`
+- Input sanitization via `lib/utils/sanitize.js`
+
+**Mock Data** (`data/`):
+- `data/masterData.js` - Customers, sections, lines, boards (fallback/seed data)
+- `data/mockEvents.js` - Event log samples
+- `data/mockNotifications.js` - Notification samples
 
 ### System Health Monitoring
 
@@ -179,6 +199,20 @@ The codebase mixes TypeScript (.ts, .tsx) and JavaScript (.js, .jsx):
 
 TypeScript errors are currently ignored during builds (`ignoreBuildErrors: true` in `next.config.js`). When adding new TypeScript files, ensure proper typing even though errors won't block builds.
 
+## Testing
+
+**Unit Tests (Jest)**:
+- Tests in `__tests__/` directories or `*.test.js` files
+- Setup in `jest.setup.js`, config in `jest.config.js`
+- Run single test: `npm test -- path/to/test.test.js`
+- Coverage collected from: `lib/`, `hooks/`, `components/`, `context/`, `app/api/`
+
+**E2E Tests (Playwright)**:
+- Tests in `e2e/` directory
+- Config in `playwright.config.js`
+- Auto-starts dev server before tests
+- Reports generated in `playwright-report/`
+
 ## Environment Setup
 
 Required environment variables (create `.env`):
@@ -221,6 +255,36 @@ const { showToast } = useToast();
 showToast('Operation completed successfully');
 ```
 
+### API Route Patterns
+
+API routes use a consistent pattern with auth middleware and Zod validation:
+
+```js
+import { withAuth } from '@/lib/auth/apiAuth'
+import { validate, validationErrorResponse } from '@/lib/validations/validate'
+import { createOverrideSchema } from '@/lib/validations/schemas'
+import { sanitizeRequestBody } from '@/lib/utils/sanitize'
+
+async function handlePOST(request) {
+  const body = await request.json()
+  const sanitizedBody = sanitizeRequestBody(body)
+
+  const validation = validate(createOverrideSchema, sanitizedBody)
+  if (!validation.success) {
+    return validationErrorResponse(validation.errors)
+  }
+
+  // request.user is attached by withAuth middleware
+  const result = await someRepo.create(validation.data)
+  return NextResponse.json({ success: true, data: result.data })
+}
+
+// Wrap handler with auth + permission check
+export const POST = withAuth('overrides:create')(handlePOST)
+```
+
+Permission strings follow the format `resource:action` (e.g., `users:read`, `overrides:create`).
+
 ## Database Schema Notes
 
 The full schema is in `indusia_schema_v1.md`. Key tables:
@@ -232,13 +296,98 @@ The full schema is in `indusia_schema_v1.md`. Key tables:
 
 When implementing Supabase queries, use Row Level Security (RLS) policies based on user roles.
 
+## Phase Execution Workflow
+
+### Implementation Prompts
+
+Detailed implementation prompts are stored in `.claude/prompts/` directory:
+
+| Phase | File | Description |
+|-------|------|-------------|
+| 1 | `phase-1-dashboard-backend.md` | Dashboard KPIs backend (repos + APIs) |
+| 2 | `phase-2-dashboard-frontend.md` | Dashboard frontend (charts + components) |
+| 3 | `phase-3-override-annotation.md` | Override annotation canvas |
+| 4 | `phase-4-live-inspection.md` | Live inspection SSE + overlay |
+| 5 | `phase-5-operator-page.md` | HMI Operator page route + board selector |
+| 6 | `phase-6-inspection-api.md` | Inspection action API + DB schema |
+
+### Post-Phase Checklist
+
+**IMPORTANT:** After completing each phase, ALWAYS perform these steps:
+
+1. **Update README.md** — Add/update relevant sections:
+   - New features implemented
+   - New API endpoints
+   - New components created
+   - Database changes
+   - Configuration changes
+
+2. **Update this section** — Mark phase as completed:
+   ```
+   | Phase | Status | Completed Date |
+   |-------|--------|----------------|
+   | 1 | ✅ Done | 2025-01-XX |
+   ```
+
+3. **Commit changes** — Include both code and documentation:
+   ```bash
+   git add .
+   git commit -m "feat: complete phase-X - [brief description]"
+   ```
+
+### Phase Completion Status
+
+| Phase | Status | Completed | Notes |
+|-------|--------|-----------|-------|
+| 1 | ✅ Done | - | Dashboard backend |
+| 2 | ✅ Done | - | Dashboard frontend |
+| 3 | ✅ Done | - | Override annotation |
+| 4 | ✅ Done | - | Live inspection |
+| 5 | 🔲 Pending | - | Operator page route |
+| 6 | 🔲 Pending | - | Inspection API |
+
+### README Update Template
+
+When updating README.md after a phase, include:
+
+```markdown
+## Recent Updates
+
+### Phase X: [Phase Name] (YYYY-MM-DD)
+
+**New Features:**
+- Feature 1
+- Feature 2
+
+**New API Endpoints:**
+- `POST /api/xxx` - Description
+- `GET /api/xxx` - Description
+
+**New Components:**
+- `ComponentName.jsx` - Description
+
+**Database Changes:**
+- New table: `table_name`
+- New column: `table.column`
+```
+
+---
+
 ## Future Integrations
 
-The codebase is being prepared for:
-1. Supabase authentication and database integration
-2. FastAPI microservice for AI training (separate repo)
-3. Modal.com integration for ML workflows
-4. Semantic search with pgvector for override embeddings
-5. AI Assistant with RAG using `kb_articles` table
+Completed:
+- ✅ Repository layer (`lib/repos/`)
+- ✅ API routes (`app/api/`)
+- ✅ Zod validation layer (`lib/validations/`)
+- ✅ API authentication/authorization (`lib/auth/`)
+- ✅ Input sanitization (`lib/utils/sanitize.js`)
 
-Avoid hardcoding logic that assumes the current mock data structure will remain unchanged.
+In progress:
+- Supabase Auth migration (currently using mock auth with x-user-id header)
+- Dashboard analytics and live inspection views
+
+Planned:
+- FastAPI microservice for AI training (separate repo)
+- Modal.com integration for ML workflows
+- Semantic search with pgvector for override embeddings
+- AI Assistant with RAG using `kb_articles` table

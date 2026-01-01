@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { authFetch } from '@/lib/utils/authFetch';
 import { roles as mockRoles } from '@/data/masterData';
 
 export function useRoles() {
@@ -11,7 +12,7 @@ export function useRoles() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch('/api/roles');
+      const res = await authFetch('/api/roles');
       if (!res.ok) throw new Error('API request failed');
       const json = await res.json();
       if (!json.success) throw new Error(json.error);
@@ -35,9 +36,8 @@ export function useRoles() {
 
   const create = async (roleData) => {
     try {
-      const res = await fetch('/api/roles', {
+      const res = await authFetch('/api/roles', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(roleData)
       });
       if (!res.ok) throw new Error('API request failed');
@@ -59,9 +59,8 @@ export function useRoles() {
 
   const update = async (id, updates) => {
     try {
-      const res = await fetch(`/api/roles/${id}`, {
+      const res = await authFetch(`/api/roles/${id}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updates)
       });
       if (!res.ok) throw new Error('API request failed');
@@ -82,7 +81,7 @@ export function useRoles() {
       throw new Error('Cannot delete system roles');
     }
     try {
-      const res = await fetch(`/api/roles/${id}`, { method: 'DELETE' });
+      const res = await authFetch(`/api/roles/${id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('API request failed');
       const json = await res.json();
       if (!json.success) throw new Error(json.error);

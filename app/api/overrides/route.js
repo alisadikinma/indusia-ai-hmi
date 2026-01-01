@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import * as overridesRepo from '@/lib/repos/overridesRepo'
+import * as datasetQueueRepo from '@/lib/repos/datasetQueueRepo'
 import { createOverrideSchema, overrideFiltersSchema, paginationSchema } from '@/lib/validations/schemas'
 import { validate, validationErrorResponse, validateQueryParams } from '@/lib/validations/validate'
 import { withAuth } from '@/lib/auth/apiAuth'
@@ -90,6 +91,7 @@ async function handleGET(request) {
 /**
  * POST /api/overrides
  * Body: { board_id, defect_type, reason, operator_notes, operator_id, operator_name, section_id, customer_id }
+ * Enhanced: Also supports { override_type, images: [{ image_url, ai_detections, annotations }] }
  * Required permission: overrides:create
  * Section restricted: Can only create overrides for assigned sections
  */
@@ -100,7 +102,89 @@ async function handlePOST(request) {
     // Sanitize input
     const sanitizedBody = sanitizeRequestBody(body)
 
-    // Validate input with Zod schema
+    // Check if this is an annotation-based override (has images array)
+    const hasAnnotations = Array.isArray(sanitizedBody.images) && sanitizedBody.images.length > 0
+
+    if (hasAnnotations) {
+      // Annotation-based override flow
+      const {
+        board_id,
+        section_id,
+        line_id,
+        customer_id,
+        override_type,
+        reason,
+        correct_class,
+        submitted_by,
+        submitted_by_name,
+        images
+      } = sanitizedBody
+
+      // Basic validation for annotation flow
+      if (!board_id || !override_type || !reason) {
+        return NextResponse.json(
+          { success: false, error: 'board_id, override_type, and reason are required' },
+          { status: 400 }
+        )
+      }
+
+      // Validate section access if section_id provided
+      if (section_id) {
+        try {
+          validateSectionAccess(request.user, section_id)
+        } catch (accessError) {
+          return NextResponse.json(
+            { success: false, error: accessError.message, code: accessError.code },
+            { status: accessError.statusCode || 403 }
+          )
+        }
+      }
+
+      // Create override with annotations
+      const result = await overridesRepo.createWithAnnotation({
+        board_id,
+        section_id,
+        line_id,
+        customer_id,
+        override_type,
+        reason,
+        correct_class,
+        submitted_by: submitted_by || request.user?.id,
+        submitted_by_name: submitted_by_name || request.user?.name,
+        images
+      })
+
+      if (result.error) {
+        return NextResponse.json(
+          { success: false, error: result.error },
+          { status: 500 }
+        )
+      }
+
+      // Auto-queue for training based on override type
+      if (result.data) {
+        try {
+          await datasetQueueRepo.autoQueueFromOverride({
+            id: result.data.id,
+            override_type
+          })
+        } catch (queueError) {
+          // Log but don't fail the override creation
+          console.error('[POST /api/overrides] Auto-queue error:', queueError)
+        }
+      }
+
+      return NextResponse.json(
+        {
+          success: true,
+          data: result.data,
+          imageError: result.imageError // Include if image insert had issues
+        },
+        { status: 201 }
+      )
+    }
+
+    // Original flow - validate with schema
     const validation = validate(createOverrideSchema, sanitizedBody)
     if (!validation.success) {
       return validationErrorResponse(validation.errors)

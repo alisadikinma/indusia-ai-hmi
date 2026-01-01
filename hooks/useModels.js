@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '@/context/AuthContext'
+import { authFetch } from '@/lib/utils/authFetch'
 
 /**
  * Hook for managing AI models
@@ -19,8 +20,8 @@ export function useModels() {
 
     try {
       const [modelsRes, activeRes] = await Promise.all([
-        fetch('/api/models'),
-        fetch('/api/models/active')
+        authFetch('/api/models'),
+        authFetch('/api/models/active')
       ])
 
       const modelsJson = await modelsRes.json()
@@ -47,9 +48,8 @@ export function useModels() {
    */
   const deployModel = useCallback(async (modelId) => {
     try {
-      const res = await fetch(`/api/models/${modelId}/deploy`, {
+      const res = await authFetch(`/api/models/${modelId}/deploy`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ user_id: user?.id })
       })
 
@@ -74,7 +74,7 @@ export function useModels() {
    */
   const getDownloadUrl = useCallback(async (modelId) => {
     try {
-      const res = await fetch(`/api/models/${modelId}/download`)
+      const res = await authFetch(`/api/models/${modelId}/download`)
       const json = await res.json()
       return json.success ? json.data.url : null
     } catch (err) {
@@ -90,7 +90,7 @@ export function useModels() {
    */
   const getModel = useCallback(async (modelId) => {
     try {
-      const res = await fetch(`/api/models/${modelId}`)
+      const res = await authFetch(`/api/models/${modelId}`)
       const json = await res.json()
       return json.success ? json.data : null
     } catch (err) {
@@ -107,9 +107,8 @@ export function useModels() {
    */
   const updateModelStatus = useCallback(async (modelId, status) => {
     try {
-      const res = await fetch(`/api/models/${modelId}`, {
+      const res = await authFetch(`/api/models/${modelId}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status })
       })
 
@@ -154,7 +153,7 @@ export function useDeploymentHistory(limit = 10) {
   const fetchHistory = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await fetch(`/api/models/history?limit=${limit}`)
+      const res = await authFetch(`/api/models/history?limit=${limit}`)
       const json = await res.json()
 
       if (json.success) {

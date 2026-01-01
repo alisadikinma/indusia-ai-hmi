@@ -2,12 +2,22 @@
 
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 
-// Mock users for fallback when API fails
+/**
+ * Extract simple role name from various formats
+ * - 'superadmin' -> 'superadmin'
+ * - 'role_superadmin' -> 'superadmin'
+ */
+function normalizeRole(roleValue) {
+  if (!roleValue) return null;
+  return roleValue.replace(/^role_/i, '').toLowerCase();
+}
+
+// Mock users for fallback - must match login API mock users
 const mockUsers = [
-  { id: 'u1', name: 'Admin User', email: 'admin@indusia.com', password: 'admin123', role: 'superadmin', status: 'active', sections: [] },
-  { id: 'u2', name: 'Manager User', email: 'manager@indusia.com', password: 'manager123', role: 'manager', status: 'active', sections: ['s1', 's2'] },
-  { id: 'u3', name: 'Operator User', email: 'operator@indusia.com', password: 'operator123', role: 'operator', status: 'active', sections: ['s1'] },
-  { id: 'u4', name: 'Engineer User', email: 'engineer@indusia.com', password: 'engineer123', role: 'engineer', status: 'active', sections: [] },
+  { id: 'user_admin', name: 'Admin User', email: 'admin@indusia.com', password: 'admin123', role: 'superadmin', role_id: 'role_superadmin', status: 'active', sections: ['section_smt', 'section_tht', 'section_final'] },
+  { id: 'user_manager', name: 'Manager User', email: 'manager@indusia.com', password: 'manager123', role: 'manager', role_id: 'role_manager', status: 'active', sections: ['section_smt', 'section_tht'] },
+  { id: 'user_operator', name: 'Operator User', email: 'operator@indusia.com', password: 'operator123', role: 'operator', role_id: 'role_operator', status: 'active', sections: ['section_smt'] },
+  { id: 'user_engineer', name: 'Engineer User', email: 'engineer@indusia.com', password: 'engineer123', role: 'engineer', role_id: 'role_engineer', status: 'active', sections: ['section_smt', 'section_tht', 'section_final'] },
 ];
 
 const AuthContext = createContext(null);
@@ -15,6 +25,19 @@ const AuthContext = createContext(null);
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Normalize user object to ensure consistent role field
+  const normalizeUser = (userData) => {
+    if (!userData) return null;
+    
+    // Extract role from role_id if role is not set
+    const role = userData.role || normalizeRole(userData.role_id || userData.roleId);
+    
+    return {
+      ...userData,
+      role, // Always have normalized role
+    };
+  };
 
   // Restore user session on mount
   useEffect(() => {
@@ -31,13 +54,13 @@ export function AuthProvider({ children }) {
             if (json.success && json.data) {
               // Merge with stored selections (selectedSectionId, etc.)
               const selections = storedUser ? JSON.parse(storedUser) : {};
-              const restoredUser = {
+              const restoredUser = normalizeUser({
                 ...json.data,
                 selectedSectionId: selections.selectedSectionId || null,
                 selectedCustomerId: selections.selectedCustomerId || null,
                 selectedLineId: selections.selectedLineId || null,
                 selectedBoardId: selections.selectedBoardId || null,
-              };
+              });
               setUser(restoredUser);
               setIsLoading(false);
               return;
@@ -51,7 +74,8 @@ export function AuthProvider({ children }) {
       // Fallback: try to restore from localStorage
       if (storedUser) {
         try {
-          setUser(JSON.parse(storedUser));
+          const parsed = JSON.parse(storedUser);
+          setUser(normalizeUser(parsed));
         } catch (error) {
           console.error('Failed to parse stored user:', error);
           localStorage.removeItem('indusia_user');
@@ -64,7 +88,7 @@ export function AuthProvider({ children }) {
     restoreSession();
   }, []);
 
-  // Login with email and password (new API-based login)
+  // Login with email and password (API-based login)
   const login = useCallback(async (email, password) => {
     try {
       const res = await fetch('/api/auth/login', {
@@ -79,13 +103,13 @@ export function AuthProvider({ children }) {
         return { success: false, error: json.error || 'Login failed' };
       }
 
-      const loggedInUser = {
+      const loggedInUser = normalizeUser({
         ...json.data.user,
         selectedSectionId: null,
         selectedCustomerId: null,
         selectedLineId: null,
         selectedBoardId: null,
-      };
+      });
 
       setUser(loggedInUser);
       localStorage.setItem('indusia_user_id', loggedInUser.id);
@@ -99,13 +123,13 @@ export function AuthProvider({ children }) {
       const mockUser = mockUsers.find(u => u.email === email && u.password === password);
       if (mockUser && mockUser.status === 'active') {
         const { password: _, ...safeUser } = mockUser;
-        const loggedInUser = {
+        const loggedInUser = normalizeUser({
           ...safeUser,
           selectedSectionId: null,
           selectedCustomerId: null,
           selectedLineId: null,
           selectedBoardId: null,
-        };
+        });
         setUser(loggedInUser);
         localStorage.setItem('indusia_user_id', loggedInUser.id);
         localStorage.setItem('indusia_user', JSON.stringify(loggedInUser));
@@ -118,17 +142,18 @@ export function AuthProvider({ children }) {
 
   // Legacy login with profile (maintains backward compatibility)
   const loginWithProfile = useCallback((profile, options = {}) => {
-    const baseUser = {
+    const baseUser = normalizeUser({
       id: profile.id,
       name: profile.name,
       email: profile.email,
       role: profile.role,
+      role_id: profile.role_id,
       sections: profile.sections || [],
       selectedSectionId: null,
       selectedCustomerId: null,
       selectedLineId: null,
       selectedBoardId: null,
-    };
+    });
 
     if (profile.role === 'operator') {
       baseUser.selectedSectionId = options.sectionId || null;
@@ -213,13 +238,13 @@ export function AuthProvider({ children }) {
       if (res.ok) {
         const json = await res.json();
         if (json.success && json.data) {
-          const refreshedUser = {
+          const refreshedUser = normalizeUser({
             ...json.data,
             selectedSectionId: user.selectedSectionId,
             selectedCustomerId: user.selectedCustomerId,
             selectedLineId: user.selectedLineId,
             selectedBoardId: user.selectedBoardId,
-          };
+          });
           setUser(refreshedUser);
           localStorage.setItem('indusia_user', JSON.stringify(refreshedUser));
         }
@@ -256,10 +281,13 @@ export function useAuth() {
     throw new Error('useAuth must be used within AuthProvider');
   }
 
-  const isSuperAdmin = context.user?.role === 'superadmin';
-  const isManager = context.user?.role === 'manager';
-  const isEngineer = context.user?.role === 'engineer';
-  const isOperator = context.user?.role === 'operator';
+  // Use normalized role for role checks
+  const userRole = context.user?.role;
+  
+  const isSuperAdmin = userRole === 'superadmin';
+  const isManager = userRole === 'manager';
+  const isEngineer = userRole === 'engineer';
+  const isOperator = userRole === 'operator';
 
   return {
     ...context,

@@ -1,6 +1,8 @@
 -- ============================================================
--- INDUSIA AI DATABASE SETUP - Complete Schema v2
+-- INDUSIA AI DATABASE SETUP - Complete Schema v3
 -- Run this entire script in Supabase SQL Editor
+-- Updated: Added inspection_stats, inspection_frames, 
+--          dataset_queue, defect_classes, shift_config
 -- ============================================================
 
 -- ============================================================
@@ -171,7 +173,8 @@ CREATE TABLE IF NOT EXISTS overrides (
   reviewer_notes TEXT,
   reviewed_at TIMESTAMPTZ,
   section_id TEXT REFERENCES sections(id),
-  customer_id TEXT REFERENCES customers(id)
+  customer_id TEXT REFERENCES customers(id),
+  override_type TEXT CHECK (override_type IN ('false_positive_no_defect', 'false_positive_acceptable', 'misclassification', 'false_negative', 'other'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_overrides_status ON overrides (status);
@@ -376,10 +379,114 @@ CREATE INDEX IF NOT EXISTS idx_ai_models_active ON ai_models(is_active) WHERE is
 CREATE INDEX IF NOT EXISTS idx_ai_models_created ON ai_models(created_at DESC);
 
 -- ============================================================
--- PART 15: RPC FUNCTIONS
+-- PART 15: INSPECTION STATS (Dashboard KPIs)
 -- ============================================================
 
--- 15.1 match_overrides - Semantic search for overrides
+CREATE TABLE IF NOT EXISTS inspection_stats (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  shift_date DATE NOT NULL,
+  shift_number INTEGER NOT NULL,
+  line_id TEXT NOT NULL REFERENCES lines(id) ON DELETE CASCADE,
+  section_id TEXT REFERENCES sections(id),
+  total_inspected INTEGER DEFAULT 0,
+  total_pass INTEGER DEFAULT 0,
+  total_defect INTEGER DEFAULT 0,
+  total_false_call INTEGER DEFAULT 0,
+  avg_confidence FLOAT,
+  defect_breakdown JSONB DEFAULT '{}',
+  defect_locations JSONB DEFAULT '[]',
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now(),
+  UNIQUE(shift_date, shift_number, line_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_inspection_stats_date ON inspection_stats(shift_date DESC);
+CREATE INDEX IF NOT EXISTS idx_inspection_stats_line ON inspection_stats(line_id);
+CREATE INDEX IF NOT EXISTS idx_inspection_stats_section ON inspection_stats(section_id);
+CREATE INDEX IF NOT EXISTS idx_inspection_stats_composite ON inspection_stats(shift_date, shift_number, line_id);
+
+-- ============================================================
+-- PART 16: INSPECTION FRAMES (Live Inspection Logging)
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS inspection_frames (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  line_id TEXT NOT NULL REFERENCES lines(id) ON DELETE CASCADE,
+  board_id TEXT REFERENCES boards(id),
+  frame_timestamp TIMESTAMPTZ NOT NULL DEFAULT now(),
+  image_path TEXT,
+  detections JSONB DEFAULT '[]',
+  inference_ms FLOAT,
+  result TEXT NOT NULL CHECK (result IN ('pass', 'fail', 'review')),
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_inspection_frames_line ON inspection_frames(line_id);
+CREATE INDEX IF NOT EXISTS idx_inspection_frames_timestamp ON inspection_frames(frame_timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_inspection_frames_result ON inspection_frames(line_id, result);
+
+-- ============================================================
+-- PART 17: DATASET QUEUE (Training Pipeline Queue)
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS dataset_queue (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  override_id TEXT NOT NULL REFERENCES overrides(id) ON DELETE CASCADE,
+  training_action TEXT NOT NULL CHECK (training_action IN ('add_positive', 'add_negative', 'correct_label')),
+  priority INTEGER DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'processed', 'failed', 'skipped')),
+  error_message TEXT,
+  processed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_dataset_queue_status ON dataset_queue(status);
+CREATE INDEX IF NOT EXISTS idx_dataset_queue_priority ON dataset_queue(priority DESC, created_at ASC);
+CREATE INDEX IF NOT EXISTS idx_dataset_queue_override ON dataset_queue(override_id);
+
+-- ============================================================
+-- PART 18: DEFECT CLASSES (Master Data)
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS defect_classes (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  code TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL,
+  severity TEXT NOT NULL DEFAULT 'medium' CHECK (severity IN ('low', 'medium', 'high', 'critical')),
+  color TEXT DEFAULT '#FF0000',
+  description TEXT,
+  is_active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_defect_classes_code ON defect_classes(code);
+CREATE INDEX IF NOT EXISTS idx_defect_classes_active ON defect_classes(is_active) WHERE is_active = TRUE;
+
+-- ============================================================
+-- PART 19: SHIFT CONFIG
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS shift_config (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  section_id TEXT NOT NULL REFERENCES sections(id) ON DELETE CASCADE,
+  shift_number INTEGER NOT NULL CHECK (shift_number BETWEEN 1 AND 3),
+  start_time TIME NOT NULL,
+  end_time TIME NOT NULL,
+  is_active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now(),
+  UNIQUE(section_id, shift_number)
+);
+
+CREATE INDEX IF NOT EXISTS idx_shift_config_section ON shift_config(section_id);
+CREATE INDEX IF NOT EXISTS idx_shift_config_active ON shift_config(section_id, is_active) WHERE is_active = TRUE;
+
+-- ============================================================
+-- PART 20: RPC FUNCTIONS
+-- ============================================================
+
+-- 20.1 match_overrides - Semantic search for overrides
 CREATE OR REPLACE FUNCTION match_overrides(
   query_embedding VECTOR(384),
   match_threshold FLOAT,
@@ -423,7 +530,7 @@ AS $$
   LIMIT match_count;
 $$;
 
--- 15.2 match_kb_articles - Semantic search for knowledge base
+-- 20.2 match_kb_articles - Semantic search for knowledge base
 CREATE OR REPLACE FUNCTION match_kb_articles(
   query_embedding VECTOR(384),
   match_threshold FLOAT,
@@ -468,11 +575,11 @@ AS $$
 $$;
 
 -- ============================================================
--- PART 16: STORAGE BUCKETS
+-- PART 21: STORAGE BUCKETS
 -- Note: Run these separately if they fail (bucket might exist)
 -- ============================================================
 
--- 16.1 inspection-images bucket
+-- 21.1 inspection-images bucket
 INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 VALUES (
   'inspection-images',
@@ -482,7 +589,7 @@ VALUES (
   ARRAY['image/jpeg', 'image/png', 'image/webp']
 ) ON CONFLICT (id) DO NOTHING;
 
--- 16.2 model-weights bucket
+-- 21.2 model-weights bucket
 INSERT INTO storage.buckets (id, name, public, file_size_limit)
 VALUES (
   'model-weights',
@@ -492,7 +599,7 @@ VALUES (
 ) ON CONFLICT (id) DO NOTHING;
 
 -- ============================================================
--- PART 17: STORAGE POLICIES
+-- PART 22: STORAGE POLICIES
 -- ============================================================
 
 -- Policy: Auth uploads to inspection-images
@@ -554,9 +661,16 @@ END $$;
 -- ============================================================
 -- SETUP COMPLETE!
 -- ============================================================
--- Total: 22 tables, 2 RPC functions, 2 storage buckets
+-- Total: 27 tables, 2 RPC functions, 2 storage buckets
 -- 
+-- Tables added in v3:
+--   - inspection_stats (Dashboard KPIs)
+--   - inspection_frames (Live Inspection Logging)
+--   - dataset_queue (Training Pipeline Queue)
+--   - defect_classes (Defect Master Data)
+--   - shift_config (Shift Time Configuration)
+--
 -- Next steps:
 -- 1. Copy Project URL & anon key to .env.local
--- 2. Insert seed data (roles, menu_items, initial user)
+-- 2. Run seed data script (indusia_seed_data.sql)
 -- ============================================================

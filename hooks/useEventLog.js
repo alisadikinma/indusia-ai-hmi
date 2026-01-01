@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
+import { authFetch } from '@/lib/utils/authFetch';
 import { mockEvents, EVENT_TYPES, EVENT_SOURCES } from '@/data/mockEvents';
 
 export function useEventLog() {
@@ -31,7 +32,7 @@ export function useEventLog() {
       if (filters.to) params.append('to', filters.to);
       if (filters.eventTypes.length === 1) params.append('type', filters.eventTypes[0]);
 
-      const res = await fetch(`/api/event-log?${params.toString()}`);
+      const res = await authFetch(`/api/event-log?${params.toString()}`);
       if (!res.ok) throw new Error('API request failed');
       const json = await res.json();
       if (!json.success) throw new Error(json.error);
@@ -128,9 +129,8 @@ export function useEventLog() {
 
   const logEvent = async (eventData) => {
     try {
-      const res = await fetch('/api/event-log', {
+      const res = await authFetch('/api/event-log', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(eventData)
       });
       if (!res.ok) throw new Error('API request failed');

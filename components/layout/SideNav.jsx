@@ -6,14 +6,29 @@ import { ClipboardCheck, AlertCircle, Cloud, Database, Shield, Users, Lock, Scro
 import { useAuth } from '@/context/AuthContext';
 import { useI18n } from '@/hooks/useI18n';
 
+/**
+ * Extract simple role name from various formats
+ * - 'superadmin' -> 'superadmin'
+ * - 'role_superadmin' -> 'superadmin'
+ * - 'Role_superadmin' -> 'superadmin'
+ */
+function normalizeRole(roleValue) {
+  if (!roleValue) return null;
+  // Remove 'role_' or 'Role_' prefix if present
+  return roleValue.replace(/^role_/i, '').toLowerCase();
+}
+
 export default function SideNav() {
   const pathname = usePathname();
   const { user } = useAuth();
   const { t } = useI18n();
 
+  // Get normalized role - prefer 'role' field, fallback to role_id/roleId
+  const userRole = normalizeRole(user?.role || user?.roleId || user?.role_id);
+
   // DEBUG: Log user data
   console.log('[SideNav] user:', user);
-  console.log('[SideNav] roleId:', user?.roleId, 'role_id:', user?.role_id, 'role:', user?.role);
+  console.log('[SideNav] normalized role:', userRole);
 
   const navItems = [
     {
@@ -70,14 +85,14 @@ export default function SideNav() {
     return pathname.startsWith(href.split('/').slice(0, 3).join('/'));
   };
 
-  // Support roleId (API camelCase), role_id (raw), and role (mock)
-  const userRole = user?.roleId || user?.role_id || user?.role;
-
   const visibleItems = navItems.filter((item) =>
-    user && item.roles.includes(userRole)
+    user && userRole && item.roles.includes(userRole)
   );
 
   const isSuperAdmin = userRole === 'superadmin';
+
+  // Format role for display (capitalize first letter)
+  const displayRole = userRole ? userRole.charAt(0).toUpperCase() + userRole.slice(1) : 'Unknown';
 
   return (
     <aside className="fixed left-0 top-0 h-full w-64 bg-indusia-surface border-r border-indusia-border flex flex-col">
@@ -155,7 +170,7 @@ export default function SideNav() {
             Signed in as: <span className="text-indusia-text font-medium">{user.name}</span>
           </p>
           <p className="text-xs text-indusia-textMuted">
-            Role: <span className="text-indusia-text font-medium capitalize">{user.roleId || user.role_id || user.role}</span>
+            Role: <span className="text-indusia-text font-medium">{displayRole}</span>
           </p>
           <p className="text-xs text-indusia-textMuted mt-3 pt-3 border-t border-indusia-border">
             Version 1.0.0

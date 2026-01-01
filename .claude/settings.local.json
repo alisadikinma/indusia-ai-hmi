@@ -37,7 +37,9 @@
       "Bash(nul)",
       "Bash(php verify_fields.php:*)",
       "Bash(npm run build:*)",
-      "Bash(npm test:*)"
+      "Bash(npm test:*)",
+      "Bash(npx next build:*)",
+      "Bash(node -c:*)"
     ],
     "deny": [],
     "ask": []

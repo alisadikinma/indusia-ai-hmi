@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { authFetch } from '@/lib/utils/authFetch';
 import { userProfiles } from '@/data/masterData';
 
 export function useUsers() {
@@ -11,7 +12,7 @@ export function useUsers() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch('/api/users');
+      const res = await authFetch('/api/users');
       if (!res.ok) throw new Error('API request failed');
       const json = await res.json();
       if (!json.success) throw new Error(json.error);
@@ -35,9 +36,8 @@ export function useUsers() {
 
   const create = async (userData) => {
     try {
-      const res = await fetch('/api/users', {
+      const res = await authFetch('/api/users', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(userData)
       });
       if (!res.ok) throw new Error('API request failed');
@@ -61,9 +61,8 @@ export function useUsers() {
 
   const update = async (id, updates) => {
     try {
-      const res = await fetch(`/api/users/${id}`, {
+      const res = await authFetch(`/api/users/${id}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updates)
       });
       if (!res.ok) throw new Error('API request failed');
@@ -80,7 +79,7 @@ export function useUsers() {
 
   const remove = async (id) => {
     try {
-      const res = await fetch(`/api/users/${id}`, { method: 'DELETE' });
+      const res = await authFetch(`/api/users/${id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('API request failed');
       const json = await res.json();
       if (!json.success) throw new Error(json.error);

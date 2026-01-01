@@ -152,17 +152,6 @@ export default function LoginPage() {
                 )}
               </button>
             </form>
-
-            {/* Dev Credentials Hint */}
-            <div className="mt-6 p-4 bg-indusia-bg rounded-lg border border-indusia-border">
-              <p className="text-xs text-indusia-textMuted mb-2 font-semibold">Development Credentials:</p>
-              <div className="text-xs text-indusia-textMuted space-y-1">
-                <p><span className="text-indusia-text">Super Admin:</span> admin@indusia.com / admin123</p>
-                <p><span className="text-indusia-text">Manager:</span> manager@indusia.com / manager123</p>
-                <p><span className="text-indusia-text">Operator:</span> operator@indusia.com / operator123</p>
-                <p><span className="text-indusia-text">Engineer:</span> engineer@indusia.com / engineer123</p>
-              </div>
-            </div>
           </div>
 
           {/* Footer */}

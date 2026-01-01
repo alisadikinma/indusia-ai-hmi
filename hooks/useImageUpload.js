@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useCallback } from 'react'
+import { authFetch, getAuthHeaders } from '@/lib/utils/authFetch'
 
 /**
  * Hook for handling image uploads to the API
@@ -41,8 +42,13 @@ export function useImageUpload() {
       // Simulate progress (since fetch doesn't support progress for uploads easily)
       setProgress(30)
 
+      // Get auth headers but remove Content-Type (FormData sets its own)
+      const headers = getAuthHeaders()
+      delete headers['Content-Type']
+
       const res = await fetch('/api/images/upload', {
         method: 'POST',
+        headers,
         body: formData
       })
 
@@ -72,7 +78,7 @@ export function useImageUpload() {
    */
   const getImages = useCallback(async (overrideId) => {
     try {
-      const res = await fetch(`/api/images/${overrideId}`)
+      const res = await authFetch(`/api/images/${overrideId}`)
       const json = await res.json()
 
       if (!json.success) {
@@ -93,7 +99,7 @@ export function useImageUpload() {
    */
   const deleteImages = useCallback(async (overrideId) => {
     try {
-      const res = await fetch(`/api/images/${overrideId}`, {
+      const res = await authFetch(`/api/images/${overrideId}`, {
         method: 'DELETE'
       })
       const json = await res.json()

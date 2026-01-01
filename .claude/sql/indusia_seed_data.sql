@@ -1,6 +1,7 @@
 -- ============================================================
--- INDUSIA AI - SEED DATA
+-- INDUSIA AI - SEED DATA v3
 -- Run AFTER the main schema setup
+-- Passwords are plaintext for dev - use bcrypt in production
 -- ============================================================
 
 -- ============================================================
@@ -102,23 +103,72 @@ INSERT INTO customer_sections (customer_id, section_id) VALUES
 ON CONFLICT DO NOTHING;
 
 -- ============================================================
--- 5. INITIAL ADMIN USER
+-- 5. SAMPLE LINES (required for inspection_stats/frames)
 -- ============================================================
--- Password: "admin123" (you should change this!)
--- In production, use proper password hashing
+INSERT INTO lines (id, name, customer_id, section_id) VALUES
+  ('line_smt_01', 'SMT Line 1', 'cust_demo', 'section_smt'),
+  ('line_smt_02', 'SMT Line 2', 'cust_demo', 'section_smt'),
+  ('line_tht_01', 'THT Line 1', 'cust_demo', 'section_tht'),
+  ('line_final_01', 'Final Line 1', 'cust_internal', 'section_final')
+ON CONFLICT (id) DO NOTHING;
+
+-- ============================================================
+-- 6. ALL USERS (plaintext passwords for dev)
+-- ============================================================
+-- NOTE: For production, use bcrypt hashed passwords!
+-- Install bcrypt: npm install bcrypt
+-- Then hash passwords using: await bcrypt.hash('password', 12)
+
+-- Super Admin (password: admin123)
 INSERT INTO users (id, name, email, role_id, sections, password, status)
 VALUES (
   'user_admin',
-  'System Administrator',
-  'admin@indusia.local',
+  'Admin User',
+  'admin@indusia.com',
   'role_superadmin',
   ARRAY['section_smt', 'section_tht', 'section_final'],
-  'admin123',  -- CHANGE THIS! Use bcrypt hash in production
+  'admin123',
+  'active'
+) ON CONFLICT (id) DO NOTHING;
+
+-- Manager (password: manager123)
+INSERT INTO users (id, name, email, role_id, sections, password, status)
+VALUES (
+  'user_manager',
+  'Manager User',
+  'manager@indusia.com',
+  'role_manager',
+  ARRAY['section_smt', 'section_tht'],
+  'manager123',
+  'active'
+) ON CONFLICT (id) DO NOTHING;
+
+-- Operator (password: operator123)
+INSERT INTO users (id, name, email, role_id, sections, password, status)
+VALUES (
+  'user_operator',
+  'Operator User',
+  'operator@indusia.com',
+  'role_operator',
+  ARRAY['section_smt'],
+  'operator123',
+  'active'
+) ON CONFLICT (id) DO NOTHING;
+
+-- Engineer (password: engineer123)
+INSERT INTO users (id, name, email, role_id, sections, password, status)
+VALUES (
+  'user_engineer',
+  'Engineer User',
+  'engineer@indusia.com',
+  'role_engineer',
+  ARRAY['section_smt', 'section_tht', 'section_final'],
+  'engineer123',
   'active'
 ) ON CONFLICT (id) DO NOTHING;
 
 -- ============================================================
--- 6. SAMPLE BOARDS (for testing overrides)
+-- 7. SAMPLE BOARDS (for testing overrides)
 -- ============================================================
 INSERT INTO boards (id, name, customer_id) VALUES
   ('board_demo_001', 'DEMO-PCB-001', 'cust_demo'),
@@ -127,9 +177,60 @@ INSERT INTO boards (id, name, customer_id) VALUES
 ON CONFLICT (id) DO NOTHING;
 
 -- ============================================================
+-- 8. DEFECT CLASSES (Master Data for AI Detection)
+-- ============================================================
+INSERT INTO defect_classes (code, name, severity, color, description) VALUES
+  ('SOLDER_BRIDGE', 'Solder Bridge', 'critical', '#FF0000', 'Short circuit between adjacent pads'),
+  ('SOLDER_BALL', 'Solder Ball', 'high', '#FF6600', 'Stray solder sphere on PCB surface'),
+  ('MISSING_COMP', 'Missing Component', 'critical', '#CC0000', 'Component not placed on designated pad'),
+  ('TOMBSTONE', 'Tombstone', 'high', '#FF3300', 'Component lifted on one side'),
+  ('SHIFTED', 'Component Shifted', 'medium', '#FF9900', 'Component misaligned from pad center'),
+  ('POLARITY', 'Polarity Error', 'critical', '#990000', 'Component placed with wrong polarity'),
+  ('COLD_SOLDER', 'Cold Solder', 'high', '#CC6600', 'Poor solder joint with dull appearance'),
+  ('INSUFFICIENT', 'Insufficient Solder', 'medium', '#FFCC00', 'Not enough solder on joint'),
+  ('EXCESS', 'Excess Solder', 'low', '#FFFF00', 'Too much solder on joint'),
+  ('CRACK', 'Solder Crack', 'high', '#CC3300', 'Visible crack in solder joint'),
+  ('VOID', 'Solder Void', 'medium', '#FF6633', 'Air pocket in solder joint'),
+  ('FOREIGN', 'Foreign Material', 'medium', '#996633', 'Contamination on PCB surface')
+ON CONFLICT (code) DO NOTHING;
+
+-- ============================================================
+-- 9. SHIFT CONFIG (Default 3-shift schedule)
+-- ============================================================
+-- SMT Section shifts
+INSERT INTO shift_config (section_id, shift_number, start_time, end_time) VALUES
+  ('section_smt', 1, '07:00:00', '15:00:00'),
+  ('section_smt', 2, '15:00:00', '23:00:00'),
+  ('section_smt', 3, '23:00:00', '07:00:00')
+ON CONFLICT (section_id, shift_number) DO NOTHING;
+
+-- THT Section shifts
+INSERT INTO shift_config (section_id, shift_number, start_time, end_time) VALUES
+  ('section_tht', 1, '07:00:00', '15:00:00'),
+  ('section_tht', 2, '15:00:00', '23:00:00'),
+  ('section_tht', 3, '23:00:00', '07:00:00')
+ON CONFLICT (section_id, shift_number) DO NOTHING;
+
+-- Final Assembly Section shifts (2 shifts only)
+INSERT INTO shift_config (section_id, shift_number, start_time, end_time) VALUES
+  ('section_final', 1, '08:00:00', '17:00:00'),
+  ('section_final', 2, '17:00:00', '02:00:00')
+ON CONFLICT (section_id, shift_number) DO NOTHING;
+
+-- ============================================================
 -- SEED DATA COMPLETE!
 -- ============================================================
--- You can now login with:
---   Email: admin@indusia.local
---   Password: admin123 (CHANGE THIS!)
+-- 
+-- Login Credentials:
+-- ┌─────────────┬───────────────────────┬─────────────┐
+-- │ Role        │ Email                 │ Password    │
+-- ├─────────────┼───────────────────────┼─────────────┤
+-- │ Super Admin │ admin@indusia.com     │ admin123    │
+-- │ Manager     │ manager@indusia.com   │ manager123  │
+-- │ Operator    │ operator@indusia.com  │ operator123 │
+-- │ Engineer    │ engineer@indusia.com  │ engineer123 │
+-- └─────────────┴───────────────────────┴─────────────┘
+--
+-- NOTE: Passwords stored as plaintext for development.
+-- For production, install bcrypt and hash passwords!
 -- ============================================================

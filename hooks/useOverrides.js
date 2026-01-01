@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { authFetch, getAuthHeaders } from '@/lib/utils/authFetch';
 
 // Mock data for fallback
 const mockOverrides = [];
@@ -34,7 +35,7 @@ export function useOverrides(initialFilters = {}) {
       if (filters.page) params.append('page', filters.page);
       if (filters.limit) params.append('limit', filters.limit);
 
-      const res = await fetch(`/api/overrides?${params.toString()}`);
+      const res = await authFetch(`/api/overrides?${params.toString()}`);
       if (!res.ok) throw new Error('API request failed');
       const json = await res.json();
       if (!json.success) throw new Error(json.error);
@@ -51,7 +52,7 @@ export function useOverrides(initialFilters = {}) {
   // Fetch stats from API
   const fetchStats = useCallback(async () => {
     try {
-      const res = await fetch('/api/overrides/stats');
+      const res = await authFetch('/api/overrides/stats');
       if (!res.ok) throw new Error('API request failed');
       const json = await res.json();
       if (!json.success) throw new Error(json.error);
@@ -85,9 +86,8 @@ export function useOverrides(initialFilters = {}) {
 
   const createOverride = async (data) => {
     try {
-      const res = await fetch('/api/overrides', {
+      const res = await authFetch('/api/overrides', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)
       });
       if (!res.ok) throw new Error('API request failed');
@@ -111,9 +111,8 @@ export function useOverrides(initialFilters = {}) {
 
   const approveOverride = async (id, reviewerId, reviewerName, notes = '') => {
     try {
-      const res = await fetch(`/api/overrides/${id}`, {
+      const res = await authFetch(`/api/overrides/${id}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'approve',
           reviewerId,
@@ -143,9 +142,8 @@ export function useOverrides(initialFilters = {}) {
 
   const rejectOverride = async (id, reviewerId, reviewerName, notes = '') => {
     try {
-      const res = await fetch(`/api/overrides/${id}`, {
+      const res = await authFetch(`/api/overrides/${id}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'reject',
           reviewerId,
