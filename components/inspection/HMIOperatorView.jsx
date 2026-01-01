@@ -2,21 +2,23 @@
 
 /**
  * HMI Operator View Component
+ * Control Room Brutalism Design
  * Full-screen focused inspection interface for operators
- * ISA-101 compliant, minimal distractions, large touch targets
+ * Mission-critical aesthetic with phosphor colors
  */
 
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { 
-  Menu, HelpCircle, AlertTriangle, Sun, Moon, Video,
+import {
+  Menu, HelpCircle, AlertTriangle, Video,
   ZoomIn, ZoomOut, Move, Maximize2, Minimize2,
-  Check, X, Pause, Play
+  Check, X, Pause, Play, Radio, Activity, Eye,
+  ChevronLeft, ChevronRight, Flag
 } from 'lucide-react';
 import { useHMILayout } from '@/hooks/useHMILayout';
 import { useLiveInspection } from '@/hooks/useLiveInspection';
 import { HMIActionPanel } from './HMIActionPanel';
 import { DetectionOverlay } from './DetectionOverlay';
-import { FalseCallOverrideModal } from './FalseCallOverrideModal';
+import FalseCallOverrideModal from './FalseCallOverrideModal';
 import { cn } from '@/lib/utils';
 
 export function HMIOperatorView({
@@ -32,9 +34,6 @@ export function HMIOperatorView({
   const {
     layout,
     isPaused,
-    isDarkMode,
-    themeColors,
-    toggleTheme,
     togglePause,
     toggleFullscreen,
   } = useHMILayout();
@@ -42,8 +41,7 @@ export function HMIOperatorView({
   // Local state
   const [zoomLevel, setZoomLevel] = useState(100);
   const [showFalseCallModal, setShowFalseCallModal] = useState(false);
-  const [currentAction, setCurrentAction] = useState(null);
-  const timerRef = useRef(null);
+  const [currentTime, setCurrentTime] = useState('');
 
   // Live inspection hook
   const {
@@ -52,11 +50,10 @@ export function HMIOperatorView({
     currentFrame,
     stats,
     error,
-    connect,
     disconnect,
   } = useLiveInspection(lineId);
 
-  // Extract detection data from current frame
+  // Extract detection data
   const detection = currentFrame?.detections?.[0] || {};
   const defectType = detection.class_name || 'SCANNING...';
   const confidence = Math.round((detection.confidence || 0) * 100);
@@ -64,12 +61,11 @@ export function HMIOperatorView({
 
   // Calculate yield rate
   const totalInspected = stats.pass + stats.fail + stats.review;
-  const yieldRate = totalInspected > 0 
+  const yieldRate = totalInspected > 0
     ? ((stats.pass / totalInspected) * 100).toFixed(1)
     : '0.0';
 
-  // Get current timestamp
-  const [currentTime, setCurrentTime] = useState('');
+  // Real-time clock
   useEffect(() => {
     const updateTime = () => {
       const now = new Date();
@@ -83,13 +79,10 @@ export function HMIOperatorView({
   // Action handlers
   const handleApprove = useCallback(() => {
     console.log('Approved:', boardIdDisplay);
-    // TODO: Call API to record approval
-    // Reset timer would happen automatically via onTimeout reset
   }, [boardIdDisplay]);
 
   const handleReject = useCallback(() => {
     console.log('Rejected:', boardIdDisplay);
-    // TODO: Call API to record rejection
   }, [boardIdDisplay]);
 
   const handleFalseCall = useCallback(() => {
@@ -110,7 +103,7 @@ export function HMIOperatorView({
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (showFalseCallModal) return;
-      
+
       switch (e.key.toLowerCase()) {
         case 'a':
           if (!isPaused) handleApprove();
@@ -121,7 +114,7 @@ export function HMIOperatorView({
         case 'f':
           if (!isPaused) handleFalseCall();
           break;
-        case ' ': // Spacebar
+        case ' ':
           e.preventDefault();
           togglePause();
           break;
@@ -135,32 +128,37 @@ export function HMIOperatorView({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isPaused, showFalseCallModal, handleApprove, handleReject, handleFalseCall, togglePause, toggleFullscreen, layout.fullscreen]);
 
-  const colors = themeColors;
+  // Status configuration
+  const getStatusConfig = () => {
+    if (isPaused) return { color: 'phosphor-cyan', label: 'PAUSED', icon: Pause };
+    if (connected) return { color: 'phosphor-green', label: 'INSPECTING', icon: Activity };
+    if (connecting) return { color: 'phosphor-amber', label: 'CONNECTING', icon: Radio };
+    return { color: 'phosphor-red', label: 'OFFLINE', icon: AlertTriangle };
+  };
+
+  const statusConfig = getStatusConfig();
 
   return (
-    <div 
-      className="min-h-screen flex flex-col font-sans transition-colors duration-300"
-      style={{ backgroundColor: colors.bg, color: colors.text }}
-    >
-      {/* === COMPACT HEADER === */}
-      <header 
-        className="h-11 flex items-center justify-between px-4 shrink-0 border-b transition-colors"
-        style={{ backgroundColor: colors.surface, borderColor: colors.border }}
-      >
-        {/* Left: Menu + Board Info */}
-        <div className="flex items-center gap-3">
-          <button 
+    <div className="min-h-screen bg-void flex flex-col font-sans">
+      {/* === HEADER BAR === */}
+      <header className="h-12 bg-panel border-b border-surface-border flex items-center justify-between px-4 shrink-0">
+        {/* Left: Exit + Board Info */}
+        <div className="flex items-center gap-4">
+          <button
             onClick={onExit}
-            className="p-1.5 rounded transition-colors hover:opacity-80"
+            className="p-2 border border-surface-border bg-terminal hover:border-phosphor-amber hover:text-phosphor-amber transition-colors"
           >
-            <Menu size={18} style={{ color: colors.textMuted }} />
+            <Menu size={18} className="text-text-secondary" />
           </button>
-          <div className="flex items-center gap-2 text-sm">
-            <span className="font-mono font-semibold" style={{ color: colors.primary }}>
-              {boardIdDisplay}
-            </span>
-            <span style={{ color: colors.textMuted }}>|</span>
-            <span className="text-xs" style={{ color: colors.textMuted }}>
+
+          <div className="flex items-center gap-3">
+            <div className="px-3 py-1 bg-terminal border border-phosphor-amber/50">
+              <span className="font-mono text-sm font-bold text-phosphor-amber">
+                {boardIdDisplay}
+              </span>
+            </div>
+            <div className="h-4 w-px bg-surface-border" />
+            <span className="font-mono text-xs text-text-tertiary">
               {lineName || lineId}
             </span>
           </div>
@@ -168,150 +166,217 @@ export function HMIOperatorView({
 
         {/* Center: Status */}
         <div className="flex items-center gap-4">
-          {isPaused && (
-            <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/20 border border-blue-500/50 animate-pulse">
-              <Pause size={14} className="text-blue-400" />
-              <span className="text-xs font-semibold text-blue-400">PAUSED</span>
-            </div>
-          )}
-          <div className="flex items-center gap-2">
+          <div className={cn(
+            "flex items-center gap-2 px-4 py-1.5 border",
+            `border-${statusConfig.color}/50 bg-${statusConfig.color}/10`
+          )}>
             <div className={cn(
-              "w-2 h-2 rounded-full",
-              isPaused ? "bg-blue-400" : 
-              connected ? "bg-emerald-400 animate-pulse" : 
-              connecting ? "bg-yellow-400 animate-pulse" : "bg-red-400"
+              "w-2 h-2",
+              `bg-${statusConfig.color}`,
+              !isPaused && connected && "animate-pulse"
             )} />
+            <statusConfig.icon size={14} className={`text-${statusConfig.color}`} />
             <span className={cn(
-              "text-xs font-medium",
-              isPaused ? "text-blue-400" : 
-              connected ? "text-emerald-400" : 
-              connecting ? "text-yellow-400" : "text-red-400"
+              "font-display text-xs font-bold tracking-widest",
+              `text-${statusConfig.color}`
             )}>
-              {isPaused ? 'PAUSED' : connected ? 'INSPECTING' : connecting ? 'CONNECTING' : 'OFFLINE'}
+              {statusConfig.label}
             </span>
           </div>
-          <span className="text-xs font-mono" style={{ color: colors.textMuted }}>
-            {currentTime}
-          </span>
         </div>
 
-        {/* Right: Theme + Warning + Help */}
-        <div className="flex items-center gap-3">
-          <button 
-            onClick={toggleTheme}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-full transition-all"
-            style={{ 
-              backgroundColor: isDarkMode ? '#2D3E56' : '#E0E0E0',
-              border: `1px solid ${colors.border}`
-            }}
-          >
-            <Sun size={14} className={isDarkMode ? 'text-gray-500' : 'text-amber-500'} />
-            <div 
-              className="w-5 h-5 rounded-full transition-all duration-300 flex items-center justify-center"
-              style={{ backgroundColor: isDarkMode ? colors.primary : '#FCD34D' }}
-            >
-              {isDarkMode ? <Moon size={12} className="text-white" /> : <Sun size={12} className="text-amber-700" />}
-            </div>
-            <Moon size={14} className={isDarkMode ? 'text-blue-400' : 'text-gray-400'} />
-          </button>
-
+        {/* Right: Time + Help */}
+        <div className="flex items-center gap-4">
           {error && (
-            <div className="flex items-center gap-1 px-2 py-0.5 rounded bg-yellow-500/20 border border-yellow-500/50">
-              <AlertTriangle size={12} className="text-yellow-400" />
-              <span className="text-xs text-yellow-400">Warning</span>
+            <div className="flex items-center gap-2 px-3 py-1 bg-phosphor-red/10 border border-phosphor-red/50">
+              <AlertTriangle size={14} className="text-phosphor-red" />
+              <span className="font-mono text-xs text-phosphor-red">ALERT</span>
             </div>
           )}
-          
-          <button className="p-1.5 rounded transition-colors hover:opacity-80">
-            <HelpCircle size={16} style={{ color: colors.textMuted }} />
+          <span className="font-mono text-sm text-phosphor-amber">{currentTime}</span>
+          <button className="p-2 border border-surface-border bg-terminal hover:border-phosphor-amber transition-colors">
+            <HelpCircle size={16} className="text-text-tertiary" />
           </button>
         </div>
       </header>
 
       {/* === MAIN CONTENT === */}
       <main className="flex-1 flex overflow-hidden">
-        
-        {/* LEFT: Action Panel (340px) */}
-        <div 
-          className="w-[340px] shrink-0 border-r transition-colors"
-          style={{ borderColor: colors.border }}
-        >
-          <HMIActionPanel
-            defectType={defectType}
-            confidence={confidence}
-            historicalAccuracy={94}
-            autoApproveEnabled={layout.autoApproveEnabled}
-            autoApproveTimeout={layout.autoApproveTimeout}
-            isPaused={isPaused}
-            onApprove={handleApprove}
-            onReject={handleReject}
-            onFalseCall={handleFalseCall}
-            onTimeout={handleAutoApprove}
-            theme={isDarkMode ? 'dark' : 'light'}
-            themeColors={colors}
-            disabled={!connected}
-          />
+        {/* LEFT: Action Panel */}
+        <div className="w-[360px] shrink-0 border-r border-surface-border bg-panel flex flex-col">
+          {/* Detection Info */}
+          <div className="p-4 border-b border-surface-border">
+            <div className="panel-header mb-3">
+              <Eye className="w-4 h-4" />
+              <span>Detection Analysis</span>
+            </div>
+
+            <div className="space-y-3">
+              {/* Defect Type */}
+              <div className="bg-terminal border border-surface-border p-3">
+                <span className="data-label">DETECTED CLASS</span>
+                <p className={cn(
+                  "font-mono text-xl font-bold mt-1",
+                  defectType === 'PASS' ? 'text-phosphor-green' :
+                  defectType === 'SCANNING...' ? 'text-text-tertiary' :
+                  'text-phosphor-red'
+                )}>
+                  {defectType}
+                </p>
+              </div>
+
+              {/* Confidence */}
+              <div className="bg-terminal border border-surface-border p-3">
+                <span className="data-label">CONFIDENCE SCORE</span>
+                <div className="flex items-end gap-2 mt-1">
+                  <span className="font-mono text-3xl font-bold text-phosphor-amber">
+                    {confidence}
+                  </span>
+                  <span className="font-mono text-sm text-text-tertiary mb-1">%</span>
+                </div>
+                <div className="mt-2 h-2 bg-void border border-surface-border">
+                  <div
+                    className={cn(
+                      "h-full transition-all",
+                      confidence >= 90 ? 'bg-phosphor-green' :
+                      confidence >= 70 ? 'bg-phosphor-amber' :
+                      'bg-phosphor-red'
+                    )}
+                    style={{ width: `${confidence}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="p-4 flex-1">
+            <div className="panel-header mb-3">
+              <Radio className="w-4 h-4" />
+              <span>Operator Actions</span>
+            </div>
+
+            <div className="space-y-3">
+              {/* APPROVE */}
+              <button
+                onClick={handleApprove}
+                disabled={isPaused || !connected}
+                className={cn(
+                  "w-full py-5 flex items-center justify-center gap-3 transition-all",
+                  "bg-phosphor-green/20 border-2 border-phosphor-green text-phosphor-green",
+                  "hover:bg-phosphor-green hover:text-void",
+                  "disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-phosphor-green/20 disabled:hover:text-phosphor-green"
+                )}
+              >
+                <Check size={28} strokeWidth={3} />
+                <span className="font-display text-2xl font-bold tracking-wider">APPROVE</span>
+                <span className="font-mono text-xs opacity-60">[A]</span>
+              </button>
+
+              {/* REJECT */}
+              <button
+                onClick={handleReject}
+                disabled={isPaused || !connected}
+                className={cn(
+                  "w-full py-5 flex items-center justify-center gap-3 transition-all",
+                  "bg-phosphor-red/20 border-2 border-phosphor-red text-phosphor-red",
+                  "hover:bg-phosphor-red hover:text-white",
+                  "disabled:opacity-30 disabled:cursor-not-allowed"
+                )}
+              >
+                <X size={28} strokeWidth={3} />
+                <span className="font-display text-2xl font-bold tracking-wider">REJECT</span>
+                <span className="font-mono text-xs opacity-60">[R]</span>
+              </button>
+
+              {/* FALSE CALL */}
+              <button
+                onClick={handleFalseCall}
+                disabled={isPaused || !connected}
+                className={cn(
+                  "w-full py-4 flex items-center justify-center gap-3 transition-all",
+                  "bg-phosphor-amber/10 border-2 border-phosphor-amber/50 text-phosphor-amber",
+                  "hover:bg-phosphor-amber/20 hover:border-phosphor-amber",
+                  "disabled:opacity-30 disabled:cursor-not-allowed"
+                )}
+              >
+                <Flag size={20} />
+                <span className="font-display text-lg font-bold tracking-wider">FALSE CALL</span>
+                <span className="font-mono text-xs opacity-60">[F]</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Stats */}
+          <div className="p-4 border-t border-surface-border bg-terminal">
+            <div className="grid grid-cols-3 gap-3">
+              <div className="text-center">
+                <span className="data-label">PASSED</span>
+                <p className="font-mono text-2xl font-bold text-phosphor-green">{stats.pass}</p>
+              </div>
+              <div className="text-center">
+                <span className="data-label">FAILED</span>
+                <p className="font-mono text-2xl font-bold text-phosphor-red">{stats.fail}</p>
+              </div>
+              <div className="text-center">
+                <span className="data-label">YIELD</span>
+                <p className="font-mono text-2xl font-bold text-phosphor-amber">{yieldRate}%</p>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* RIGHT: Camera View */}
-        <div 
-          className="flex-1 p-4 transition-colors"
-          style={{ backgroundColor: isDarkMode ? '#0D1B2A' : '#E8E8E8' }}
-        >
-          <div 
-            className="relative w-full h-full rounded-2xl border-2 overflow-hidden transition-colors"
-            style={{ 
-              borderColor: colors.border,
-              backgroundColor: isDarkMode ? '#0A0F18' : '#E0E0E0'
-            }}
-          >
+        <div className="flex-1 bg-void p-4 flex flex-col">
+          {/* Camera Frame */}
+          <div className="flex-1 border-2 border-surface-border relative overflow-hidden bg-terminal">
             {/* Camera Header */}
-            <div 
-              className="absolute top-0 left-0 right-0 h-10 flex items-center justify-between px-4 border-b z-10"
-              style={{ 
-                backgroundColor: isDarkMode ? 'rgba(26, 41, 66, 0.95)' : 'rgba(255, 255, 255, 0.95)',
-                borderColor: colors.border,
-                backdropFilter: 'blur(8px)'
-              }}
-            >
-              <div className="flex items-center gap-2">
-                <div className="flex items-center gap-1.5">
-                  <div className={cn(
-                    "w-2.5 h-2.5 rounded-full",
-                    isPaused ? "bg-blue-500" : connected ? "bg-red-500 animate-pulse" : "bg-gray-500"
-                  )} />
-                  <span className={cn(
-                    "text-xs font-semibold",
-                    isPaused ? "text-blue-400" : connected ? "text-red-400" : "text-gray-400"
-                  )}>
-                    {isPaused ? '⏸ PAUSED' : connected ? '● REC' : '○ OFFLINE'}
-                  </span>
-                </div>
-                <span className="text-xs font-mono" style={{ color: colors.textMuted }}>CAM-01</span>
-              </div>
+            <div className="absolute top-0 left-0 right-0 h-10 bg-panel/95 border-b border-surface-border flex items-center justify-between px-4 z-10 backdrop-blur">
               <div className="flex items-center gap-3">
-                <Video size={16} style={{ color: colors.primary }} />
-                <span className="text-xs font-medium" style={{ color: colors.text }}>LIVE CAMERA FEED</span>
+                <div className={cn(
+                  "w-2.5 h-2.5",
+                  isPaused ? "bg-phosphor-cyan" :
+                  connected ? "bg-phosphor-red animate-pulse" :
+                  "bg-text-tertiary"
+                )} />
+                <span className={cn(
+                  "font-mono text-xs font-bold",
+                  isPaused ? "text-phosphor-cyan" :
+                  connected ? "text-phosphor-red" :
+                  "text-text-tertiary"
+                )}>
+                  {isPaused ? 'PAUSED' : connected ? 'REC' : 'OFFLINE'}
+                </span>
+                <span className="font-mono text-xs text-text-tertiary">CAM-01</span>
               </div>
-              <span className="text-xs font-mono" style={{ color: colors.textMuted }}>1920×1080 @ 30fps</span>
+              <div className="flex items-center gap-2">
+                <Video size={14} className="text-phosphor-amber" />
+                <span className="font-display text-xs font-semibold text-text-primary tracking-wider">
+                  LIVE FEED
+                </span>
+              </div>
+              <span className="font-mono text-xs text-text-tertiary">1920x1080 @ 30fps</span>
             </div>
 
-            {/* Camera View with Detection Overlay */}
+            {/* Detection Overlay */}
             <div className="absolute inset-0 top-10 flex items-center justify-center">
               {/* Paused Overlay */}
               {isPaused && (
-                <div className="absolute inset-0 bg-black/50 z-20 flex items-center justify-center">
+                <div className="absolute inset-0 bg-void/80 z-20 flex items-center justify-center backdrop-blur-sm">
                   <div className="text-center">
-                    <div className="w-20 h-20 rounded-full bg-blue-500/20 border-2 border-blue-500 flex items-center justify-center mb-4 mx-auto">
-                      <Pause size={40} className="text-blue-400" />
+                    <div className="w-24 h-24 border-2 border-phosphor-cyan flex items-center justify-center mb-4 mx-auto bg-phosphor-cyan/10">
+                      <Pause size={48} className="text-phosphor-cyan" />
                     </div>
-                    <p className="text-xl font-bold text-blue-400">INSPECTION PAUSED</p>
-                    <p className="text-sm text-gray-400 mt-2">Press SPACE or RESUME to continue</p>
+                    <p className="font-display text-2xl font-bold text-phosphor-cyan tracking-wider">
+                      INSPECTION PAUSED
+                    </p>
+                    <p className="font-mono text-sm text-text-tertiary mt-2">
+                      PRESS [SPACE] TO RESUME
+                    </p>
                   </div>
                 </div>
               )}
 
-              {/* Detection Overlay */}
               <div className="relative w-[90%] h-[90%]">
                 <DetectionOverlay
                   imageUrl={currentFrame?.image_url}
@@ -325,71 +390,54 @@ export function HMIOperatorView({
 
             {/* Zoom Controls */}
             <div className="absolute bottom-4 right-4 flex flex-col gap-2 z-10">
-              <button 
+              <button
                 onClick={() => setZoomLevel(Math.min(200, zoomLevel + 10))}
-                className="p-3 rounded-xl transition-colors border backdrop-blur"
-                style={{ 
-                  backgroundColor: isDarkMode ? 'rgba(26, 41, 66, 0.9)' : 'rgba(255, 255, 255, 0.9)',
-                  borderColor: colors.border
-                }}
+                className="p-3 bg-panel/90 border border-surface-border hover:border-phosphor-amber transition-colors backdrop-blur"
               >
-                <ZoomIn size={22} style={{ color: colors.text }} />
+                <ZoomIn size={20} className="text-text-primary" />
               </button>
-              <button 
+              <button
                 onClick={() => setZoomLevel(Math.max(50, zoomLevel - 10))}
-                className="p-3 rounded-xl transition-colors border backdrop-blur"
-                style={{ 
-                  backgroundColor: isDarkMode ? 'rgba(26, 41, 66, 0.9)' : 'rgba(255, 255, 255, 0.9)',
-                  borderColor: colors.border
-                }}
+                className="p-3 bg-panel/90 border border-surface-border hover:border-phosphor-amber transition-colors backdrop-blur"
               >
-                <ZoomOut size={22} style={{ color: colors.text }} />
+                <ZoomOut size={20} className="text-text-primary" />
               </button>
-              <button 
-                className="p-3 rounded-xl transition-colors border backdrop-blur"
-                style={{ 
-                  backgroundColor: isDarkMode ? 'rgba(26, 41, 66, 0.9)' : 'rgba(255, 255, 255, 0.9)',
-                  borderColor: colors.border
-                }}
-              >
-                <Move size={22} style={{ color: colors.text }} />
+              <button className="p-3 bg-panel/90 border border-surface-border hover:border-phosphor-amber transition-colors backdrop-blur">
+                <Move size={20} className="text-text-primary" />
               </button>
-              <div 
-                className="px-3 py-2 rounded-xl text-center border backdrop-blur"
-                style={{ 
-                  backgroundColor: isDarkMode ? 'rgba(26, 41, 66, 0.9)' : 'rgba(255, 255, 255, 0.9)',
-                  borderColor: colors.border
-                }}
-              >
-                <span className="text-sm font-mono" style={{ color: colors.primary }}>{zoomLevel}%</span>
+              <div className="px-3 py-2 bg-panel/90 border border-surface-border text-center backdrop-blur">
+                <span className="font-mono text-sm text-phosphor-amber">{zoomLevel}%</span>
               </div>
             </div>
+
+            {/* Technical corners */}
+            <div className="absolute top-12 left-2 w-8 h-8 border-l-2 border-t-2 border-phosphor-amber/30" />
+            <div className="absolute top-12 right-2 w-8 h-8 border-r-2 border-t-2 border-phosphor-amber/30" />
+            <div className="absolute bottom-2 left-2 w-8 h-8 border-l-2 border-b-2 border-phosphor-amber/30" />
+            <div className="absolute bottom-2 right-2 w-8 h-8 border-r-2 border-b-2 border-phosphor-amber/30" />
           </div>
         </div>
       </main>
 
-      {/* === FOOTER === */}
-      <footer 
-        className="h-[60px] flex items-center justify-between px-4 shrink-0 border-t transition-colors"
-        style={{ backgroundColor: colors.surface, borderColor: colors.border }}
-      >
-        {/* STOP + PAUSE */}
-        <div className="flex items-center gap-2">
-          <button 
+      {/* === FOOTER BAR === */}
+      <footer className="h-16 bg-panel border-t border-surface-border flex items-center justify-between px-4 shrink-0">
+        {/* Left: STOP + PAUSE */}
+        <div className="flex items-center gap-3">
+          <button
             onClick={handleStop}
-            className="h-12 px-5 bg-red-700 hover:bg-red-600 active:bg-red-800 rounded-xl flex items-center gap-2 font-bold text-lg transition-colors shadow-lg text-white"
+            className="h-12 px-6 bg-phosphor-red text-white font-display text-lg font-bold tracking-wider flex items-center gap-2 hover:shadow-glow-red transition-all"
           >
-            <div className="w-3 h-3 bg-white rounded-full" />
+            <div className="w-3 h-3 bg-white" />
             STOP
           </button>
-          
-          <button 
+
+          <button
             onClick={togglePause}
             className={cn(
-              "h-12 px-5 rounded-xl flex items-center gap-2 font-bold text-lg transition-colors shadow-lg text-white",
-              isPaused 
-                ? 'bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700' 
-                : 'bg-blue-600 hover:bg-blue-500 active:bg-blue-700'
+              "h-12 px-6 font-display text-lg font-bold tracking-wider flex items-center gap-2 transition-all",
+              isPaused
+                ? "bg-phosphor-green text-void hover:shadow-glow-green"
+                : "bg-phosphor-cyan/20 border-2 border-phosphor-cyan text-phosphor-cyan hover:bg-phosphor-cyan/30"
             )}
           >
             {isPaused ? (
@@ -406,65 +454,50 @@ export function HMIOperatorView({
           </button>
         </div>
 
-        {/* Navigation */}
+        {/* Center: Navigation */}
         <div className="flex items-center gap-3">
-          <button 
+          <button
             disabled={isPaused}
-            className={cn(
-              "h-12 px-6 rounded-xl flex items-center gap-2 font-semibold transition-colors",
-              isPaused && "opacity-50 cursor-not-allowed"
-            )}
-            style={{ backgroundColor: isDarkMode ? '#2D3E56' : '#D4D4D4', color: colors.text }}
+            className="h-12 px-6 bg-terminal border border-surface-border text-text-secondary font-display font-bold tracking-wider flex items-center gap-2 hover:border-phosphor-amber hover:text-phosphor-amber transition-colors disabled:opacity-30"
           >
-            <span className="text-xl">◀</span> PREV
+            <ChevronLeft size={20} />
+            PREV
           </button>
-          <button 
+          <button
             disabled={isPaused}
-            className={cn(
-              "h-12 px-8 rounded-xl flex items-center gap-2 font-bold text-lg transition-colors shadow-lg",
-              isPaused && "opacity-50 cursor-not-allowed"
-            )}
-            style={{ backgroundColor: colors.primary, color: isDarkMode ? '#0A1628' : '#FFFFFF' }}
+            className="h-12 px-8 bg-phosphor-amber text-void font-display text-lg font-bold tracking-wider flex items-center gap-2 hover:shadow-glow-amber transition-all disabled:opacity-30"
           >
-            NEXT <span className="text-xl">▶</span>
+            NEXT
+            <ChevronRight size={20} />
           </button>
         </div>
 
-        {/* Stats + Fullscreen */}
-        <div className="flex items-center gap-5">
-          <div className="flex items-center gap-4">
+        {/* Right: Fullscreen */}
+        <div className="flex items-center gap-4">
+          {/* Quick stats */}
+          <div className="flex items-center gap-4 mr-4">
             <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-full bg-emerald-500/20 flex items-center justify-center">
-                <Check size={16} className="text-emerald-400" />
+              <div className="w-6 h-6 border border-phosphor-green/50 bg-phosphor-green/10 flex items-center justify-center">
+                <Check size={14} className="text-phosphor-green" />
               </div>
-              <span className="text-xl font-bold text-emerald-400">{stats.pass}</span>
+              <span className="font-mono text-xl font-bold text-phosphor-green">{stats.pass}</span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-full bg-red-500/20 flex items-center justify-center">
-                <X size={16} className="text-red-400" />
+              <div className="w-6 h-6 border border-phosphor-red/50 bg-phosphor-red/10 flex items-center justify-center">
+                <X size={14} className="text-phosphor-red" />
               </div>
-              <span className="text-xl font-bold text-red-400">{stats.fail}</span>
-            </div>
-            <div 
-              className="px-4 py-2 rounded-xl border"
-              style={{ 
-                backgroundColor: `${colors.primary}20`,
-                borderColor: `${colors.primary}50`
-              }}
-            >
-              <span className="text-xl font-bold" style={{ color: colors.primary }}>{yieldRate}%</span>
+              <span className="font-mono text-xl font-bold text-phosphor-red">{stats.fail}</span>
             </div>
           </div>
 
-          <button 
+          <button
             onClick={toggleFullscreen}
-            className="p-3 rounded-xl transition-colors"
-            style={{ backgroundColor: isDarkMode ? '#2D3E56' : '#D4D4D4' }}
+            className="p-3 bg-terminal border border-surface-border hover:border-phosphor-amber transition-colors"
           >
             {layout.fullscreen ? (
-              <Minimize2 size={22} style={{ color: colors.text }} />
+              <Minimize2 size={20} className="text-text-primary" />
             ) : (
-              <Maximize2 size={22} style={{ color: colors.text }} />
+              <Maximize2 size={20} className="text-text-primary" />
             )}
           </button>
         </div>
@@ -484,7 +517,6 @@ export function HMIOperatorView({
           user={user}
           onSuccess={() => {
             setShowFalseCallModal(false);
-            // Move to next
           }}
         />
       )}

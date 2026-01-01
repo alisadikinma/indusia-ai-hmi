@@ -40,6 +40,7 @@ npm run test:e2e:ui       # Interactive UI mode
 ### Next.js App Router Structure
 
 The app uses Next.js 13.5 with App Router. Pages are in `app/` with the following main routes:
+- `/inspection/operator` - Fullscreen operator HMI with board selector
 - `/inspection/result/[id]` - Operator HMI for inspection results
 - `/inspection/overrides` - Manager review queue for false call overrides
 - `/engineering/master-data` - Engineering console for dataset/model management
@@ -79,7 +80,7 @@ Navigation items in `SideNav.jsx` are filtered by role. Each route should check 
 - `components/layout/` - SideNav, TopNav
 - `components/system/` - SystemHealthBar, SystemStatusChip, SystemStatusDetailsModal
 - `components/notifications/` - NotificationBell, NotificationDrawer, NotificationFilters
-- `components/inspection/` - FalseCallOverrideModal, OverrideReviewModal
+- `components/inspection/` - FalseCallOverrideModal, OverrideReviewModal, HMIOperatorView, HMIActionPanel, HMITimer, DetectionOverlay, LiveView
 - `components/sync/` - Sync progress and queue components
 - `components/event-log/` - Event log table and filters
 - `components/help/` - HelpOverlay system with context-aware shortcuts
@@ -343,8 +344,8 @@ Detailed implementation prompts are stored in `.claude/prompts/` directory:
 | 2 | ✅ Done | - | Dashboard frontend |
 | 3 | ✅ Done | - | Override annotation |
 | 4 | ✅ Done | - | Live inspection |
-| 5 | 🔲 Pending | - | Operator page route |
-| 6 | 🔲 Pending | - | Inspection API |
+| 5 | ✅ Done | 2026-01-01 | Operator page route |
+| 6 | ✅ Done | 2026-01-01 | Inspection API |
 
 ### README Update Template
 

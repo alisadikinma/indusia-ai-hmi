@@ -1,9 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
-import { LogIn, Eye, EyeOff, Loader2 } from 'lucide-react';
+import { Eye, EyeOff, Loader2, Shield, AlertTriangle, Terminal } from 'lucide-react';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -14,18 +14,51 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [currentTime, setCurrentTime] = useState('');
+  const [bootSequence, setBootSequence] = useState(0);
+
+  // Boot sequence animation
+  useEffect(() => {
+    const steps = ['INITIALIZING', 'LOADING MODULES', 'ESTABLISHING CONNECTION', 'READY'];
+    let step = 0;
+    const interval = setInterval(() => {
+      if (step < steps.length) {
+        setBootSequence(step);
+        step++;
+      } else {
+        clearInterval(interval);
+      }
+    }, 400);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Real-time clock
+  useEffect(() => {
+    const updateTime = () => {
+      const now = new Date();
+      setCurrentTime(now.toLocaleTimeString('en-US', {
+        hour12: false,
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      }));
+    };
+    updateTime();
+    const interval = setInterval(updateTime, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
 
     if (!email) {
-      setError('Please enter your email.');
+      setError('ERROR: EMAIL_REQUIRED');
       return;
     }
 
     if (!password) {
-      setError('Please enter your password.');
+      setError('ERROR: PASSWORD_REQUIRED');
       return;
     }
 
@@ -35,7 +68,7 @@ export default function LoginPage() {
       const result = await login(email, password);
 
       if (!result.success) {
-        setError(result.error || 'Login failed');
+        setError(`AUTH_FAILED: ${result.error || 'INVALID_CREDENTIALS'}`);
         setIsLoading(false);
         return;
       }
@@ -55,113 +88,218 @@ export default function LoginPage() {
       }
     } catch (err) {
       console.error('Login error:', err);
-      setError('An error occurred. Please try again.');
+      setError('SYSTEM_ERROR: CONNECTION_FAILED');
       setIsLoading(false);
     }
   };
 
+  const bootMessages = [
+    '> SYSTEM BOOT SEQUENCE INITIATED',
+    '> LOADING AUTHENTICATION MODULES...',
+    '> ESTABLISHING SECURE CONNECTION...',
+    '> READY FOR OPERATOR INPUT'
+  ];
+
   return (
-    <div className="min-h-screen bg-indusia-bg flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
-        <div className="bg-indusia-surface rounded-xl shadow-2xl border border-indusia-border overflow-hidden">
-          {/* Header */}
-          <div className="bg-gradient-to-r from-indusia-primary to-indusia-primary/80 px-8 py-6">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-white/20 rounded-lg flex items-center justify-center">
-                <LogIn className="w-6 h-6 text-white" />
+    <div className="min-h-screen bg-void grid-bg flex items-center justify-center p-6 relative overflow-hidden">
+      {/* Decorative grid overlay */}
+      <div className="absolute inset-0 bg-grid-pattern bg-grid opacity-30" />
+
+      {/* Radial vignette */}
+      <div className="absolute inset-0 bg-gradient-radial from-transparent via-transparent to-void/80" />
+
+      {/* Technical corner decorations */}
+      <div className="absolute top-4 left-4 w-16 h-16 border-l-2 border-t-2 border-phosphor-amber/30" />
+      <div className="absolute top-4 right-4 w-16 h-16 border-r-2 border-t-2 border-phosphor-amber/30" />
+      <div className="absolute bottom-4 left-4 w-16 h-16 border-l-2 border-b-2 border-phosphor-amber/30" />
+      <div className="absolute bottom-4 right-4 w-16 h-16 border-r-2 border-b-2 border-phosphor-amber/30" />
+
+      {/* System status bar - top */}
+      <div className="absolute top-0 left-0 right-0 h-8 bg-panel/80 border-b border-surface-border flex items-center justify-between px-4 text-xxs font-mono">
+        <div className="flex items-center gap-4">
+          <span className="text-phosphor-amber">SYS://INDUSIA.HMI.AUTH</span>
+          <span className="text-text-tertiary">|</span>
+          <div className="flex items-center gap-1.5">
+            <div className="w-1.5 h-1.5 bg-phosphor-green animate-pulse-glow" />
+            <span className="text-phosphor-green">ONLINE</span>
+          </div>
+        </div>
+        <div className="flex items-center gap-4">
+          <span className="text-text-tertiary">UTC</span>
+          <span className="text-phosphor-amber font-semibold tracking-wider">{currentTime}</span>
+        </div>
+      </div>
+
+      {/* Main login panel */}
+      <div className="relative w-full max-w-md animate-fade-in">
+        {/* Panel container */}
+        <div className="panel tech-corner shadow-panel">
+          {/* Panel header */}
+          <div className="panel-header">
+            <Shield className="w-4 h-4" />
+            <span>Authentication Terminal</span>
+            <span className="ml-auto text-text-tertiary font-mono text-xxs">v2.4.1</span>
+          </div>
+
+          {/* Logo section */}
+          <div className="px-8 pt-8 pb-6 border-b border-surface-border">
+            <div className="flex items-center gap-4">
+              {/* Logo mark */}
+              <div className="relative">
+                <div className="w-16 h-16 border-2 border-phosphor-amber flex items-center justify-center bg-terminal relative overflow-hidden">
+                  <div className="absolute inset-0 bg-phosphor-amber/5" />
+                  <span className="font-display font-bold text-2xl text-phosphor-amber text-glow-amber">IN</span>
+                </div>
+                <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-phosphor-green animate-pulse-glow" />
               </div>
+
+              {/* Logo text */}
               <div>
-                <h1 className="text-2xl font-bold text-white">INDUSIA AI</h1>
-                <p className="text-white/80 text-sm">Login</p>
+                <h1 className="font-display font-bold text-3xl tracking-wider text-text-primary">
+                  INDUSIA
+                </h1>
+                <p className="font-mono text-xs text-phosphor-amber tracking-widest">
+                  AI VISUAL INSPECTION
+                </p>
               </div>
+            </div>
+
+            {/* Boot sequence terminal */}
+            <div className="mt-6 bg-terminal border border-surface-border p-3">
+              {bootMessages.slice(0, bootSequence + 1).map((msg, i) => (
+                <div
+                  key={i}
+                  className="font-mono text-xs animate-slide-up"
+                  style={{
+                    color: i === bootSequence ? '#FFAA00' : '#8B949E',
+                    animationDelay: `${i * 0.1}s`
+                  }}
+                >
+                  {msg}
+                  {i === bootSequence && bootSequence < 3 && (
+                    <span className="inline-block w-2 h-3 bg-phosphor-amber ml-1 animate-typing-cursor" />
+                  )}
+                </div>
+              ))}
             </div>
           </div>
 
-          {/* Form */}
+          {/* Form section */}
           <div className="px-8 py-8">
-            <div className="mb-6">
-              <h2 className="text-lg font-semibold text-indusia-text mb-2">User Login</h2>
-              <p className="text-sm text-indusia-textMuted">
-                Enter your email and password to continue.
-              </p>
-            </div>
-
-            <form onSubmit={handleSubmit} className="space-y-5">
-              {/* Email */}
+            <form onSubmit={handleSubmit} className="space-y-6">
+              {/* Email field */}
               <div>
-                <label className="block text-sm font-medium text-indusia-text mb-2">
-                  Email
+                <label className="data-label flex items-center gap-2 mb-2">
+                  <Terminal className="w-3 h-3" />
+                  Operator ID
                 </label>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="Enter your email"
-                  className="w-full px-4 py-3 bg-indusia-bg border border-indusia-border rounded-lg text-indusia-text focus:outline-none focus:ring-2 focus:ring-indusia-primary focus:border-transparent"
-                  disabled={isLoading}
-                />
+                <div className="relative">
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="operator@indusia.io"
+                    className="w-full px-4 py-3 bg-terminal border border-surface-border text-text-primary font-mono text-sm placeholder:text-text-tertiary focus:border-phosphor-amber focus:shadow-glow-amber transition-all"
+                    disabled={isLoading}
+                    autoComplete="email"
+                  />
+                  <div className="absolute left-0 top-0 bottom-0 w-1 bg-phosphor-amber/50" />
+                </div>
               </div>
 
-              {/* Password */}
+              {/* Password field */}
               <div>
-                <label className="block text-sm font-medium text-indusia-text mb-2">
-                  Password
+                <label className="data-label flex items-center gap-2 mb-2">
+                  <Shield className="w-3 h-3" />
+                  Access Code
                 </label>
                 <div className="relative">
                   <input
                     type={showPassword ? 'text' : 'password'}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Enter your password"
-                    className="w-full px-4 py-3 bg-indusia-bg border border-indusia-border rounded-lg text-indusia-text focus:outline-none focus:ring-2 focus:ring-indusia-primary focus:border-transparent pr-12"
+                    placeholder="••••••••••••"
+                    className="w-full px-4 py-3 pr-12 bg-terminal border border-surface-border text-text-primary font-mono text-sm placeholder:text-text-tertiary focus:border-phosphor-amber focus:shadow-glow-amber transition-all"
                     disabled={isLoading}
+                    autoComplete="current-password"
                   />
+                  <div className="absolute left-0 top-0 bottom-0 w-1 bg-phosphor-amber/50" />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-indusia-textMuted hover:text-indusia-text transition-colors"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-text-tertiary hover:text-phosphor-amber transition-colors p-1"
+                    tabIndex={-1}
                   >
-                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
               </div>
 
-              {/* Error Message */}
+              {/* Error message */}
               {error && (
-                <div className="bg-indusia-fail/10 border border-indusia-fail rounded-lg px-4 py-3">
-                  <p className="text-indusia-fail text-sm">{error}</p>
+                <div className="flex items-start gap-3 p-3 bg-phosphor-red/10 border border-phosphor-red/50 animate-slide-up">
+                  <AlertTriangle className="w-4 h-4 text-phosphor-red flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-mono text-xs text-phosphor-red font-semibold">{error}</p>
+                    <p className="font-mono text-xxs text-text-tertiary mt-1">
+                      CHECK CREDENTIALS AND RETRY
+                    </p>
+                  </div>
                 </div>
               )}
 
-              {/* Submit Button */}
+              {/* Submit button */}
               <button
                 type="submit"
-                disabled={isLoading}
-                className="w-full px-6 py-4 bg-indusia-primary text-white rounded-lg font-semibold text-base hover:opacity-90 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={isLoading || bootSequence < 3}
+                className="w-full py-4 btn-primary font-display text-lg tracking-widest flex items-center justify-center gap-3 disabled:opacity-40"
               >
                 {isLoading ? (
                   <>
                     <Loader2 className="w-5 h-5 animate-spin" />
-                    Logging in...
+                    <span>AUTHENTICATING</span>
                   </>
                 ) : (
                   <>
-                    <LogIn className="w-5 h-5" />
-                    Login
+                    <Shield className="w-5 h-5" />
+                    <span>AUTHORIZE ACCESS</span>
                   </>
                 )}
               </button>
             </form>
           </div>
 
-          {/* Footer */}
-          <div className="px-8 py-4 bg-indusia-surfaceMuted border-t border-indusia-border">
-            <p className="text-xs text-indusia-textMuted text-center">
-              INDUSIA AI Visual Inspection System v1.0
-            </p>
+          {/* Panel footer */}
+          <div className="px-8 py-4 bg-terminal border-t border-surface-border">
+            <div className="flex items-center justify-between font-mono text-xxs">
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-1.5">
+                  <div className="status-indicator ok" />
+                  <span className="text-text-tertiary">SECURE</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="status-indicator ok" />
+                  <span className="text-text-tertiary">ENCRYPTED</span>
+                </div>
+              </div>
+              <span className="text-text-tertiary">SESSION: {Math.random().toString(36).substr(2, 8).toUpperCase()}</span>
+            </div>
           </div>
         </div>
+
+        {/* Bottom system info */}
+        <div className="mt-6 text-center">
+          <p className="font-mono text-xxs text-text-tertiary tracking-wider">
+            INDUSIA AI VISUAL INSPECTION SYSTEM // HMI CONSOLE v1.0.0
+          </p>
+          <p className="font-mono text-xxs text-text-tertiary/50 mt-1">
+            AUTHORIZED PERSONNEL ONLY
+          </p>
+        </div>
       </div>
+
+      {/* Decorative scan line */}
+      <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-phosphor-amber/50 to-transparent animate-scan" />
     </div>
   );
 }

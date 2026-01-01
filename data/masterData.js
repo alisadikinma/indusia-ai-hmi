@@ -49,6 +49,7 @@ export const roles = [
 export const menuItems = [
   { id: "dashboard", name: "Dashboard", path: "/" },
   { id: "inspection", name: "HMI Inspection", path: "/inspection/result" },
+  { id: "inspection_operator", name: "Operator View", path: "/inspection/operator", roles: ["operator", "manager", "engineer", "superadmin"] },
   { id: "overrides", name: "Manager Override Queue", path: "/inspection/overrides" },
   { id: "engineering", name: "Engineering Console", path: "/engineering/master-data" },
   { id: "sync", name: "Sync to Cloud", path: "/settings/sync" },
@@ -57,10 +58,10 @@ export const menuItems = [
 ];
 
 export const permissions = {
-  operator: ["dashboard", "inspection", "help"],
-  manager: ["dashboard", "inspection", "overrides", "sync", "help"],
-  engineer: ["dashboard", "engineering", "sync", "help"],
-  superadmin: ["dashboard", "inspection", "overrides", "engineering", "sync", "superadmin", "help"],
+  operator: ["dashboard", "inspection", "inspection_operator", "help"],
+  manager: ["dashboard", "inspection", "inspection_operator", "overrides", "sync", "help"],
+  engineer: ["dashboard", "inspection_operator", "engineering", "sync", "help"],
+  superadmin: ["dashboard", "inspection", "inspection_operator", "overrides", "engineering", "sync", "superadmin", "help"],
 };
 
 export const userProfiles = [

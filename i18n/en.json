@@ -6,6 +6,7 @@
   "nav": {
     "dashboard": "Dashboard",
     "hmi": "HMI Inspection",
+    "operatorView": "Operator View",
     "managerQueue": "Override Queue",
     "engineering": "Engineering Console",
     "masterData": "Master Data",

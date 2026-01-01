@@ -27,6 +27,59 @@ A comprehensive Human-Machine Interface (HMI) system for AI-powered visual inspe
 
 ## Recent Updates
 
+### Phase 6: Inspection Action API (2026-01-01)
+
+**New Features:**
+- Complete inspection session management (start, pause, resume, end)
+- Operator decision recording (approve, reject, false_call, auto_approve)
+- Real-time session statistics with auto-updating
+- Performance metrics tracking (decision time, yield rate)
+
+**New API Endpoints:**
+- `POST /api/inspection/session` — Start new inspection session
+- `GET /api/inspection/session` — Get active session for current user
+- `GET /api/inspection/session/[id]` — Get session details
+- `PUT /api/inspection/session/[id]` — Update session (pause/resume/end)
+- `POST /api/inspection/action` — Record operator decision
+- `GET /api/inspection/stats` — Get statistics (line, operator, or session)
+
+**New Repository:**
+- `lib/repos/inspectionRepo.js` — Database operations for inspection results and sessions
+
+**New Database Tables:**
+- `inspection_sessions` — Tracks operator inspection sessions
+- `inspection_results` — Records individual operator decisions
+
+**New Validation Schemas:**
+- `lib/validations/inspectionSchema.js` — Zod schemas for inspection inputs
+
+---
+
+### Phase 5: HMI Operator Page Route (2026-01-01)
+
+**New Features:**
+- Dedicated operator inspection page route at `/inspection/operator`
+- Cascading board selector (Section → Customer → Line → Board)
+- Recent boards quick-access for fast board selection
+- URL parameter support for bookmarking/sharing specific boards
+- Minimal layout without sidebar for fullscreen operation
+
+**New Components:**
+- `app/inspection/operator/page.jsx` — Main operator page with auth guard
+- `app/inspection/operator/BoardSelector.jsx` — Cascading board selection UI
+- `app/inspection/operator/layout.jsx` — Minimal fullscreen layout
+
+**Navigation:**
+- Added "Operator View" to sidebar navigation
+- Accessible to: operator, manager, engineer, superadmin roles
+
+**Keyboard Shortcuts:**
+| Key | Action |
+|-----|--------|
+| `ESC` | Go back in board selector |
+
+---
+
 ### Pre-Phase: HMI Operator Components (2025-01-01)
 
 **New Features:**
@@ -65,8 +118,8 @@ Implementation prompts stored in `.claude/prompts/`:
 | 2 | `phase-2-dashboard-frontend.md` | ✅ Done | Dashboard charts & components |
 | 3 | `phase-3-override-annotation.md` | ✅ Done | Override annotation canvas |
 | 4 | `phase-4-live-inspection.md` | ✅ Done | Live inspection SSE + overlay |
-| 5 | `phase-5-operator-page.md` | 🔲 Pending | HMI Operator page route |
-| 6 | `phase-6-inspection-api.md` | 🔲 Pending | Inspection action API |
+| 5 | `phase-5-operator-page.md` | ✅ Done | HMI Operator page route |
+| 6 | `phase-6-inspection-api.md` | ✅ Done | Inspection action API |
 
 ---
 
@@ -199,6 +252,7 @@ indusia-ai-hmi/
 │   │
 │   ├── dashboard/                    # Analytics dashboard page
 │   ├── inspection/
+│   │   ├── operator/                 # Fullscreen operator HMI
 │   │   ├── result/[id]/              # Inspection result detail
 │   │   ├── live/                     # Live inspection view
 │   │   └── overrides/                # Manager override queue
