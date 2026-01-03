@@ -1,277 +1,807 @@
-'use client'
+'use client';
 
 /**
- * Live View Component
- * Main component for live inspection monitoring
- * Shows camera feed with detection overlay, stats, and detection log
+ * Live View Component - ISA-101 Compliant HMI
+ * Control Room Brutalism Design
+ * Real-time inspection monitoring with auto-approve feature
+ * 
+ * Roles:
+ * - Operator: Can approve/reject/false call
+ * - Other roles: View-only mode
  */
 
-import { useState, useCallback } from 'react'
-import { useLiveInspection } from '@/hooks/useLiveInspection'
-import { DetectionOverlay } from './DetectionOverlay'
-import { DetectionLog } from './DetectionLog'
-import { OverrideModal } from '@/components/override/OverrideModal'
-import { cn } from '@/lib/utils'
+import { useState, useCallback, useEffect, useRef } from 'react';
 import {
-  Wifi,
-  WifiOff,
-  RefreshCw,
-  Trash2,
-  RotateCcw,
-  Volume2,
-  VolumeX,
-  Settings
-} from 'lucide-react'
+  Menu, HelpCircle, AlertTriangle, Video,
+  ZoomIn, ZoomOut, Move, Maximize2, Minimize2,
+  Check, X, Pause, Play, Radio, Activity, Eye,
+  ChevronLeft, ChevronRight, Flag, Square, Settings,
+  Sun, Moon, PanelLeft, EyeOff
+} from 'lucide-react';
+import { useLiveInspection } from '@/hooks/useLiveInspection';
+import { useSidebar } from '@/context/SidebarContext';
+import { DetectionOverlay } from './DetectionOverlay';
+import FalseCallOverrideModal from './FalseCallOverrideModal';
+import { cn } from '@/lib/utils';
 
-export function LiveView({ lineId, lineName, sectionId, customerId, user }) {
-  const [confidenceThreshold, setConfidenceThreshold] = useState(0.75)
-  const [overrideTarget, setOverrideTarget] = useState(null)
-  const [soundEnabled, setSoundEnabled] = useState(false)
-  const [showSettings, setShowSettings] = useState(false)
+/**
+ * Circular Auto-Approve Timer
+ */
+function AutoApproveTimer({ 
+  duration = 10, 
+  isPaused = false, 
+  onTimeout, 
+  confidence = 0,
+  confidenceThreshold = 85,
+  size = 100,
+  disabled = false 
+}) {
+  const [timeLeft, setTimeLeft] = useState(duration);
+  const isActive = confidence >= confidenceThreshold && !isPaused && !disabled;
 
+  // Reset when confidence changes
+  useEffect(() => {
+    setTimeLeft(duration);
+  }, [duration, confidence]);
+
+  // Countdown
+  useEffect(() => {
+    if (!isActive || timeLeft <= 0) return;
+
+    const timer = setInterval(() => {
+      setTimeLeft(prev => {
+        if (prev <= 1) {
+          onTimeout?.();
+          return duration;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [isActive, timeLeft, duration, onTimeout]);
+
+  // SVG calculations
+  const strokeWidth = 6;
+  const radius = (size - strokeWidth) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const progress = isActive ? (timeLeft / duration) : 1;
+  const strokeDashoffset = circumference * (1 - progress);
+
+  // Color based on time
+  const getColor = () => {
+    if (disabled) return 'var(--text-tertiary)';
+    if (!isActive) return 'var(--text-tertiary)';
+    if (timeLeft > 5) return 'var(--phosphor-amber)';
+    if (timeLeft > 2) return 'var(--phosphor-amber-bright)';
+    return 'var(--phosphor-red)';
+  };
+
+  return (
+    <div className="flex flex-col items-center">
+      <div className="relative" style={{ width: size, height: size }}>
+        <svg className="transform -rotate-90" width={size} height={size}>
+          {/* Background circle */}
+          <circle
+            cx={size / 2}
+            cy={size / 2}
+            r={radius}
+            stroke="var(--surface-border)"
+            strokeWidth={strokeWidth}
+            fill="none"
+          />
+          {/* Progress circle */}
+          <circle
+            cx={size / 2}
+            cy={size / 2}
+            r={radius}
+            stroke={getColor()}
+            strokeWidth={strokeWidth}
+            fill="none"
+            strokeLinecap="square"
+            strokeDasharray={circumference}
+            strokeDashoffset={strokeDashoffset}
+            className="transition-all duration-1000 ease-linear"
+          />
+        </svg>
+
+        {/* Center text */}
+        <div className="absolute inset-0 flex flex-col items-center justify-center">
+          {disabled ? (
+            <EyeOff size={size * 0.25} className="text-text-tertiary" />
+          ) : isActive ? (
+            <>
+              <span 
+                className="font-mono font-bold"
+                style={{ fontSize: size * 0.4, color: getColor(), lineHeight: 1 }}
+              >
+                {timeLeft}
+              </span>
+              <span className="font-mono text-xs text-text-tertiary">sec</span>
+            </>
+          ) : (
+            <Pause size={size * 0.3} className="text-text-tertiary" />
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Detection Legend Overlay
+ */
+function DetectionLegend({ detections = [] }) {
+  const counts = {
+    critical: detections.filter(d => d.severity === 'critical' || d.class_name?.includes('bridge') || d.class_name?.includes('short')).length,
+    warning: detections.filter(d => d.severity === 'warning' || d.class_name?.includes('bite')).length,
+    info: detections.filter(d => d.severity === 'info' || d.class_name?.includes('copper')).length,
+  };
+
+  // Only show if there are detections
+  if (detections.length === 0) return null;
+
+  return (
+    <div className="absolute top-14 right-4 z-10 bg-panel/95 border border-surface-border p-3 backdrop-blur">
+      <div className="font-display text-xs font-bold text-text-tertiary tracking-wider mb-2">
+        DETECTED
+      </div>
+      <div className="space-y-2">
+        {counts.critical > 0 && (
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 bg-phosphor-red" />
+            <span className="font-mono text-xs text-text-primary">Critical ({counts.critical})</span>
+          </div>
+        )}
+        {counts.warning > 0 && (
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 bg-phosphor-amber" />
+            <span className="font-mono text-xs text-text-primary">Warning ({counts.warning})</span>
+          </div>
+        )}
+        {counts.info > 0 && (
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 bg-phosphor-cyan" />
+            <span className="font-mono text-xs text-text-primary">Info ({counts.info})</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export function LiveView({
+  lineId,
+  lineName,
+  sectionId,
+  customerId,
+  user,
+  onExit,
+  isOperator = false, // Only operators can perform actions
+}) {
+  // Sidebar context
+  const { isHidden, toggleHidden } = useSidebar();
+
+  // State
+  const [isPaused, setIsPaused] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [zoomLevel, setZoomLevel] = useState(100);
+  const [showFalseCallModal, setShowFalseCallModal] = useState(false);
+  const [currentTime, setCurrentTime] = useState('');
+  const [autoApproveDuration, setAutoApproveDuration] = useState(10);
+
+  // Live inspection hook
   const {
     connected,
     connecting,
     currentFrame,
-    detectionLog,
     stats,
     error,
     connect,
     disconnect,
-    clearLog,
-    resetStats
-  } = useLiveInspection(lineId, {
-    onDetection: (data) => {
-      // Play sound for defects if enabled
-      if (soundEnabled && (data.result === 'fail' || data.result === 'review')) {
-        playAlertSound()
-      }
-    }
-  })
+  } = useLiveInspection(lineId);
 
-  const playAlertSound = () => {
-    try {
-      const audio = new Audio('/sounds/alert.mp3')
-      audio.volume = 0.5
-      audio.play().catch(() => { })
-    } catch { }
-  }
+  // Extract detection data
+  const detection = currentFrame?.detections?.[0] || {};
+  const defectType = detection.class_name || 'SCANNING...';
+  const confidence = Math.round((detection.confidence || 0) * 100);
+  const boardId = currentFrame?.board_id || 'PCB-0000-0000';
+  const batchId = currentFrame?.batch_id || 'BATCH-0000';
 
-  const handleOverrideClick = useCallback((frame) => {
-    setOverrideTarget({
-      boardId: frame.board_id,
-      imageUrl: frame.image_url,
-      aiDetections: frame.detections
-    })
-  }, [])
-
-  const handleOverrideSuccess = useCallback(() => {
-    setOverrideTarget(null)
-    // Could show toast notification here
-  }, [])
-
-  // Filter detections by confidence threshold
-  const filteredDetections = currentFrame?.detections?.filter(
-    d => (d.confidence || 0) >= confidenceThreshold
-  ) || []
-
-  // Calculate pass rate
-  const totalInspected = stats.pass + stats.fail + stats.review
-  const passRate = totalInspected > 0
+  // Calculate stats
+  const totalInspected = stats.pass + stats.fail + stats.review;
+  const yieldRate = totalInspected > 0
     ? ((stats.pass / totalInspected) * 100).toFixed(1)
-    : '0.0'
+    : '0.0';
+
+  // Historical accuracy (mock for now)
+  const historicalAccuracy = 94;
+
+  // Actions disabled for non-operators
+  const actionsDisabled = !isOperator || isPaused || !connected;
+
+  // Real-time clock
+  useEffect(() => {
+    const updateTime = () => {
+      const now = new Date();
+      setCurrentTime(now.toLocaleTimeString('en-US', { hour12: false }));
+    };
+    updateTime();
+    const interval = setInterval(updateTime, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Action handlers - only for operators
+  const handleApprove = useCallback(() => {
+    if (!isOperator) return;
+    console.log('Approved:', boardId);
+    // TODO: API call
+  }, [boardId, isOperator]);
+
+  const handleReject = useCallback(() => {
+    if (!isOperator) return;
+    console.log('Rejected:', boardId);
+    // TODO: API call
+  }, [boardId, isOperator]);
+
+  const handleFalseCall = useCallback(() => {
+    if (!isOperator) return;
+    setShowFalseCallModal(true);
+  }, [isOperator]);
+
+  const handleAutoApprove = useCallback(() => {
+    if (!isOperator) return;
+    console.log('Auto-approved:', boardId);
+    handleApprove();
+  }, [boardId, handleApprove, isOperator]);
+
+  const handleStop = useCallback(() => {
+    disconnect();
+    if (onExit) onExit();
+  }, [disconnect, onExit]);
+
+  const togglePause = () => setIsPaused(!isPaused);
+
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen();
+      setIsFullscreen(true);
+    } else {
+      document.exitFullscreen();
+      setIsFullscreen(false);
+    }
+  };
+
+  // Keyboard shortcuts - actions only for operators
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (showFalseCallModal) return;
+
+      switch (e.key.toLowerCase()) {
+        case 'a':
+          if (isOperator && !isPaused && connected) handleApprove();
+          break;
+        case 'r':
+          if (isOperator && !isPaused && connected) handleReject();
+          break;
+        case 'f':
+          if (isOperator && !isPaused && connected) handleFalseCall();
+          break;
+        case 'm':
+          toggleHidden();
+          break;
+        case ' ':
+          e.preventDefault();
+          togglePause();
+          break;
+        case 'escape':
+          if (isFullscreen) toggleFullscreen();
+          break;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isPaused, connected, showFalseCallModal, isFullscreen, handleApprove, handleReject, handleFalseCall, toggleHidden, isOperator]);
+
+  // Status config
+  const getStatusConfig = () => {
+    if (isPaused) return { color: 'phosphor-cyan', label: 'PAUSED', icon: Pause };
+    if (connected) return { color: 'phosphor-green', label: isOperator ? 'INSPECTING' : 'VIEWING', icon: isOperator ? Activity : Eye };
+    if (connecting) return { color: 'phosphor-amber', label: 'CONNECTING', icon: Radio };
+    return { color: 'phosphor-red', label: 'OFFLINE', icon: AlertTriangle };
+  };
+
+  const statusConfig = getStatusConfig();
+  const StatusIcon = statusConfig.icon;
 
   return (
-    <div className="h-full flex flex-col bg-indusia-bg">
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-indusia-border bg-indusia-surface">
+    <div className="h-screen bg-void flex flex-col font-sans select-none">
+      {/* === HEADER BAR === */}
+      <header className="h-12 bg-panel border-b border-surface-border flex items-center justify-between px-4 shrink-0">
+        {/* Left: Menu + Board/Batch Info */}
         <div className="flex items-center gap-4">
-          <div>
-            <h1 className="text-xl font-bold text-indusia-text">Live Inspection</h1>
-            <p className="text-sm text-indusia-textMuted">{lineName || lineId}</p>
-          </div>
-
-          {/* Connection Status */}
-          <div
-            className={cn(
-              'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium',
-              connected
-                ? 'bg-indusia-pass/20 text-indusia-pass'
-                : connecting
-                  ? 'bg-indusia-warning/20 text-indusia-warning'
-                  : 'bg-indusia-fail/20 text-indusia-fail'
-            )}
+          <button
+            onClick={toggleHidden}
+            className="p-2 border border-surface-border bg-terminal hover:border-phosphor-amber hover:text-phosphor-amber transition-colors"
+            title={isHidden ? "Show Menu" : "Hide Menu"}
           >
-            {connected ? (
-              <>
-                <Wifi className="w-3.5 h-3.5" />
-                <div className="w-2 h-2 rounded-full bg-indusia-pass animate-pulse" />
-                LIVE
-              </>
-            ) : connecting ? (
-              <>
-                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                CONNECTING
-              </>
+            {isHidden ? (
+              <PanelLeft size={18} className="text-text-secondary" />
             ) : (
-              <>
-                <WifiOff className="w-3.5 h-3.5" />
-                DISCONNECTED
-              </>
+              <Menu size={18} className="text-text-secondary" />
             )}
-          </div>
+          </button>
 
-          {!connected && !connecting && (
-            <button
-              onClick={connect}
-              className="px-3 py-1 text-sm bg-indusia-primary text-white rounded hover:opacity-90"
-            >
-              Reconnect
-            </button>
+          <div className="flex items-center gap-3">
+            <span className="font-mono text-sm font-bold text-phosphor-amber">
+              {boardId}
+            </span>
+            <span className="text-text-tertiary">|</span>
+            <span className="font-mono text-xs text-text-secondary">
+              {batchId}
+            </span>
+          </div>
+          
+          {/* View-only badge for non-operators */}
+          {!isOperator && (
+            <div className="flex items-center gap-2 px-3 py-1 bg-phosphor-cyan/10 border border-phosphor-cyan/50">
+              <Eye size={14} className="text-phosphor-cyan" />
+              <span className="font-mono text-xs font-bold text-phosphor-cyan">VIEW ONLY</span>
+            </div>
           )}
         </div>
 
-        {/* Stats */}
-        <div className="flex items-center gap-6">
-          <div className="text-center">
-            <div className="text-2xl font-bold text-indusia-pass">{stats.pass}</div>
-            <div className="text-xs text-indusia-textMuted">Pass</div>
+        {/* Center: Status */}
+        <div className="flex items-center gap-3">
+          <div className={cn(
+            "flex items-center gap-2 px-4 py-1.5 border",
+            statusConfig.color === 'phosphor-green' && "border-phosphor-green/50 bg-phosphor-green/10",
+            statusConfig.color === 'phosphor-amber' && "border-phosphor-amber/50 bg-phosphor-amber/10",
+            statusConfig.color === 'phosphor-red' && "border-phosphor-red/50 bg-phosphor-red/10",
+            statusConfig.color === 'phosphor-cyan' && "border-phosphor-cyan/50 bg-phosphor-cyan/10",
+          )}>
+            <div className={cn(
+              "w-2 h-2",
+              statusConfig.color === 'phosphor-green' && "bg-phosphor-green",
+              statusConfig.color === 'phosphor-amber' && "bg-phosphor-amber",
+              statusConfig.color === 'phosphor-red' && "bg-phosphor-red",
+              statusConfig.color === 'phosphor-cyan' && "bg-phosphor-cyan",
+              connected && !isPaused && "animate-pulse"
+            )} />
+            <StatusIcon size={14} className={cn(
+              statusConfig.color === 'phosphor-green' && "text-phosphor-green",
+              statusConfig.color === 'phosphor-amber' && "text-phosphor-amber",
+              statusConfig.color === 'phosphor-red' && "text-phosphor-red",
+              statusConfig.color === 'phosphor-cyan' && "text-phosphor-cyan",
+            )} />
+            <span className={cn(
+              "font-display text-xs font-bold tracking-widest",
+              statusConfig.color === 'phosphor-green' && "text-phosphor-green",
+              statusConfig.color === 'phosphor-amber' && "text-phosphor-amber",
+              statusConfig.color === 'phosphor-red' && "text-phosphor-red",
+              statusConfig.color === 'phosphor-cyan' && "text-phosphor-cyan",
+            )}>
+              {statusConfig.label}
+            </span>
           </div>
-          <div className="text-center">
-            <div className="text-2xl font-bold text-indusia-fail">{stats.fail}</div>
-            <div className="text-xs text-indusia-textMuted">Fail</div>
-          </div>
-          <div className="text-center">
-            <div className="text-2xl font-bold text-indusia-warning">{stats.review}</div>
-            <div className="text-xs text-indusia-textMuted">Review</div>
-          </div>
-          <div className="text-center border-l border-indusia-border pl-6">
-            <div className="text-2xl font-bold text-indusia-primary">{passRate}%</div>
-            <div className="text-xs text-indusia-textMuted">Pass Rate</div>
-          </div>
-          <button
-            onClick={resetStats}
-            className="p-2 text-indusia-textMuted hover:text-indusia-text hover:bg-indusia-surfaceMuted rounded transition-colors"
-            title="Reset Stats"
-          >
-            <RotateCcw className="w-4 h-4" />
+          <span className="font-mono text-sm text-phosphor-amber">{currentTime}</span>
+        </div>
+
+        {/* Right: System icons */}
+        <div className="flex items-center gap-2">
+          <button className="p-2 border border-surface-border bg-terminal hover:border-phosphor-amber transition-colors">
+            <Settings size={16} className="text-text-tertiary" />
+          </button>
+          <button className="p-2 border border-surface-border bg-terminal hover:border-phosphor-amber transition-colors">
+            <Sun size={16} className="text-text-tertiary" />
+          </button>
+          {error && (
+            <div className="flex items-center gap-2 px-3 py-1 bg-phosphor-red/10 border border-phosphor-red/50">
+              <AlertTriangle size={14} className="text-phosphor-red" />
+              <span className="font-display text-xs font-bold text-phosphor-red">LINE</span>
+            </div>
+          )}
+          <button className="p-2 border border-surface-border bg-terminal hover:border-phosphor-amber transition-colors">
+            <HelpCircle size={16} className="text-text-tertiary" />
           </button>
         </div>
-      </div>
+      </header>
 
-      {/* Main Content */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* Camera Feed + Overlay */}
-        <div className="flex-1 p-4 flex flex-col">
-          <div className="flex-1 relative flex items-center justify-center bg-indusia-surfaceMuted rounded-lg overflow-hidden">
-            <DetectionOverlay
-              imageUrl={currentFrame?.image_url}
-              detections={filteredDetections}
-              result={currentFrame?.result}
-              onOverrideClick={() => currentFrame && handleOverrideClick(currentFrame)}
-              width={800}
-              height={600}
-            />
+      {/* === MAIN CONTENT === */}
+      <main className="flex-1 flex overflow-hidden">
+        {/* LEFT PANEL: AI Detection + Actions */}
+        <div className="w-[340px] shrink-0 border-r border-surface-border bg-panel flex flex-col">
+          {/* AI Detection Card */}
+          <div className="p-4 border-b border-surface-border">
+            <div className="panel-header mb-3">
+              <Eye className="w-4 h-4" />
+              <span>AI Detection</span>
+            </div>
 
-            {error && !connected && (
-              <div className="absolute bottom-4 left-4 right-4 bg-indusia-fail/90 text-white px-4 py-2 rounded-lg text-sm">
-                {error.message}
+            {/* Defect Type */}
+            <div className="bg-terminal border border-surface-border p-3 mb-3">
+              <div className="flex items-center gap-2 mb-2">
+                <div className={cn(
+                  "w-3 h-3",
+                  defectType === 'PASS' || defectType === 'SCANNING...' ? 'bg-text-tertiary' : 'bg-phosphor-red'
+                )} />
+                <span className={cn(
+                  "font-display text-lg font-bold tracking-wide",
+                  defectType === 'PASS' ? 'text-phosphor-green' :
+                  defectType === 'SCANNING...' ? 'text-text-tertiary' :
+                  'text-phosphor-red'
+                )}>
+                  {defectType.toUpperCase().replace('_', ' ')}
+                </span>
+              </div>
+
+              {/* Confidence */}
+              <div className="mb-2">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="font-mono text-xs text-text-tertiary">Confidence</span>
+                  <span className={cn(
+                    "font-mono text-2xl font-bold",
+                    confidence >= 85 ? 'text-phosphor-green' :
+                    confidence >= 60 ? 'text-phosphor-amber' :
+                    'text-phosphor-red'
+                  )}>
+                    {confidence}%
+                  </span>
+                </div>
+                <div className="h-2 bg-void border border-surface-border">
+                  <div
+                    className={cn(
+                      "h-full transition-all",
+                      confidence >= 85 ? 'bg-phosphor-green' :
+                      confidence >= 60 ? 'bg-phosphor-amber' :
+                      'bg-phosphor-red'
+                    )}
+                    style={{ width: `${confidence}%` }}
+                  />
+                </div>
+              </div>
+
+              <span className="font-mono text-xxs text-text-tertiary">
+                Historically correct {historicalAccuracy}% of the time
+              </span>
+            </div>
+
+            {/* High Confidence Badge */}
+            {confidence >= 85 && isOperator && (
+              <div className="flex items-center gap-2 px-3 py-2 bg-phosphor-green/10 border border-phosphor-green/30">
+                <div className="w-2 h-2 bg-phosphor-green" />
+                <span className="font-display text-xs font-semibold text-phosphor-green tracking-wide">
+                  High Confidence - Auto-proceed available
+                </span>
               </div>
             )}
           </div>
 
-          {/* Bottom Bar */}
-          <div className="flex items-center justify-between pt-3 text-sm">
-            <div className="flex items-center gap-4 text-indusia-textMuted">
-              <span>Board: <span className="text-indusia-text font-medium">{currentFrame?.board_id || '-'}</span></span>
-              <span>Inference: <span className="text-indusia-text font-medium">{currentFrame?.inference_ms || 0}ms</span></span>
-              <span>Detections: <span className="text-indusia-text font-medium">{filteredDetections.length}</span></span>
+          {/* Auto-Approve Timer - only for operators */}
+          <div className="p-4 border-b border-surface-border bg-terminal">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <span className="data-label">
+                  {isOperator ? 'AUTO-APPROVE IN' : 'AUTO-APPROVE'}
+                </span>
+                <p className="font-mono text-xs text-text-tertiary mt-0.5">
+                  {isOperator ? 'Take action or wait' : 'Disabled in view mode'}
+                </p>
+              </div>
+              <AutoApproveTimer
+                duration={autoApproveDuration}
+                isPaused={isPaused || !connected}
+                confidence={confidence}
+                confidenceThreshold={85}
+                onTimeout={handleAutoApprove}
+                size={80}
+                disabled={!isOperator}
+              />
             </div>
 
-            {/* Controls */}
-            <div className="flex items-center gap-4">
-              {/* Sound Toggle */}
-              <button
-                onClick={() => setSoundEnabled(!soundEnabled)}
-                className={cn(
-                  'p-2 rounded transition-colors',
-                  soundEnabled
-                    ? 'bg-indusia-primary/20 text-indusia-primary'
-                    : 'text-indusia-textMuted hover:text-indusia-text hover:bg-indusia-surfaceMuted'
-                )}
-                title={soundEnabled ? 'Disable Sound Alerts' : 'Enable Sound Alerts'}
-              >
-                {soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
-              </button>
-
-              {/* Confidence Threshold Slider */}
-              <div className="flex items-center gap-2 text-indusia-textMuted">
-                <span className="text-xs">Confidence:</span>
-                <input
-                  type="range"
-                  min="0.5"
-                  max="0.95"
-                  step="0.05"
-                  value={confidenceThreshold}
-                  onChange={(e) => setConfidenceThreshold(parseFloat(e.target.value))}
-                  className="w-24 accent-indusia-primary"
-                />
-                <span className="w-10 text-xs text-indusia-text font-medium">
-                  {Math.round(confidenceThreshold * 100)}%
+            {/* Warning when active - only for operators */}
+            {isOperator && confidence >= 85 && !isPaused && connected && (
+              <div className="flex items-center gap-2 px-3 py-2 bg-phosphor-amber/10 border border-phosphor-amber/30 animate-pulse">
+                <AlertTriangle size={14} className="text-phosphor-amber" />
+                <span className="font-mono text-xs text-phosphor-amber">
+                  Auto-approving soon!
                 </span>
               </div>
+            )}
+            
+            {/* View-only message */}
+            {!isOperator && (
+              <div className="flex items-center gap-2 px-3 py-2 bg-phosphor-cyan/10 border border-phosphor-cyan/30">
+                <Eye size={14} className="text-phosphor-cyan" />
+                <span className="font-mono text-xs text-phosphor-cyan">
+                  View-only mode active
+                </span>
+              </div>
+            )}
+          </div>
 
-              {/* Settings */}
+          {/* Operator Actions */}
+          <div className="p-4 flex-1">
+            <div className="panel-header mb-3">
+              <Radio className="w-4 h-4" />
+              <span>Operator Action</span>
+              {!isOperator && (
+                <span className="ml-auto text-phosphor-cyan font-mono text-xxs">DISABLED</span>
+              )}
+            </div>
+
+            <div className="space-y-3">
+              {/* APPROVE */}
               <button
-                onClick={() => setShowSettings(!showSettings)}
-                className="p-2 text-indusia-textMuted hover:text-indusia-text hover:bg-indusia-surfaceMuted rounded transition-colors"
-                title="Settings"
+                onClick={handleApprove}
+                disabled={actionsDisabled}
+                className={cn(
+                  "w-full py-5 flex items-center justify-center gap-3 transition-all",
+                  "bg-phosphor-green/20 border-2 border-phosphor-green text-phosphor-green",
+                  "hover:bg-phosphor-green hover:text-void",
+                  "disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-phosphor-green/20 disabled:hover:text-phosphor-green"
+                )}
               >
-                <Settings className="w-4 h-4" />
+                <Check size={28} strokeWidth={3} />
+                <span className="font-display text-2xl font-bold tracking-wider">APPROVE</span>
+              </button>
+
+              {/* REJECT */}
+              <button
+                onClick={handleReject}
+                disabled={actionsDisabled}
+                className={cn(
+                  "w-full py-5 flex items-center justify-center gap-3 transition-all",
+                  "bg-phosphor-red/20 border-2 border-phosphor-red text-phosphor-red",
+                  "hover:bg-phosphor-red hover:text-white",
+                  "disabled:opacity-30 disabled:cursor-not-allowed"
+                )}
+              >
+                <X size={28} strokeWidth={3} />
+                <span className="font-display text-2xl font-bold tracking-wider">REJECT</span>
+              </button>
+
+              {/* FALSE CALL */}
+              <button
+                onClick={handleFalseCall}
+                disabled={actionsDisabled}
+                className={cn(
+                  "w-full py-4 flex items-center justify-center gap-3 transition-all",
+                  "bg-phosphor-amber/10 border-2 border-phosphor-amber/50 text-phosphor-amber",
+                  "hover:bg-phosphor-amber/20 hover:border-phosphor-amber",
+                  "disabled:opacity-30 disabled:cursor-not-allowed"
+                )}
+              >
+                <Flag size={20} />
+                <span className="font-display text-lg font-bold tracking-wider">FALSE CALL</span>
               </button>
             </div>
+
+            {/* Keyboard shortcuts - only show for operators */}
+            {isOperator ? (
+              <div className="mt-4 flex items-center justify-center gap-4 text-text-tertiary">
+                <div className="flex items-center gap-1">
+                  <span className="px-2 py-0.5 bg-void border border-surface-border font-mono text-xs">A</span>
+                  <span className="font-mono text-xxs">Approve</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="px-2 py-0.5 bg-void border border-surface-border font-mono text-xs">R</span>
+                  <span className="font-mono text-xxs">Reject</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="px-2 py-0.5 bg-void border border-surface-border font-mono text-xs">F</span>
+                  <span className="font-mono text-xxs">False</span>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-4 p-3 bg-phosphor-cyan/5 border border-phosphor-cyan/20">
+                <p className="font-mono text-xs text-phosphor-cyan text-center">
+                  Actions disabled for {user?.role?.toUpperCase() || 'NON-OPERATOR'}
+                </p>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Detection Log Sidebar */}
-        <div className="w-80 border-l border-indusia-border bg-indusia-surface flex flex-col">
-          <div className="p-3 border-b border-indusia-border flex items-center justify-between">
-            <h3 className="font-semibold text-indusia-text">Detection Log</h3>
-            <button
-              onClick={clearLog}
-              className="p-1.5 text-indusia-textMuted hover:text-indusia-fail hover:bg-indusia-fail/10 rounded transition-colors"
-              title="Clear Log"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
-          </div>
-          <div className="flex-1 overflow-hidden">
-            <DetectionLog
-              items={detectionLog}
-              onItemClick={handleOverrideClick}
-              maxHeight="100%"
-            />
+        {/* RIGHT PANEL: Camera View */}
+        <div className="flex-1 bg-void p-4 flex flex-col">
+          {/* Camera Frame */}
+          <div className="flex-1 border-2 border-surface-border relative overflow-hidden bg-terminal">
+            {/* Camera Header */}
+            <div className="absolute top-0 left-0 right-0 h-10 bg-panel/95 border-b border-surface-border flex items-center justify-between px-4 z-10 backdrop-blur">
+              <div className="flex items-center gap-3">
+                <div className={cn(
+                  "w-2.5 h-2.5",
+                  isPaused ? "bg-phosphor-cyan" :
+                  connected ? "bg-phosphor-red animate-pulse" :
+                  "bg-text-tertiary"
+                )} />
+                <span className={cn(
+                  "font-mono text-xs font-bold",
+                  isPaused ? "text-phosphor-cyan" :
+                  connected ? "text-phosphor-red" :
+                  "text-text-tertiary"
+                )}>
+                  {isPaused ? 'PAUSED' : connected ? 'REC' : 'OFFLINE'}
+                </span>
+                <span className="font-mono text-xs text-text-tertiary">CAM-01</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Video size={14} className="text-phosphor-amber" />
+                <span className="font-display text-xs font-semibold text-text-primary tracking-wider">
+                  LIVE CAMERA FEED
+                </span>
+              </div>
+              <span className="font-mono text-xs text-text-tertiary">1920×1080 @ 30fps</span>
+            </div>
+
+            {/* Detection Legend */}
+            <DetectionLegend detections={currentFrame?.detections || []} />
+
+            {/* Detection Overlay */}
+            <div className="absolute inset-0 top-10 flex items-center justify-center">
+              {/* Paused Overlay */}
+              {isPaused && (
+                <div className="absolute inset-0 bg-void/80 z-20 flex items-center justify-center backdrop-blur-sm">
+                  <div className="text-center">
+                    <div className="w-24 h-24 border-2 border-phosphor-cyan flex items-center justify-center mb-4 mx-auto bg-phosphor-cyan/10">
+                      <Pause size={48} className="text-phosphor-cyan" />
+                    </div>
+                    <p className="font-display text-2xl font-bold text-phosphor-cyan tracking-wider">
+                      INSPECTION PAUSED
+                    </p>
+                    <p className="font-mono text-sm text-text-tertiary mt-2">
+                      PRESS [SPACE] TO RESUME
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              <div className="relative w-[90%] h-[90%]">
+                <DetectionOverlay
+                  imageUrl={currentFrame?.image_url}
+                  detections={currentFrame?.detections || []}
+                  result={currentFrame?.result}
+                  width="100%"
+                  height="100%"
+                />
+              </div>
+            </div>
+
+            {/* Zoom Controls */}
+            <div className="absolute bottom-4 right-4 flex flex-col gap-2 z-10">
+              <button
+                onClick={() => setZoomLevel(Math.min(200, zoomLevel + 10))}
+                className="p-3 bg-panel/90 border border-surface-border hover:border-phosphor-amber transition-colors backdrop-blur"
+              >
+                <ZoomIn size={20} className="text-text-primary" />
+              </button>
+              <button
+                onClick={() => setZoomLevel(Math.max(50, zoomLevel - 10))}
+                className="p-3 bg-panel/90 border border-surface-border hover:border-phosphor-amber transition-colors backdrop-blur"
+              >
+                <ZoomOut size={20} className="text-text-primary" />
+              </button>
+              <button className="p-3 bg-panel/90 border border-surface-border hover:border-phosphor-amber transition-colors backdrop-blur">
+                <Move size={20} className="text-text-primary" />
+              </button>
+              <div className="px-3 py-2 bg-panel/90 border border-surface-border text-center backdrop-blur">
+                <span className="font-mono text-sm text-phosphor-amber">{zoomLevel}%</span>
+              </div>
+            </div>
+
+            {/* Technical corners */}
+            <div className="absolute top-12 left-2 w-8 h-8 border-l-2 border-t-2 border-phosphor-amber/30" />
+            <div className="absolute top-12 right-2 w-8 h-8 border-r-2 border-t-2 border-phosphor-amber/30" />
+            <div className="absolute bottom-2 left-2 w-8 h-8 border-l-2 border-b-2 border-phosphor-amber/30" />
+            <div className="absolute bottom-2 right-2 w-8 h-8 border-r-2 border-b-2 border-phosphor-amber/30" />
           </div>
         </div>
-      </div>
+      </main>
 
-      {/* Override Modal */}
-      {overrideTarget && (
-        <OverrideModal
-          isOpen={!!overrideTarget}
-          onClose={() => setOverrideTarget(null)}
-          boardId={overrideTarget.boardId}
-          imageUrl={overrideTarget.imageUrl}
-          aiDetections={overrideTarget.aiDetections}
+      {/* === FOOTER BAR === */}
+      <footer className="h-16 bg-panel border-t border-surface-border flex items-center justify-between px-4 shrink-0">
+        {/* Left: EXIT + PAUSE */}
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleStop}
+            className={cn(
+              "h-12 px-6 font-display text-lg font-bold tracking-wider flex items-center gap-2 transition-all",
+              isOperator 
+                ? "bg-phosphor-red text-white hover:shadow-glow-red"
+                : "bg-phosphor-cyan text-void hover:shadow-glow-cyan"
+            )}
+          >
+            <Square size={16} fill="currentColor" />
+            {isOperator ? 'STOP' : 'EXIT'}
+          </button>
+
+          <button
+            onClick={togglePause}
+            className={cn(
+              "h-12 px-6 font-display text-lg font-bold tracking-wider flex items-center gap-2 transition-all",
+              isPaused
+                ? "bg-phosphor-green text-void hover:shadow-glow-green"
+                : "bg-phosphor-cyan/20 border-2 border-phosphor-cyan text-phosphor-cyan hover:bg-phosphor-cyan/30"
+            )}
+          >
+            {isPaused ? (
+              <>
+                <Play size={20} />
+                RESUME
+              </>
+            ) : (
+              <>
+                <Pause size={20} />
+                PAUSE
+              </>
+            )}
+          </button>
+        </div>
+
+        {/* Center: Navigation - only for operators */}
+        <div className="flex items-center gap-3">
+          <button
+            disabled={!isOperator || isPaused}
+            className="h-12 px-6 bg-terminal border border-surface-border text-text-secondary font-display font-bold tracking-wider flex items-center gap-2 hover:border-phosphor-amber hover:text-phosphor-amber transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            <ChevronLeft size={20} />
+            PREV
+          </button>
+          <button
+            disabled={!isOperator || isPaused}
+            className="h-12 px-8 bg-phosphor-amber text-void font-display text-lg font-bold tracking-wider flex items-center gap-2 hover:shadow-glow-amber transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            NEXT
+            <ChevronRight size={20} />
+          </button>
+        </div>
+
+        {/* Right: Stats */}
+        <div className="flex items-center gap-6">
+          <div className="flex items-center gap-2">
+            <Check size={18} className="text-phosphor-green" />
+            <span className="font-mono text-xl font-bold text-phosphor-green">{stats.pass}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <X size={18} className="text-phosphor-red" />
+            <span className="font-mono text-xl font-bold text-phosphor-red">{stats.fail}</span>
+          </div>
+          <div className="h-8 w-px bg-surface-border" />
+          <div className="px-4 py-2 bg-phosphor-amber/10 border border-phosphor-amber/30">
+            <span className="font-mono text-xl font-bold text-phosphor-amber">{yieldRate}%</span>
+          </div>
+          <button
+            onClick={toggleFullscreen}
+            className="p-3 bg-terminal border border-surface-border hover:border-phosphor-amber transition-colors"
+          >
+            {isFullscreen ? (
+              <Minimize2 size={20} className="text-text-primary" />
+            ) : (
+              <Maximize2 size={20} className="text-text-primary" />
+            )}
+          </button>
+        </div>
+      </footer>
+
+      {/* False Call Modal - only for operators */}
+      {showFalseCallModal && isOperator && (
+        <FalseCallOverrideModal
+          isOpen={showFalseCallModal}
+          onClose={() => setShowFalseCallModal(false)}
+          boardId={boardId}
+          imageUrl={currentFrame?.image_url}
+          aiDetections={currentFrame?.detections}
           sectionId={sectionId}
           lineId={lineId}
           customerId={customerId}
           user={user}
-          onSuccess={handleOverrideSuccess}
+          onSuccess={() => setShowFalseCallModal(false)}
         />
       )}
     </div>
-  )
+  );
 }
 
-export default LiveView
+export default LiveView;

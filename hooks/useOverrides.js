@@ -1,15 +1,16 @@
-import { useState, useEffect, useCallback } from 'react';
-import { authFetch, getAuthHeaders } from '@/lib/utils/authFetch';
+/**
+ * useOverrides Hook
+ * Fetches and manages override data from API - NO MOCK DATA
+ */
 
-// Mock data for fallback
-const mockOverrides = [];
-const mockStats = { pending: 0, approved: 0, rejected: 0, total: 0 };
+import { useState, useEffect, useCallback } from 'react';
+import { authFetch } from '@/lib/utils/authFetch';
 
 export function useOverrides(initialFilters = {}) {
   const [overrides, setOverrides] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [stats, setStats] = useState(mockStats);
+  const [stats, setStats] = useState({ pending: 0, approved: 0, rejected: 0, total: 0 });
   const [filters, setFiltersState] = useState({
     status: null,
     sectionId: null,
@@ -21,7 +22,7 @@ export function useOverrides(initialFilters = {}) {
     ...initialFilters
   });
 
-  // Fetch overrides from API with fallback
+  // Fetch overrides from API
   const fetchOverrides = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -36,13 +37,15 @@ export function useOverrides(initialFilters = {}) {
       if (filters.limit) params.append('limit', filters.limit);
 
       const res = await authFetch(`/api/overrides?${params.toString()}`);
-      if (!res.ok) throw new Error('API request failed');
+      if (!res.ok) throw new Error('Failed to fetch overrides');
+      
       const json = await res.json();
-      if (!json.success) throw new Error(json.error);
-      setOverrides(json.data);
+      if (!json.success) throw new Error(json.error || 'Failed to fetch overrides');
+      
+      setOverrides(json.data || []);
     } catch (err) {
-      console.warn('API failed, using mock data:', err.message);
-      setOverrides([...mockOverrides]);
+      console.error('[useOverrides] Fetch error:', err.message);
+      setOverrides([]);
       setError(err.message);
     } finally {
       setLoading(false);
@@ -53,13 +56,15 @@ export function useOverrides(initialFilters = {}) {
   const fetchStats = useCallback(async () => {
     try {
       const res = await authFetch('/api/overrides/stats');
-      if (!res.ok) throw new Error('API request failed');
+      if (!res.ok) throw new Error('Failed to fetch stats');
+      
       const json = await res.json();
-      if (!json.success) throw new Error(json.error);
-      setStats(json.data);
+      if (!json.success) throw new Error(json.error || 'Failed to fetch stats');
+      
+      setStats(json.data || { pending: 0, approved: 0, rejected: 0, total: 0 });
     } catch (err) {
-      console.warn('API failed, using mock stats:', err.message);
-      setStats(mockStats);
+      console.error('[useOverrides] Stats error:', err.message);
+      setStats({ pending: 0, approved: 0, rejected: 0, total: 0 });
     }
   }, []);
 
@@ -90,22 +95,17 @@ export function useOverrides(initialFilters = {}) {
         method: 'POST',
         body: JSON.stringify(data)
       });
-      if (!res.ok) throw new Error('API request failed');
+      if (!res.ok) throw new Error('Failed to create override');
+      
       const json = await res.json();
-      if (!json.success) throw new Error(json.error);
+      if (!json.success) throw new Error(json.error || 'Failed to create override');
+      
       setOverrides(prev => [json.data, ...prev]);
       await fetchStats();
       return json.data;
     } catch (err) {
-      console.warn('API failed, using local create:', err.message);
-      const newOverride = {
-        id: `ovr-${Date.now()}`,
-        status: 'pending',
-        createdAt: new Date().toISOString(),
-        ...data
-      };
-      setOverrides(prev => [newOverride, ...prev]);
-      return newOverride;
+      console.error('[useOverrides] Create error:', err.message);
+      throw err;
     }
   };
 
@@ -120,23 +120,17 @@ export function useOverrides(initialFilters = {}) {
           reviewNotes: notes
         })
       });
-      if (!res.ok) throw new Error('API request failed');
+      if (!res.ok) throw new Error('Failed to approve override');
+      
       const json = await res.json();
-      if (!json.success) throw new Error(json.error);
+      if (!json.success) throw new Error(json.error || 'Failed to approve override');
+      
       setOverrides(prev => prev.map(o => o.id === id ? json.data : o));
       await fetchStats();
       return json.data;
     } catch (err) {
-      console.warn('API failed, using local approve:', err.message);
-      const updated = {
-        status: 'approved',
-        reviewedBy: reviewerId,
-        reviewerName,
-        reviewNotes: notes,
-        reviewedAt: new Date().toISOString()
-      };
-      setOverrides(prev => prev.map(o => o.id === id ? { ...o, ...updated } : o));
-      return { id, ...updated };
+      console.error('[useOverrides] Approve error:', err.message);
+      throw err;
     }
   };
 
@@ -151,23 +145,17 @@ export function useOverrides(initialFilters = {}) {
           reviewNotes: notes
         })
       });
-      if (!res.ok) throw new Error('API request failed');
+      if (!res.ok) throw new Error('Failed to reject override');
+      
       const json = await res.json();
-      if (!json.success) throw new Error(json.error);
+      if (!json.success) throw new Error(json.error || 'Failed to reject override');
+      
       setOverrides(prev => prev.map(o => o.id === id ? json.data : o));
       await fetchStats();
       return json.data;
     } catch (err) {
-      console.warn('API failed, using local reject:', err.message);
-      const updated = {
-        status: 'rejected',
-        reviewedBy: reviewerId,
-        reviewerName,
-        reviewNotes: notes,
-        reviewedAt: new Date().toISOString()
-      };
-      setOverrides(prev => prev.map(o => o.id === id ? { ...o, ...updated } : o));
-      return { id, ...updated };
+      console.error('[useOverrides] Reject error:', err.message);
+      throw err;
     }
   };
 

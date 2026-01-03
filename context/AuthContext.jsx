@@ -25,6 +25,10 @@ const AuthContext = createContext(null);
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  
+  // Active inspection session
+  const [activeLineId, setActiveLineId] = useState(null);
+  const [activeLineName, setActiveLineName] = useState(null);
 
   // Normalize user object to ensure consistent role field
   const normalizeUser = (userData) => {
@@ -44,6 +48,18 @@ export function AuthProvider({ children }) {
     const restoreSession = async () => {
       const storedUserId = localStorage.getItem('indusia_user_id');
       const storedUser = localStorage.getItem('indusia_user');
+      const storedActiveLine = localStorage.getItem('indusia_active_line');
+
+      // Restore active line session
+      if (storedActiveLine) {
+        try {
+          const parsedLine = JSON.parse(storedActiveLine);
+          setActiveLineId(parsedLine.lineId);
+          setActiveLineName(parsedLine.lineName);
+        } catch (e) {
+          localStorage.removeItem('indusia_active_line');
+        }
+      }
 
       if (storedUserId) {
         try {
@@ -182,6 +198,20 @@ export function AuthProvider({ children }) {
     updateSelections({ selectedBoardId: boardId });
   }, [updateSelections]);
 
+  // Set active inspection line (for operators)
+  const setActiveLine = useCallback((lineId, lineName) => {
+    setActiveLineId(lineId);
+    setActiveLineName(lineName);
+    localStorage.setItem('indusia_active_line', JSON.stringify({ lineId, lineName }));
+  }, []);
+
+  // Clear active inspection line
+  const clearActiveLine = useCallback(() => {
+    setActiveLineId(null);
+    setActiveLineName(null);
+    localStorage.removeItem('indusia_active_line');
+  }, []);
+
   // Logout
   const logout = useCallback(async () => {
     try {
@@ -190,8 +220,11 @@ export function AuthProvider({ children }) {
       console.warn('API logout failed:', err.message);
     }
     setUser(null);
+    setActiveLineId(null);
+    setActiveLineName(null);
     localStorage.removeItem('indusia_user');
     localStorage.removeItem('indusia_user_id');
+    localStorage.removeItem('indusia_active_line');
   }, []);
 
   // Change password
@@ -266,6 +299,12 @@ export function AuthProvider({ children }) {
     changePassword,
     hasPermission,
     refreshUser,
+    // Active line session
+    activeLineId,
+    activeLineName,
+    setActiveLine,
+    clearActiveLine,
+    hasActiveLine: !!activeLineId,
   };
 
   return (

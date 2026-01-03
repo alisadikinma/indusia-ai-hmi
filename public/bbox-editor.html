@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>INDUSIA - BBox Editor</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Courier New', monospace;
+      background: #0a0a0a;
+      color: #e0e0e0;
+      min-height: 100vh;
+      padding: 20px;
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      margin-bottom: 20px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid #333;
+    }
+    h1 { color: #f59e0b; font-size: 24px; }
+    .container {
+      display: flex;
+      gap: 20px;
+    }
+    .image-panel {
+      flex: 1;
+      background: #111;
+      border: 1px solid #333;
+      padding: 10px;
+    }
+    .controls-panel {
+      width: 350px;
+      background: #111;
+      border: 1px solid #333;
+      padding: 20px;
+    }
+    .image-container {
+      position: relative;
+      display: inline-block;
+      cursor: crosshair;
+    }
+    .image-container img {
+      max-width: 100%;
+      max-height: 70vh;
+      display: block;
+    }
+    .bbox-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      pointer-events: none;
+    }
+    .bbox {
+      fill: rgba(239, 68, 68, 0.2);
+      stroke: #ef4444;
+      stroke-width: 3;
+    }
+    .bbox-label {
+      fill: #ef4444;
+      font-size: 14px;
+      font-weight: bold;
+    }
+    select, input, button {
+      font-family: inherit;
+      font-size: 14px;
+      padding: 8px 12px;
+      background: #1a1a1a;
+      border: 1px solid #333;
+      color: #e0e0e0;
+      width: 100%;
+      margin-bottom: 10px;
+    }
+    select:focus, input:focus {
+      outline: none;
+      border-color: #f59e0b;
+    }
+    button {
+      background: #f59e0b;
+      color: #000;
+      cursor: pointer;
+      font-weight: bold;
+    }
+    button:hover { background: #d97706; }
+    button.secondary {
+      background: #333;
+      color: #e0e0e0;
+    }
+    button.secondary:hover { background: #444; }
+    label {
+      display: block;
+      margin-bottom: 5px;
+      color: #888;
+      font-size: 12px;
+    }
+    .coords {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .output {
+      background: #1a1a1a;
+      border: 1px solid #333;
+      padding: 15px;
+      margin-top: 20px;
+      font-size: 12px;
+      white-space: pre-wrap;
+      max-height: 300px;
+      overflow-y: auto;
+    }
+    .info {
+      font-size: 12px;
+      color: #888;
+      margin-bottom: 20px;
+      padding: 10px;
+      background: #1a1a1a;
+      border-left: 3px solid #f59e0b;
+    }
+    .current-pos {
+      font-size: 12px;
+      color: #f59e0b;
+      margin-top: 10px;
+    }
+    h3 {
+      color: #f59e0b;
+      margin-bottom: 15px;
+      font-size: 14px;
+    }
+    .divider {
+      border-top: 1px solid #333;
+      margin: 20px 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>🎯 INDUSIA BBox Editor</h1>
+  </div>
+
+  <div class="container">
+    <div class="image-panel">
+      <div class="image-container" id="imageContainer">
+        <img id="previewImage" src="" alt="Select an image" />
+        <svg class="bbox-overlay" id="bboxOverlay"></svg>
+      </div>
+      <div class="current-pos" id="currentPos">Mouse: x=0, y=0</div>
+    </div>
+
+    <div class="controls-panel">
+      <h3>📁 SELECT IMAGE</h3>
+      <select id="imageSelect">
+        <option value="">-- Select Image --</option>
+        <option value="pcb_missing_component_01.png">pcb_missing_component_01.png</option>
+        <option value="pcb_solder_bridge_01.png">pcb_solder_bridge_01.png</option>
+        <option value="pcb_tombstone_01.png">pcb_tombstone_01.png</option>
+        <option value="pcb_insufficient_solder_01.png">pcb_insufficient_solder_01.png</option>
+        <option value="pcb_cold_solder_01.png">pcb_cold_solder_01.png</option>
+        <option value="pcb_solder_ball_01.png">pcb_solder_ball_01.png</option>
+      </select>
+
+      <div class="info">
+        <strong>Instructions:</strong><br>
+        1. Select image<br>
+        2. Click & drag to draw bbox<br>
+        3. Or manually enter coordinates<br>
+        4. Copy output to imageService.js
+      </div>
+
+      <h3>📐 BBOX COORDINATES</h3>
+      <div class="coords">
+        <div>
+          <label>X (left)</label>
+          <input type="number" id="bboxX" value="0" min="0" />
+        </div>
+        <div>
+          <label>Y (top)</label>
+          <input type="number" id="bboxY" value="0" min="0" />
+        </div>
+        <div>
+          <label>Width</label>
+          <input type="number" id="bboxW" value="100" min="10" />
+        </div>
+        <div>
+          <label>Height</label>
+          <input type="number" id="bboxH" value="100" min="10" />
+        </div>
+      </div>
+
+      <button onclick="updateBBox()">Update Preview</button>
+      <button class="secondary" onclick="resetBBox()">Reset</button>
+
+      <div class="divider"></div>
+
+      <h3>📋 OUTPUT CODE</h3>
+      <div class="output" id="output">Select an image to start...</div>
+      <button onclick="copyOutput()">Copy to Clipboard</button>
+    </div>
+  </div>
+
+  <script>
+    const imageSelect = document.getElementById('imageSelect');
+    const previewImage = document.getElementById('previewImage');
+    const bboxOverlay = document.getElementById('bboxOverlay');
+    const currentPos = document.getElementById('currentPos');
+    const output = document.getElementById('output');
+    
+    const bboxX = document.getElementById('bboxX');
+    const bboxY = document.getElementById('bboxY');
+    const bboxW = document.getElementById('bboxW');
+    const bboxH = document.getElementById('bboxH');
+
+    let imgNaturalWidth = 0;
+    let imgNaturalHeight = 0;
+    let isDrawing = false;
+    let startX = 0, startY = 0;
+
+    // Current bbox data
+    const bboxData = {
+      'pcb_missing_component_01.png': { x: 820, y: 180, width: 220, height: 160, defect: 'missing_component', component: 'C23' },
+      'pcb_solder_bridge_01.png': { x: 1300, y: 380, width: 280, height: 280, defect: 'solder_bridge', component: 'U15' },
+      'pcb_tombstone_01.png': { x: 680, y: 520, width: 380, height: 300, defect: 'tombstone', component: 'R12' },
+      'pcb_insufficient_solder_01.png': { x: 520, y: 460, width: 380, height: 220, defect: 'insufficient_solder', component: 'R47' },
+      'pcb_cold_solder_01.png': { x: 560, y: 680, width: 380, height: 420, defect: 'cold_solder', component: 'U8' },
+      'pcb_solder_ball_01.png': { x: 260, y: 360, width: 480, height: 580, defect: 'solder_ball', component: 'PCB Surface' },
+    };
+
+    imageSelect.addEventListener('change', () => {
+      const filename = imageSelect.value;
+      if (!filename) return;
+      
+      previewImage.src = `/images/${filename}`;
+      previewImage.onload = () => {
+        imgNaturalWidth = previewImage.naturalWidth;
+        imgNaturalHeight = previewImage.naturalHeight;
+        
+        // Load existing bbox
+        const data = bboxData[filename];
+        if (data) {
+          bboxX.value = data.x;
+          bboxY.value = data.y;
+          bboxW.value = data.width;
+          bboxH.value = data.height;
+        }
+        
+        updateBBox();
+      };
+    });
+
+    // Mouse tracking for coordinate display
+    const imageContainer = document.getElementById('imageContainer');
+    imageContainer.addEventListener('mousemove', (e) => {
+      const rect = previewImage.getBoundingClientRect();
+      const scaleX = imgNaturalWidth / previewImage.offsetWidth;
+      const scaleY = imgNaturalHeight / previewImage.offsetHeight;
+      
+      const x = Math.round((e.clientX - rect.left) * scaleX);
+      const y = Math.round((e.clientY - rect.top) * scaleY);
+      
+      currentPos.textContent = `Mouse: x=${x}, y=${y} (Image: ${imgNaturalWidth}x${imgNaturalHeight})`;
+    });
+
+    // Drawing bbox with mouse
+    imageContainer.addEventListener('mousedown', (e) => {
+      if (!previewImage.src) return;
+      
+      const rect = previewImage.getBoundingClientRect();
+      const scaleX = imgNaturalWidth / previewImage.offsetWidth;
+      const scaleY = imgNaturalHeight / previewImage.offsetHeight;
+      
+      startX = Math.round((e.clientX - rect.left) * scaleX);
+      startY = Math.round((e.clientY - rect.top) * scaleY);
+      isDrawing = true;
+    });
+
+    imageContainer.addEventListener('mousemove', (e) => {
+      if (!isDrawing) return;
+      
+      const rect = previewImage.getBoundingClientRect();
+      const scaleX = imgNaturalWidth / previewImage.offsetWidth;
+      const scaleY = imgNaturalHeight / previewImage.offsetHeight;
+      
+      const endX = Math.round((e.clientX - rect.left) * scaleX);
+      const endY = Math.round((e.clientY - rect.top) * scaleY);
+      
+      bboxX.value = Math.min(startX, endX);
+      bboxY.value = Math.min(startY, endY);
+      bboxW.value = Math.abs(endX - startX);
+      bboxH.value = Math.abs(endY - startY);
+      
+      updateBBox();
+    });
+
+    imageContainer.addEventListener('mouseup', () => {
+      isDrawing = false;
+    });
+
+    function updateBBox() {
+      const x = parseInt(bboxX.value) || 0;
+      const y = parseInt(bboxY.value) || 0;
+      const w = parseInt(bboxW.value) || 100;
+      const h = parseInt(bboxH.value) || 100;
+      
+      // Update SVG overlay
+      bboxOverlay.setAttribute('width', previewImage.offsetWidth);
+      bboxOverlay.setAttribute('height', previewImage.offsetHeight);
+      bboxOverlay.setAttribute('viewBox', `0 0 ${imgNaturalWidth} ${imgNaturalHeight}`);
+      
+      bboxOverlay.innerHTML = `
+        <rect class="bbox" x="${x}" y="${y}" width="${w}" height="${h}" />
+        <text class="bbox-label" x="${x}" y="${y - 8}">BBox: ${x}, ${y}, ${w}, ${h}</text>
+      `;
+      
+      // Update output
+      const filename = imageSelect.value;
+      const data = bboxData[filename] || { defect: 'unknown', component: 'XXX' };
+      
+      output.textContent = `'${filename}': {
+  imageWidth: ${imgNaturalWidth},
+  imageHeight: ${imgNaturalHeight},
+  defects: [
+    {
+      id: 1,
+      class_name: '${data.defect}',
+      confidence: 0.95,
+      severity: 'critical',
+      component_ref: '${data.component}',
+      pin_number: null,
+      ipc_reference: 'IPC-A-610 8.x.x',
+      bbox: { x: ${x}, y: ${y}, width: ${w}, height: ${h} },
+      reviewed: false,
+    },
+  ],
+},`;
+    }
+
+    function resetBBox() {
+      bboxX.value = 0;
+      bboxY.value = 0;
+      bboxW.value = 100;
+      bboxH.value = 100;
+      updateBBox();
+    }
+
+    function copyOutput() {
+      navigator.clipboard.writeText(output.textContent);
+      alert('Copied to clipboard!');
+    }
+  </script>
+</body>
+</html>

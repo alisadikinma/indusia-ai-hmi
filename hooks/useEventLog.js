@@ -1,6 +1,34 @@
+/**
+ * useEventLog Hook
+ * Fetches and manages event log data from API - NO MOCK DATA
+ */
+
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { authFetch } from '@/lib/utils/authFetch';
-import { mockEvents, EVENT_TYPES, EVENT_SOURCES } from '@/data/mockEvents';
+
+export const EVENT_TYPES = {
+  LOGIN: 'LOGIN',
+  LOGOUT: 'LOGOUT',
+  OVERRIDE_SUBMIT: 'OVERRIDE_SUBMIT',
+  OVERRIDE_APPROVE: 'OVERRIDE_APPROVE',
+  OVERRIDE_REJECT: 'OVERRIDE_REJECT',
+  MASTERDATA_CREATE: 'MASTERDATA_CREATE',
+  MASTERDATA_UPDATE: 'MASTERDATA_UPDATE',
+  MASTERDATA_DELETE: 'MASTERDATA_DELETE',
+  SYNC_START: 'SYNC_START',
+  SYNC_SUCCESS: 'SYNC_SUCCESS',
+  SYNC_FAIL: 'SYNC_FAIL',
+  INSPECTION_PASS: 'INSPECTION_PASS',
+  INSPECTION_FAIL: 'INSPECTION_FAIL',
+  FALSE_CALL: 'FALSE_CALL',
+};
+
+export const EVENT_SOURCES = {
+  HMI: 'HMI',
+  ADMIN_CONSOLE: 'AdminConsole',
+  SYNC_SERVICE: 'SyncService',
+  SYSTEM: 'System',
+};
 
 export function useEventLog() {
   const [events, setEvents] = useState([]);
@@ -20,7 +48,7 @@ export function useEventLog() {
   const [page, setPageState] = useState(1);
   const [pageSize, setPageSize] = useState(25);
 
-  // Fetch events from API with fallback to mock data
+  // Fetch events from API
   const fetchEvents = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -31,15 +59,18 @@ export function useEventLog() {
       if (filters.from) params.append('from', filters.from);
       if (filters.to) params.append('to', filters.to);
       if (filters.eventTypes.length === 1) params.append('type', filters.eventTypes[0]);
+      params.append('limit', '200'); // Get more events
 
       const res = await authFetch(`/api/event-log?${params.toString()}`);
-      if (!res.ok) throw new Error('API request failed');
+      if (!res.ok) throw new Error('Failed to fetch event log');
+      
       const json = await res.json();
-      if (!json.success) throw new Error(json.error);
-      setEvents(json.data);
+      if (!json.success) throw new Error(json.error || 'Failed to fetch event log');
+      
+      setEvents(json.data || []);
     } catch (err) {
-      console.warn('API failed, using mock data:', err.message);
-      setEvents([...mockEvents]);
+      console.error('[useEventLog] Fetch error:', err.message);
+      setEvents([]);
       setError(err.message);
     } finally {
       setLoading(false);
@@ -133,20 +164,16 @@ export function useEventLog() {
         method: 'POST',
         body: JSON.stringify(eventData)
       });
-      if (!res.ok) throw new Error('API request failed');
+      if (!res.ok) throw new Error('Failed to log event');
+      
       const json = await res.json();
-      if (!json.success) throw new Error(json.error);
+      if (!json.success) throw new Error(json.error || 'Failed to log event');
+      
       setEvents(prev => [json.data, ...prev]);
       return json.data;
     } catch (err) {
-      console.warn('API failed, using local log:', err.message);
-      const newEvent = {
-        id: `evt-${Date.now()}`,
-        timestamp: new Date().toISOString(),
-        ...eventData
-      };
-      setEvents(prev => [newEvent, ...prev]);
-      return newEvent;
+      console.error('[useEventLog] Log error:', err.message);
+      throw err;
     }
   };
 

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Search, Calendar, RefreshCw, Loader2 } from 'lucide-react';
+import { Search, Calendar, RefreshCw, Loader2, AlertCircle, Inbox } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useOverrides } from '@/hooks/useOverrides';
 import SectionHeader from '@/components/common/SectionHeader';
@@ -11,66 +11,14 @@ import StatusBadge from '@/components/common/StatusBadge';
 import OverrideReviewModal from '@/components/inspection/OverrideReviewModal';
 import { useToast } from '@/hooks/useToast';
 
-// Mock data for fallback when API has no data
-const mockOverrides = [
-  {
-    id: 1,
-    boardId: 'EVS-23A-001293',
-    defectType: 'Solder Bridge',
-    location: 'R12',
-    confidence: 94,
-    reason: 'Acceptable solder joint (AI over-sensitive)',
-    operatorNotes: 'This joint is within spec according to IPC-A-610 Class 2 standards.',
-    operator: 'Operator 1',
-    operatorId: 'u3',
-    timestamp: '2024-11-30 14:26:12',
-    status: 'pending',
-    reviewerNotes: '',
-    sectionId: 'sec-smt',
-    customerId: 'cust-A',
-  },
-  {
-    id: 2,
-    boardId: 'EVS-23A-001294',
-    defectType: 'Missing Component',
-    location: 'C45',
-    confidence: 92,
-    reason: 'Component variation (within tolerance)',
-    operatorNotes: 'Component is present but appears different due to alternate supplier part.',
-    operator: 'Operator 2',
-    operatorId: 'u3',
-    timestamp: '2024-11-30 14:28:45',
-    status: 'pending',
-    reviewerNotes: '',
-    sectionId: 'sec-testing',
-    customerId: 'cust-B',
-  },
-  {
-    id: 3,
-    boardId: 'EVS-23A-001295',
-    defectType: 'Insufficient Solder',
-    location: 'U7',
-    confidence: 89,
-    reason: 'Lighting artifact (reflection/shadow)',
-    operatorNotes: '',
-    operator: 'Operator 1',
-    operatorId: 'u3',
-    timestamp: '2024-11-30 14:31:20',
-    status: 'approved',
-    reviewerNotes: 'Verified. Lighting conditions caused false detection.',
-    sectionId: 'sec-mi',
-    customerId: 'cust-A',
-  },
-];
-
 export default function OverrideApprovalsPage() {
   const router = useRouter();
   const { user } = useAuth();
   const { showToast } = useToast();
 
-  // Use the useOverrides hook
+  // Use the useOverrides hook - NO MOCK DATA
   const {
-    overrides: apiOverrides,
+    overrides,
     loading,
     error,
     stats,
@@ -81,22 +29,10 @@ export default function OverrideApprovalsPage() {
     refreshOverrides,
   } = useOverrides();
 
-  // Use API data if available, otherwise fall back to mock
-  const [overrides, setOverrides] = useState(mockOverrides);
   const [statusFilter, setStatusFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [reviewModalOpen, setReviewModalOpen] = useState(false);
   const [selectedOverride, setSelectedOverride] = useState(null);
-
-  // Update local overrides when API data changes
-  useEffect(() => {
-    if (apiOverrides && apiOverrides.length > 0) {
-      setOverrides(apiOverrides);
-    } else if (!loading && apiOverrides?.length === 0) {
-      // If API returns empty, use mock data for demo
-      setOverrides(mockOverrides);
-    }
-  }, [apiOverrides, loading]);
 
   // Support roleId (API camelCase), role_id (raw), and role (mock)
   const userRole = user?.roleId || user?.role_id || user?.role;
@@ -127,7 +63,7 @@ export default function OverrideApprovalsPage() {
   const filteredOverrides = overrides
     .filter((override) => {
       if (userRole === 'manager') {
-        return allowedSectionIds.includes(override.sectionId);
+        return allowedSectionIds.length === 0 || allowedSectionIds.includes(override.sectionId);
       }
       return true;
     })
@@ -163,15 +99,6 @@ export default function OverrideApprovalsPage() {
     try {
       await approveOverride(id, user?.id, user?.name, reviewerNotes);
 
-      // Update local state
-      setOverrides((prev) =>
-        prev.map((o) =>
-          o.id === id
-            ? { ...o, status: 'approved', reviewerNotes }
-            : o
-        )
-      );
-
       showToast({
         title: 'Override approved',
         description: 'Added to cloud sync queue.',
@@ -193,15 +120,6 @@ export default function OverrideApprovalsPage() {
   const handleReject = async (id, reviewerNotes) => {
     try {
       await rejectOverride(id, user?.id, user?.name, reviewerNotes);
-
-      // Update local state
-      setOverrides((prev) =>
-        prev.map((o) =>
-          o.id === id
-            ? { ...o, status: 'rejected', reviewerNotes }
-            : o
-        )
-      );
 
       showToast({
         title: 'Override rejected',
@@ -321,8 +239,15 @@ export default function OverrideApprovalsPage() {
 
       {/* Error Display */}
       {error && (
-        <div className="bg-red-500/10 border border-red-500/30 rounded-lg px-4 py-3 mb-6">
+        <div className="bg-red-500/10 border border-red-500/30 rounded-lg px-4 py-3 mb-6 flex items-center gap-3">
+          <AlertCircle className="w-5 h-5 text-red-400" />
           <p className="text-sm text-red-400">Error loading overrides: {error}</p>
+          <button
+            onClick={handleRefresh}
+            className="ml-auto text-sm text-red-400 hover:text-red-300 underline"
+          >
+            Retry
+          </button>
         </div>
       )}
 
@@ -338,7 +263,13 @@ export default function OverrideApprovalsPage() {
           </div>
         ) : filteredOverrides.length === 0 ? (
           <div className="text-center py-12">
-            <p className="text-indusia-textMuted">No overrides found</p>
+            <Inbox className="w-12 h-12 text-indusia-textMuted mx-auto mb-3" />
+            <p className="text-indusia-textMuted font-medium">No overrides found</p>
+            <p className="text-sm text-indusia-textMuted mt-1">
+              {statusFilter !== 'all' 
+                ? `No ${statusFilter} overrides at this time.`
+                : 'Operator false call submissions will appear here.'}
+            </p>
           </div>
         ) : (
           <div className="overflow-x-auto">

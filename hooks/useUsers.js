@@ -1,25 +1,29 @@
+/**
+ * useUsers Hook
+ * Fetches and manages users from API - NO MOCK DATA
+ */
+
 import { useState, useEffect, useCallback } from 'react';
 import { authFetch } from '@/lib/utils/authFetch';
-import { userProfiles } from '@/data/masterData';
 
 export function useUsers() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Fetch users from API with fallback to mock data
+  // Fetch users from API
   const fetchUsers = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const res = await authFetch('/api/users');
-      if (!res.ok) throw new Error('API request failed');
+      if (!res.ok) throw new Error('Failed to fetch users');
       const json = await res.json();
-      if (!json.success) throw new Error(json.error);
-      setUsers(json.data);
+      if (!json.success) throw new Error(json.error || 'Failed to fetch users');
+      setUsers(json.data || []);
     } catch (err) {
-      console.warn('API failed, using mock data:', err.message);
-      setUsers([...userProfiles]);
+      console.error('[useUsers] Fetch error:', err.message);
+      setUsers([]);
       setError(err.message);
     } finally {
       setLoading(false);
@@ -40,22 +44,14 @@ export function useUsers() {
         method: 'POST',
         body: JSON.stringify(userData)
       });
-      if (!res.ok) throw new Error('API request failed');
+      if (!res.ok) throw new Error('Failed to create user');
       const json = await res.json();
-      if (!json.success) throw new Error(json.error);
+      if (!json.success) throw new Error(json.error || 'Failed to create user');
       setUsers(prev => [...prev, json.data]);
       return json.data;
     } catch (err) {
-      console.warn('API failed, using local create:', err.message);
-      const newUser = {
-        id: `user-${Date.now()}`,
-        ...userData,
-        createdAt: new Date().toISOString(),
-        status: 'active',
-        mustChangePassword: false,
-      };
-      setUsers(prev => [...prev, newUser]);
-      return newUser;
+      console.error('[useUsers] Create error:', err.message);
+      throw err;
     }
   };
 
@@ -65,30 +61,28 @@ export function useUsers() {
         method: 'PATCH',
         body: JSON.stringify(updates)
       });
-      if (!res.ok) throw new Error('API request failed');
+      if (!res.ok) throw new Error('Failed to update user');
       const json = await res.json();
-      if (!json.success) throw new Error(json.error);
+      if (!json.success) throw new Error(json.error || 'Failed to update user');
       setUsers(prev => prev.map(u => u.id === id ? json.data : u));
       return json.data;
     } catch (err) {
-      console.warn('API failed, using local update:', err.message);
-      setUsers(prev => prev.map(u => u.id === id ? { ...u, ...updates } : u));
-      return { ...getById(id), ...updates };
+      console.error('[useUsers] Update error:', err.message);
+      throw err;
     }
   };
 
   const remove = async (id) => {
     try {
       const res = await authFetch(`/api/users/${id}`, { method: 'DELETE' });
-      if (!res.ok) throw new Error('API request failed');
+      if (!res.ok) throw new Error('Failed to delete user');
       const json = await res.json();
-      if (!json.success) throw new Error(json.error);
+      if (!json.success) throw new Error(json.error || 'Failed to delete user');
       setUsers(prev => prev.filter(u => u.id !== id));
       return true;
     } catch (err) {
-      console.warn('API failed, using local remove:', err.message);
-      setUsers(prev => prev.filter(u => u.id !== id));
-      return true;
+      console.error('[useUsers] Delete error:', err.message);
+      throw err;
     }
   };
 
@@ -101,12 +95,21 @@ export function useUsers() {
   };
 
   const resetPassword = async (id) => {
-    const tempPassword = `Temp${Math.random().toString(36).substring(2, 8)}@123`;
-    await update(id, {
-      password: tempPassword,
-      mustChangePassword: true,
-    });
-    return tempPassword;
+    try {
+      const res = await authFetch(`/api/users/${id}/reset-password`, {
+        method: 'POST'
+      });
+      if (!res.ok) throw new Error('Failed to reset password');
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error || 'Failed to reset password');
+      
+      // Refresh user to get mustChangePassword status
+      await fetchUsers();
+      return json.data?.tempPassword || 'Password reset. Check email.';
+    } catch (err) {
+      console.error('[useUsers] Reset password error:', err.message);
+      throw err;
+    }
   };
 
   const refreshUsers = fetchUsers;

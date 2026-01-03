@@ -76,7 +76,20 @@ export default function LoginPage() {
       // Redirect based on role
       const user = result.user;
       if (user.role === 'operator' || user.role_id === 'operator') {
-        router.push('/inspection/result/current');
+        // Check if operator has active line session
+        const storedActiveLine = localStorage.getItem('indusia_active_line');
+        if (storedActiveLine) {
+          try {
+            const { lineId } = JSON.parse(storedActiveLine);
+            if (lineId) {
+              router.push(`/inspection/live/${lineId}`);
+              return;
+            }
+          } catch (e) {
+            localStorage.removeItem('indusia_active_line');
+          }
+        }
+        router.push('/inspection/select-line');
       } else if (user.role === 'manager' || user.role_id === 'manager') {
         router.push('/inspection/overrides');
       } else if (user.role === 'engineer' || user.role_id === 'engineer') {

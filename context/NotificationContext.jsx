@@ -1,11 +1,25 @@
 'use client';
 
+/**
+ * NotificationContext
+ * Real-time notifications from API - NO MOCK DATA
+ */
+
 import { createContext, useContext, useState, useMemo, useCallback, useEffect } from 'react';
-import { mockNotifications } from '@/data/mockNotifications';
 import { subscribeToNotifications } from '@/lib/realtime/subscriptions';
-import { useToast } from '@/hooks/useToast';
 
 const NotificationContext = createContext(null);
+
+export const NOTIFICATION_TYPES = {
+  SYSTEM: 'SYSTEM',
+  WORKFLOW: 'WORKFLOW',
+};
+
+export const NOTIFICATION_SEVERITY = {
+  INFO: 'info',
+  WARNING: 'warning',
+  CRITICAL: 'critical',
+};
 
 export function NotificationProvider({ children, userId }) {
   const [notifications, setNotifications] = useState([]);
@@ -19,26 +33,26 @@ export function NotificationProvider({ children, userId }) {
     onlyUnread: false,
   });
 
-  // Fetch notifications from API with fallback to mock data
+  // Fetch notifications from API
   const fetchNotifications = useCallback(async () => {
-    if (!userId) {
-      setNotifications([...mockNotifications]);
-      setLoading(false);
-      return;
-    }
-
     setLoading(true);
     setError(null);
+    
     try {
-      const params = new URLSearchParams({ user_id: userId });
+      const params = new URLSearchParams();
+      if (userId) params.append('user_id', userId);
+      params.append('limit', '50');
+      
       const res = await fetch(`/api/notifications?${params.toString()}`);
-      if (!res.ok) throw new Error('API request failed');
+      if (!res.ok) throw new Error('Failed to fetch notifications');
+      
       const json = await res.json();
-      if (!json.success) throw new Error(json.error);
-      setNotifications(json.data);
+      if (!json.success) throw new Error(json.error || 'API error');
+      
+      setNotifications(json.data || []);
     } catch (err) {
-      console.warn('API failed, using mock data:', err.message);
-      setNotifications([...mockNotifications]);
+      console.error('[NotificationContext] Fetch error:', err.message);
+      setNotifications([]);
       setError(err.message);
     } finally {
       setLoading(false);
@@ -54,31 +68,23 @@ export function NotificationProvider({ children, userId }) {
     if (!userId) return;
 
     const unsubscribe = subscribeToNotifications(userId, (newNotif) => {
-      // Add new notification to the list
       setNotifications((prev) => {
-        // Prevent duplicates
         if (prev.some((n) => n.id === newNotif.id)) {
           return prev;
         }
         return [newNotif, ...prev];
       });
 
-      // Show toast notification for real-time updates
-      try {
-        // Note: Toast context may not be available in all contexts
-        // This is a graceful fallback pattern
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('indusia-notification', {
-            detail: {
-              title: newNotif.title,
-              description: newNotif.message,
-              variant: newNotif.severity === 'error' ? 'error' :
-                       newNotif.severity === 'warning' ? 'warning' : 'info'
-            }
-          }));
-        }
-      } catch (err) {
-        console.warn('[NotificationContext] Could not show toast:', err);
+      // Dispatch custom event for toast notification
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('indusia-notification', {
+          detail: {
+            title: newNotif.title,
+            description: newNotif.message,
+            variant: newNotif.severity === 'critical' ? 'error' :
+                     newNotif.severity === 'warning' ? 'warning' : 'info'
+          }
+        }));
       }
     });
 
@@ -96,14 +102,15 @@ export function NotificationProvider({ children, userId }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ids: [id], read: true })
       });
-      if (!res.ok) throw new Error('API request failed');
+      if (!res.ok) throw new Error('Failed to mark as read');
+      
       const json = await res.json();
-      if (!json.success) throw new Error(json.error);
+      if (!json.success) throw new Error(json.error || 'API error');
     } catch (err) {
-      console.warn('API failed, using local update:', err.message);
+      console.error('[NotificationContext] Mark read error:', err.message);
     }
 
-    // Always update local state
+    // Update local state
     setNotifications((prev) =>
       prev.map((notification) =>
         notification.id === id ? { ...notification, read: true } : notification
@@ -112,57 +119,44 @@ export function NotificationProvider({ children, userId }) {
   }, []);
 
   const markAllAsRead = useCallback(async () => {
-    if (userId) {
-      try {
-        const res = await fetch('/api/notifications', {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId, markAllRead: true })
-        });
-        if (!res.ok) throw new Error('API request failed');
-        const json = await res.json();
-        if (!json.success) throw new Error(json.error);
-      } catch (err) {
-        console.warn('API failed, using local update:', err.message);
-      }
+    try {
+      const res = await fetch('/api/notifications', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, markAllRead: true })
+      });
+      if (!res.ok) throw new Error('Failed to mark all as read');
+      
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error || 'API error');
+    } catch (err) {
+      console.error('[NotificationContext] Mark all read error:', err.message);
     }
 
-    // Always update local state
+    // Update local state
     setNotifications((prev) =>
       prev.map((notification) => ({ ...notification, read: true }))
     );
   }, [userId]);
 
   const addNotification = useCallback(async (payload) => {
-    const newNotification = {
-      id: `ntf_${Date.now()}`,
-      read: false,
-      createdAt: new Date().toISOString(),
-      userId: userId || null,
-      relatedEventId: null,
-      ...payload,
-    };
-
-    if (userId) {
-      try {
-        const res = await fetch('/api/notifications', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...payload, userId })
-        });
-        if (!res.ok) throw new Error('API request failed');
-        const json = await res.json();
-        if (!json.success) throw new Error(json.error);
-        setNotifications((prev) => [json.data, ...prev]);
-        return json.data;
-      } catch (err) {
-        console.warn('API failed, using local add:', err.message);
-      }
+    try {
+      const res = await fetch('/api/notifications', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...payload, userId })
+      });
+      if (!res.ok) throw new Error('Failed to add notification');
+      
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error || 'API error');
+      
+      setNotifications((prev) => [json.data, ...prev]);
+      return json.data;
+    } catch (err) {
+      console.error('[NotificationContext] Add error:', err.message);
+      throw err;
     }
-
-    // Fallback to local add
-    setNotifications((prev) => [newNotification, ...prev]);
-    return newNotification;
   }, [userId]);
 
   const updateFilterOptions = useCallback((partial) => {
@@ -182,6 +176,8 @@ export function NotificationProvider({ children, userId }) {
     filterOptions,
     setFilterOptions: updateFilterOptions,
     refreshNotifications,
+    NOTIFICATION_TYPES,
+    NOTIFICATION_SEVERITY,
   };
 
   return (

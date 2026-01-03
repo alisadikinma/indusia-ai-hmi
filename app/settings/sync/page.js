@@ -1,131 +1,180 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/hooks/useToast';
-import { useMockSyncJob } from '@/hooks/useMockSyncJob';
 import SectionHeader from '@/components/common/SectionHeader';
 import Card from '@/components/common/Card';
 import SyncSummaryCard from '@/components/sync/SyncSummaryCard';
 import SyncQueueTable from '@/components/sync/SyncQueueTable';
 import SyncProgressModal from '@/components/sync/SyncProgressModal';
-import { Clock } from 'lucide-react';
+import { Clock, RefreshCw, AlertCircle } from 'lucide-react';
 
 export default function SyncPage() {
   const router = useRouter();
   const { user } = useAuth();
   const { showToast } = useToast();
 
-  const [queueItems, setQueueItems] = useState([
-    {
-      id: 1,
-      customerName: 'Customer A',
-      sectionName: 'SMT',
-      boardId: 'Board A',
-      defectsCount: 12,
-      type: 'Override',
-      status: 'ready',
-    },
-    {
-      id: 2,
-      customerName: 'Customer A',
-      sectionName: 'MI',
-      boardId: 'Board B',
-      defectsCount: 8,
-      type: 'Override',
-      status: 'ready',
-    },
-    {
-      id: 3,
-      customerName: 'Customer B',
-      sectionName: 'Testing',
-      boardId: 'Board C',
-      defectsCount: 15,
-      type: 'Inspection Summary',
-      status: 'ready',
-    },
-    {
-      id: 4,
-      customerName: 'Customer B',
-      sectionName: 'FATP',
-      boardId: 'Board Z',
-      defectsCount: 6,
-      type: 'Override',
-      status: 'ready',
-    },
-  ]);
+  // Queue items from API
+  const [queueItems, setQueueItems] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
 
+  // Sync state
   const [lastSyncTime, setLastSyncTime] = useState(null);
   const [lastSyncStatus, setLastSyncStatus] = useState('never');
   const [autoSync, setAutoSync] = useState(false);
   const [isProgressModalOpen, setIsProgressModalOpen] = useState(false);
   const [syncHistory, setSyncHistory] = useState([]);
 
-  const {
-    isSyncing,
-    progress,
-    status,
-    currentStep,
-    estimatedTime,
-    startSync,
-    pauseSync,
-    resumeSync,
-    cancelSync,
-    resetSync,
-  } = useMockSyncJob({ totalItems: queueItems.length });
+  // Sync progress
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [status, setStatus] = useState('idle'); // idle, syncing, completed, failed
+  const [currentStep, setCurrentStep] = useState('');
 
-  useEffect(() => {
-    if (status === 'completed') {
-      const now = new Date();
-      const timeString = now.toLocaleString('en-US', {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: false,
-      });
+  // Load queue items from API
+  const loadQueueItems = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
 
-      setLastSyncTime(timeString);
-      setLastSyncStatus('success');
+      const response = await fetch('/api/sync-queue?grouped=true');
+      const result = await response.json();
 
-      const syncedCount = queueItems.length;
-      setQueueItems([]);
-
-      setSyncHistory(prev => [
-        {
-          id: Date.now(),
-          timestamp: timeString,
-          recordCount: syncedCount,
-          status: 'success',
-        },
-        ...prev.slice(0, 4),
-      ]);
-
-      showToast('Sync completed successfully.');
-
-      setTimeout(() => {
-        setIsProgressModalOpen(false);
-        resetSync();
-      }, 2000);
+      if (result.success) {
+        // Transform data for SyncQueueTable format
+        const items = result.data.map((item, index) => ({
+          id: item.id || index,
+          customerName: item.customerName || 'Unknown',
+          sectionName: item.sectionName || '-',
+          boardId: item.boardId,
+          defectsCount: item.defectsCount || 1,
+          type: item.type || 'False Call',
+          status: 'ready',
+        }));
+        setQueueItems(items);
+      } else {
+        setError(result.error || 'Failed to load queue');
+      }
+    } catch (err) {
+      console.error('Load queue error:', err);
+      setError(err.message);
+    } finally {
+      setIsLoading(false);
     }
-  }, [status, queueItems.length, showToast, resetSync]);
+  }, []);
 
-  const handleSyncNow = () => {
+  // Load sync history
+  const loadSyncHistory = useCallback(async () => {
+    try {
+      const response = await fetch('/api/sync-queue/history?limit=5');
+      const result = await response.json();
+
+      if (result.success && result.data) {
+        const history = result.data.map(item => ({
+          id: item.id,
+          timestamp: new Date(item.completed_at).toLocaleString(),
+          recordCount: item.record_count,
+          successCount: item.success_count,
+          failedCount: item.failed_count,
+          status: item.status,
+        }));
+        setSyncHistory(history);
+
+        // Update last sync info
+        if (history.length > 0) {
+          setLastSyncTime(history[0].timestamp);
+          setLastSyncStatus(history[0].status);
+        }
+      }
+    } catch (err) {
+      console.error('Load history error:', err);
+    }
+  }, []);
+
+  // Initial load
+  useEffect(() => {
+    loadQueueItems();
+    loadSyncHistory();
+  }, [loadQueueItems, loadSyncHistory]);
+
+  // Execute sync
+  const handleSyncNow = async () => {
     if (queueItems.length === 0) {
       showToast('No records ready to sync.');
       return;
     }
 
     setIsProgressModalOpen(true);
-    startSync();
+    setIsSyncing(true);
+    setStatus('syncing');
+    setProgress(0);
+    setCurrentStep('Preparing upload...');
+
+    try {
+      // Simulate progress updates
+      const progressInterval = setInterval(() => {
+        setProgress(prev => {
+          if (prev >= 90) {
+            clearInterval(progressInterval);
+            return 90;
+          }
+          return prev + 10;
+        });
+      }, 500);
+
+      // Call sync API
+      const response = await fetch('/api/sync-queue/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user?.id }),
+      });
+
+      clearInterval(progressInterval);
+
+      const result = await response.json();
+
+      if (result.success) {
+        setProgress(100);
+        setStatus('completed');
+        setCurrentStep(`Synced ${result.data.syncedCount} records`);
+
+        // Update UI
+        const now = new Date().toLocaleString();
+        setLastSyncTime(now);
+        setLastSyncStatus('success');
+
+        // Reload data
+        await loadQueueItems();
+        await loadSyncHistory();
+
+        showToast(`Sync completed! ${result.data.syncedCount} records uploaded.`);
+
+        // Close modal after delay
+        setTimeout(() => {
+          setIsProgressModalOpen(false);
+          setIsSyncing(false);
+          setStatus('idle');
+          setProgress(0);
+        }, 2000);
+      } else {
+        throw new Error(result.error || 'Sync failed');
+      }
+    } catch (err) {
+      console.error('Sync error:', err);
+      setStatus('failed');
+      setCurrentStep(err.message);
+      showToast(`Sync failed: ${err.message}`);
+    }
   };
 
   const handleCancel = () => {
-    cancelSync();
+    setIsSyncing(false);
     setIsProgressModalOpen(false);
+    setStatus('idle');
+    setProgress(0);
     showToast('Sync cancelled.');
   };
 
@@ -135,6 +184,7 @@ export default function SyncPage() {
 
     if (newValue) {
       showToast('Auto sync enabled (every 15 minutes).');
+      // TODO: Implement auto sync interval
     } else {
       showToast('Auto sync disabled.');
     }
@@ -142,7 +192,9 @@ export default function SyncPage() {
 
   const handleCloseModal = () => {
     setIsProgressModalOpen(false);
-    resetSync();
+    setIsSyncing(false);
+    setStatus('idle');
+    setProgress(0);
   };
 
   const canSync = user && (user.role === 'operator' || user.role === 'manager' || user.role === 'engineer');
@@ -171,6 +223,20 @@ export default function SyncPage() {
         description="Upload approved overrides and inspection records to the cloud for AI retraining."
       />
 
+      {/* Error Banner */}
+      {error && (
+        <div className="mb-6 p-4 bg-red-500/10 border border-red-500/30 rounded-lg flex items-center gap-3">
+          <AlertCircle className="w-5 h-5 text-red-500" />
+          <p className="text-sm text-red-400">{error}</p>
+          <button
+            onClick={loadQueueItems}
+            className="ml-auto px-3 py-1 text-xs bg-red-500/20 hover:bg-red-500/30 rounded"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
         <SyncSummaryCard
           readyCount={queueItems.length}
@@ -182,7 +248,14 @@ export default function SyncPage() {
           onAutoSyncToggle={handleAutoSyncToggle}
         />
 
-        <SyncQueueTable items={queueItems} />
+        <div className="relative">
+          {isLoading && (
+            <div className="absolute inset-0 bg-indusia-surface/50 flex items-center justify-center z-10 rounded-xl">
+              <RefreshCw className="w-6 h-6 text-indusia-primary animate-spin" />
+            </div>
+          )}
+          <SyncQueueTable items={queueItems} />
+        </div>
       </div>
 
       <Card title="Sync History" subtitle="Recent synchronization events">
@@ -199,15 +272,28 @@ export default function SyncPage() {
                 className="flex items-center justify-between px-4 py-3 bg-indusia-surfaceMuted rounded-lg"
               >
                 <div className="flex items-center gap-4">
-                  <div className="w-2 h-2 rounded-full bg-indusia-pass" />
+                  <div className={`w-2 h-2 rounded-full ${
+                    event.status === 'success' ? 'bg-indusia-pass' :
+                    event.status === 'partial' ? 'bg-indusia-warning' : 'bg-indusia-fail'
+                  }`} />
                   <div>
                     <p className="text-sm font-medium text-indusia-text">
-                      Synced {event.recordCount} records
+                      Synced {event.successCount || event.recordCount} records
+                      {event.failedCount > 0 && (
+                        <span className="text-indusia-fail ml-2">
+                          ({event.failedCount} failed)
+                        </span>
+                      )}
                     </p>
                     <p className="text-xs text-indusia-textMuted">{event.timestamp}</p>
                   </div>
                 </div>
-                <span className="text-xs font-medium text-indusia-pass uppercase">Success</span>
+                <span className={`text-xs font-medium uppercase ${
+                  event.status === 'success' ? 'text-indusia-pass' :
+                  event.status === 'partial' ? 'text-indusia-warning' : 'text-indusia-fail'
+                }`}>
+                  {event.status}
+                </span>
               </div>
             ))}
           </div>
@@ -226,10 +312,10 @@ export default function SyncPage() {
         isOpen={isProgressModalOpen}
         progress={progress}
         currentStep={currentStep}
-        estimatedTime={estimatedTime}
+        estimatedTime={null}
         status={status}
-        onPause={pauseSync}
-        onResume={resumeSync}
+        onPause={() => {}}
+        onResume={() => {}}
         onCancel={handleCancel}
         onClose={handleCloseModal}
       />

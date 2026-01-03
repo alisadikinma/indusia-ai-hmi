@@ -6,7 +6,6 @@
   "nav": {
     "dashboard": "Dashboard",
     "hmi": "HMI Inspeksi",
-    "operatorView": "Tampilan Operator",
     "managerQueue": "Antrian Override",
     "engineering": "Konsol Engineer",
     "masterData": "Master Data",

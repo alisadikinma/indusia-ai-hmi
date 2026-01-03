@@ -1,12 +1,10 @@
+/**
+ * useMasterData Hook
+ * Fetches master data from API - NO MOCK DATA
+ */
+
 import { useState, useEffect, useCallback } from 'react';
 import { authFetch } from '@/lib/utils/authFetch';
-import {
-  customers as mockCustomers,
-  sections as mockSections,
-  lines as mockLines,
-  boards as mockBoards,
-  menuItems as mockMenuItems
-} from '@/data/masterData';
 
 export function useMasterData() {
   const [customers, setCustomers] = useState([]);
@@ -17,31 +15,32 @@ export function useMasterData() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Fetch all master data from API with fallback
+  // Fetch all master data from API
   const fetchMasterData = useCallback(async () => {
     setLoading(true);
     setError(null);
 
-    const fetchWithFallback = async (endpoint, fallbackData, setter) => {
+    const fetchEndpoint = async (endpoint, setter) => {
       try {
         const res = await authFetch(endpoint);
-        if (!res.ok) throw new Error('API request failed');
+        if (!res.ok) throw new Error(`Failed to fetch ${endpoint}`);
         const json = await res.json();
-        if (!json.success) throw new Error(json.error);
-        setter(json.data);
+        if (!json.success) throw new Error(json.error || `Failed to fetch ${endpoint}`);
+        setter(json.data || []);
       } catch (err) {
-        console.warn(`${endpoint} API failed, using mock data:`, err.message);
-        setter([...fallbackData]);
+        console.error(`[useMasterData] ${endpoint} error:`, err.message);
+        setter([]);
+        throw err;
       }
     };
 
     try {
       await Promise.all([
-        fetchWithFallback('/api/master-data/customers', mockCustomers, setCustomers),
-        fetchWithFallback('/api/master-data/sections', mockSections, setSections),
-        fetchWithFallback('/api/master-data/lines', mockLines, setLines),
-        fetchWithFallback('/api/master-data/boards', mockBoards, setBoards),
-        fetchWithFallback('/api/master-data/menu-items', mockMenuItems, setMenuItems),
+        fetchEndpoint('/api/master-data/customers', setCustomers),
+        fetchEndpoint('/api/master-data/sections', setSections),
+        fetchEndpoint('/api/master-data/lines', setLines),
+        fetchEndpoint('/api/master-data/boards', setBoards),
+        fetchEndpoint('/api/master-data/menu-items', setMenuItems),
       ]);
     } catch (err) {
       setError(err.message);
@@ -70,16 +69,15 @@ export function useMasterData() {
   const getSectionsByCustomer = useCallback(async (customerId) => {
     try {
       const res = await authFetch(`/api/master-data/sections?customer_id=${customerId}`);
-      if (!res.ok) throw new Error('API request failed');
+      if (!res.ok) throw new Error('Failed to fetch sections');
       const json = await res.json();
-      if (!json.success) throw new Error(json.error);
-      return json.data;
+      if (!json.success) throw new Error(json.error || 'Failed to fetch sections');
+      return json.data || [];
     } catch (err) {
-      console.warn('API failed, filtering local data:', err.message);
-      // Fall back to returning all sections (mock data doesn't have customer relation)
-      return sections;
+      console.error('[useMasterData] getSectionsByCustomer error:', err.message);
+      return [];
     }
-  }, [sections]);
+  }, []);
 
   const getCustomerById = useCallback((id) => {
     return customers.find(c => c.id === id);
