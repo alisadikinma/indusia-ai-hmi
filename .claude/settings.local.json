@@ -41,7 +41,15 @@
       "Bash(npx next build:*)",
       "Bash(node -c:*)",
       "Skill(frontend-design)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(del \"C:\\\\xampp\\\\htdocs\\\\indusia-ai-hmi\\\\.claude\\\\prompts\\\\phase-10-dev-simulation.md\")",
+      "Bash(tree:*)",
+      "Bash(xargs:*)",
+      "Bash(grep:*)",
+      "Bash(wc:*)",
+      "Bash(if exist \"C:\\\\xampp\\\\htdocs\\\\indusia-ai-hmi\\\\nul\" del \"C:\\\\xampp\\\\htdocs\\\\indusia-ai-hmi\\\\nul\")",
+      "Bash(git checkout:*)",
+      "Bash(git add:*)"
     ],
     "deny": [],
     "ask": []

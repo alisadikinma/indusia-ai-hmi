@@ -1,186 +1,239 @@
 /**
  * Live Inspection Hook
- * Manages SSE connection for real-time inspection data
+ * Connects to AI Backend SSE and manages inspection state
  */
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+'use client'
+
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { createAiBackendService } from '@/lib/services/aiBackendService'
+
+const MAX_HISTORY = 50
 
 /**
- * Hook for live inspection data streaming
+ * Hook for live inspection data streaming from AI Backend
  * @param {string} lineId - Line ID to connect to
  * @param {Object} options - Configuration options
  */
 export function useLiveInspection(lineId, options = {}) {
-  const {
-    onDetection,
-    onConnectionChange,
-    maxLogSize = 100,
-    autoReconnect = true,
-    reconnectDelay = 3000
-  } = options
+  // Connection state
+  const [isConnected, setIsConnected] = useState(false)
+  const [connectionError, setConnectionError] = useState(null)
+  const [isReconnecting, setIsReconnecting] = useState(false)
 
-  const [connected, setConnected] = useState(false)
-  const [connecting, setConnecting] = useState(false)
-  const [currentFrame, setCurrentFrame] = useState(null)
-  const [detectionLog, setDetectionLog] = useState([])
-  const [stats, setStats] = useState({ pass: 0, fail: 0, review: 0 })
-  const [error, setError] = useState(null)
+  // Inspection state
+  const [currentInspection, setCurrentInspection] = useState(null)
+  const [history, setHistory] = useState([])
+
+  // Hardware state
+  const [hardwareStatus, setHardwareStatus] = useState(null)
+  const [runningStatus, setRunningStatus] = useState(null)
+
+  // Session state
+  const [sessionInfo, setSessionInfo] = useState(null)
+
+  // Work Order state
+  const [workOrderCounters, setWorkOrderCounters] = useState(null)
+
+  // Confirmation state
+  const [isConfirming, setIsConfirming] = useState(false)
+  const [lastConfirmation, setLastConfirmation] = useState(null)
+
+  // Stats
+  const [stats, setStats] = useState({ pass: 0, fail: 0, total: 0 })
+
+  // Last heartbeat
   const [lastHeartbeat, setLastHeartbeat] = useState(null)
 
-  const eventSourceRef = useRef(null)
-  const reconnectTimeoutRef = useRef(null)
-  const reconnectAttemptsRef = useRef(0)
+  // Service ref
+  const serviceRef = useRef(null)
 
-  const connect = useCallback(() => {
+  // Initialize service
+  useEffect(() => {
     if (!lineId) return
 
-    // Cleanup existing connection
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close()
+    const service = createAiBackendService(lineId, {
+      maxReconnectAttempts: options.maxReconnectAttempts || 10
+    })
+
+    serviceRef.current = service
+
+    // Event listeners
+    service.on('connected', (data) => {
+      setIsConnected(true)
+      setIsReconnecting(false)
+      setConnectionError(null)
+      console.log('[useLiveInspection] Connected:', data)
+    })
+
+    service.on('error', (data) => {
+      setConnectionError(data.message || 'Connection error')
+      if (data.fatal) {
+        setIsConnected(false)
+        setIsReconnecting(false)
+      }
+    })
+
+    service.on('reconnecting', (data) => {
+      setIsReconnecting(true)
+      console.log(`[useLiveInspection] Reconnecting attempt ${data.attempt}`)
+    })
+
+    service.on('inspection', (data) => {
+      setCurrentInspection(data)
+      setHistory(prev => [data, ...prev].slice(0, MAX_HISTORY))
+
+      // Update stats
+      setStats(prev => ({
+        pass: prev.pass + (data.decision === 'PASS' ? 1 : 0),
+        fail: prev.fail + (data.decision === 'FAIL' ? 1 : 0),
+        total: prev.total + 1
+      }))
+    })
+
+    service.on('hardware_status', (data) => {
+      setHardwareStatus(data.hardware)
+    })
+
+    service.on('running_status', (data) => {
+      setRunningStatus(data)
+    })
+
+    service.on('session_update', (data) => {
+      setSessionInfo(data)
+    })
+
+    service.on('work_order_update', (data) => {
+      setWorkOrderCounters(data)
+      console.log('[useLiveInspection] Work order update:', data)
+    })
+
+    service.on('heartbeat', (data) => {
+      setLastHeartbeat(data.timestamp || new Date().toISOString())
+    })
+
+    // Connect
+    service.connect()
+
+    // Cleanup
+    return () => {
+      service.disconnect()
+    }
+  }, [lineId, options.maxReconnectAttempts])
+
+  /**
+   * Confirm inspection with operator decision
+   * @param {string} operatorDecision - 'GOOD' or 'NG'
+   * @param {Object} confirmOptions - Additional options (unitId, comment)
+   */
+  const confirmInspection = useCallback(async (operatorDecision, confirmOptions = {}) => {
+    if (!currentInspection || !serviceRef.current) {
+      return { success: false, error: 'No inspection to confirm' }
     }
 
-    setConnecting(true)
-    setError(null)
+    setIsConfirming(true)
 
     try {
-      const eventSource = new EventSource(`/api/live/${lineId}`)
-      eventSourceRef.current = eventSource
+      const result = await serviceRef.current.postConfirm(
+        currentInspection.inspection_id,
+        operatorDecision,
+        currentInspection.decision,
+        confirmOptions
+      )
 
-      eventSource.onopen = () => {
-        console.log('[LiveInspection] SSE connection opened')
-        setConnected(true)
-        setConnecting(false)
-        setError(null)
-        reconnectAttemptsRef.current = 0
-        onConnectionChange?.(true)
+      if (result.success) {
+        setLastConfirmation({
+          ...result.data,
+          timestamp: new Date().toISOString()
+        })
+
+        // Clear current inspection after confirmation
+        setCurrentInspection(null)
       }
 
-      eventSource.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data)
-
-          switch (data.type) {
-            case 'connected':
-              console.log('[LiveInspection] Connected:', data.clientId)
-              break
-
-            case 'heartbeat':
-              setLastHeartbeat(data.timestamp)
-              break
-
-            case 'detection':
-              // Update current frame
-              setCurrentFrame(data)
-
-              // Add to log (keep limited size)
-              setDetectionLog(prev => {
-                const newLog = [data, ...prev].slice(0, maxLogSize)
-                return newLog
-              })
-
-              // Update stats
-              if (data.result) {
-                setStats(prev => ({
-                  ...prev,
-                  [data.result]: (prev[data.result] || 0) + 1
-                }))
-              }
-
-              // Callback
-              onDetection?.(data)
-              break
-
-            default:
-              console.log('[LiveInspection] Unknown message type:', data.type)
-          }
-        } catch (err) {
-          console.error('[LiveInspection] Failed to parse SSE data:', err)
-        }
-      }
-
-      eventSource.onerror = (err) => {
-        console.error('[LiveInspection] SSE error:', err)
-        setConnected(false)
-        setConnecting(false)
-        setError(new Error('Connection lost'))
-        onConnectionChange?.(false)
-
-        eventSource.close()
-        eventSourceRef.current = null
-
-        // Auto reconnect with exponential backoff
-        if (autoReconnect) {
-          const attempts = reconnectAttemptsRef.current
-          const delay = Math.min(reconnectDelay * Math.pow(2, attempts), 30000) // Max 30s
-
-          console.log(`[LiveInspection] Reconnecting in ${delay}ms (attempt ${attempts + 1})`)
-
-          reconnectTimeoutRef.current = setTimeout(() => {
-            reconnectAttemptsRef.current++
-            connect()
-          }, delay)
-        }
-      }
-    } catch (err) {
-      console.error('[LiveInspection] Failed to create EventSource:', err)
-      setConnecting(false)
-      setError(err)
+      return result
+    } finally {
+      setIsConfirming(false)
     }
-  }, [lineId, maxLogSize, onDetection, onConnectionChange, autoReconnect, reconnectDelay])
+  }, [currentInspection])
 
+  /**
+   * Manual reconnect
+   */
+  const reconnect = useCallback(() => {
+    if (serviceRef.current) {
+      serviceRef.current.disconnect()
+      serviceRef.current.connect()
+    }
+  }, [])
+
+  /**
+   * Disconnect
+   */
   const disconnect = useCallback(() => {
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close()
-      eventSourceRef.current = null
+    if (serviceRef.current) {
+      serviceRef.current.disconnect()
+      setIsConnected(false)
     }
-    if (reconnectTimeoutRef.current) {
-      clearTimeout(reconnectTimeoutRef.current)
-      reconnectTimeoutRef.current = null
-    }
-    setConnected(false)
-    setConnecting(false)
-    reconnectAttemptsRef.current = 0
-    onConnectionChange?.(false)
-  }, [onConnectionChange])
-
-  const clearLog = useCallback(() => {
-    setDetectionLog([])
   }, [])
 
+  /**
+   * Clear history
+   */
+  const clearHistory = useCallback(() => {
+    setHistory([])
+  }, [])
+
+  /**
+   * Reset stats
+   */
   const resetStats = useCallback(() => {
-    setStats({ pass: 0, fail: 0, review: 0 })
+    setStats({ pass: 0, fail: 0, total: 0 })
   }, [])
 
-  const clearCurrentFrame = useCallback(() => {
-    setCurrentFrame(null)
+  /**
+   * Clear current inspection
+   */
+  const clearCurrentInspection = useCallback(() => {
+    setCurrentInspection(null)
   }, [])
-
-  // Connect on mount / lineId change
-  useEffect(() => {
-    if (lineId) {
-      connect()
-    }
-    return () => disconnect()
-  }, [lineId, connect, disconnect])
 
   return {
-    // Connection state
-    connected,
-    connecting,
-    error,
+    // Connection
+    isConnected,
+    isReconnecting,
+    connectionError,
+    reconnect,
+    disconnect,
+
+    // Inspection
+    currentInspection,
+    history,
+    clearHistory,
+    clearCurrentInspection,
+
+    // Hardware
+    hardwareStatus,
+    runningStatus,
+
+    // Session
+    sessionInfo,
+
+    // Work Order
+    workOrderCounters,
+
+    // Stats
+    stats,
+    resetStats,
     lastHeartbeat,
 
-    // Data
-    currentFrame,
-    detectionLog,
-    stats,
-
     // Actions
-    connect,
-    disconnect,
-    clearLog,
-    resetStats,
-    clearCurrentFrame
+    confirmInspection,
+    isConfirming,
+    lastConfirmation,
+
+    // Service (for advanced usage)
+    service: serviceRef.current
   }
 }
 

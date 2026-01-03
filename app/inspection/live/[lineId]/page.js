@@ -20,10 +20,6 @@ import { useParams, useRouter } from 'next/navigation'
 import { useAuth } from '@/context/AuthContext'
 import { authFetch } from '@/lib/utils/authFetch'
 import { LiveViewV3 } from '@/components/inspection/LiveViewV3'
-import { LiveViewV2 } from '@/components/inspection/LiveViewV2'
-
-// Feature flag for WO integration
-const USE_WORK_ORDER_INTEGRATION = true
 
 export default function LiveInspectionPage() {
   const params = useParams()
@@ -108,11 +104,8 @@ export default function LiveInspectionPage() {
     router.push('/inspection/select-line')
   }
 
-  // Use V3 (WO integrated) or V2 (legacy)
-  const LiveViewComponent = USE_WORK_ORDER_INTEGRATION ? LiveViewV3 : LiveViewV2
-
   return (
-    <LiveViewComponent
+    <LiveViewV3
       lineId={lineId}
       lineName={lineName}
       sectionId={sectionId}

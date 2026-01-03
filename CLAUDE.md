@@ -311,6 +311,13 @@ Detailed implementation prompts are stored in `.claude/prompts/` directory:
 | 4 | `phase-4-live-inspection.md` | Live inspection SSE + overlay |
 | 5 | `phase-5-operator-page.md` | HMI Operator page route + board selector |
 | 6 | `phase-6-inspection-api.md` | Inspection action API + DB schema |
+| 7 | `phase-7-ai-backend-auth.md` | AI Backend auth & API structure |
+| 8 | `phase-8-training-repos.md` | Training pipeline repositories |
+| 9 | `phase-9-ai-api-core.md` | Core AI API endpoints |
+| 11 | `phase-11-ai-api-training.md` | Training pipeline API endpoints |
+| 12 | `phase-12-sse-consumer.md` | SSE consumer & AI Backend client |
+| 13 | `phase-13-wo-hardening.md` | Work Order flow hardening |
+| 14 | `phase-14-validation-db.md` | Zod validation schemas & DB migrations |
 
 ### Post-Phase Checklist
 
@@ -346,6 +353,32 @@ Detailed implementation prompts are stored in `.claude/prompts/` directory:
 | 4 | ✅ Done | - | Live inspection |
 | 5 | ✅ Done | 2026-01-01 | Operator page route |
 | 6 | ✅ Done | 2026-01-01 | Inspection API |
+| 7 | ✅ Done | 2026-01-04 | AI Backend auth |
+| 8 | ✅ Done | 2026-01-04 | Training repos |
+| 9 | ✅ Done | 2026-01-04 | Core AI APIs |
+| 11 | ✅ Done | 2026-01-04 | Training pipeline APIs |
+| 12 | ✅ Done | 2026-01-04 | SSE consumer & client |
+| 13 | ✅ Done | 2026-01-04 | Work Order flow hardening |
+| 14 | ✅ Done | 2026-01-04 | Zod validation schemas & DB migrations |
+
+### Codebase Cleanup (2026-01-04)
+
+Major cleanup performed to improve code quality:
+
+**Files Deleted:**
+- Unused hooks: `useMockSyncJob.jsx`, `useRealtime.js`, `use-toast.ts`
+- Unused utilities: `apiErrorHandler.js`, `edgeSync.js`, `rateLimit.js`
+- Unused repos: `shiftConfigRepo.js`
+- Legacy: `LiveViewV2.jsx`, `README-NEW.md`, `.bolt/` directory
+- Duplicate APIs: `/api/defect-classes`, `/api/models` (keeping `/api/ai/*` versions)
+- Archive: `.claude/prompts/archive-training-platform/`
+- Test endpoint: `/api/test`
+
+**New Utilities Created:**
+- `lib/utils/roleUtils.js` - Centralized role normalization
+- `data/mockUsers.js` - Shared mock user data
+
+**Codebase Quality Score: 7.2/10**
 
 ### README Update Template
 

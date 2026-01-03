@@ -1,58 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabaseClient'
-
-/**
- * Extract simple role name from role_id
- * 'role_superadmin' -> 'superadmin'
- */
-function normalizeRole(roleId) {
-  if (!roleId) return null;
-  return roleId.replace(/^role_/i, '').toLowerCase();
-}
-
-// Mock users for development - always available as fallback
-const mockUsers = [
-  { 
-    id: 'user_admin', 
-    name: 'Admin User', 
-    email: 'admin@indusia.com', 
-    password: 'admin123',
-    role_id: 'role_superadmin', 
-    role: 'superadmin', 
-    status: 'active', 
-    sections: ['section_smt', 'section_tht', 'section_final'] 
-  },
-  { 
-    id: 'user_manager', 
-    name: 'Manager User', 
-    email: 'manager@indusia.com', 
-    password: 'manager123',
-    role_id: 'role_manager', 
-    role: 'manager', 
-    status: 'active', 
-    sections: ['section_smt', 'section_tht'] 
-  },
-  { 
-    id: 'user_operator', 
-    name: 'Operator User', 
-    email: 'operator@indusia.com', 
-    password: 'operator123',
-    role_id: 'role_operator', 
-    role: 'operator', 
-    status: 'active', 
-    sections: ['section_smt'] 
-  },
-  { 
-    id: 'user_engineer', 
-    name: 'Engineer User', 
-    email: 'engineer@indusia.com', 
-    password: 'engineer123',
-    role_id: 'role_engineer', 
-    role: 'engineer', 
-    status: 'active', 
-    sections: ['section_smt', 'section_tht', 'section_final'] 
-  },
-]
+import { normalizeRole } from '@/lib/utils/roleUtils'
+import { validateMockCredentials } from '@/data/mockUsers'
 
 /**
  * POST /api/auth/login
@@ -126,17 +75,13 @@ export async function POST(request) {
 
     // Fallback to mock users
     console.log('[login] Trying mock users...')
-    const mockUser = mockUsers.find(u => 
-      u.email.toLowerCase() === normalizedEmail && 
-      u.password === password
-    )
+    const mockUser = validateMockCredentials(normalizedEmail, password)
 
-    if (mockUser && mockUser.status === 'active') {
+    if (mockUser) {
       console.log('[login] Mock user found:', mockUser.email)
-      const { password: _, ...safeUser } = mockUser
       return NextResponse.json({
         success: true,
-        data: { user: safeUser },
+        data: { user: mockUser },
         _mock: true
       })
     }

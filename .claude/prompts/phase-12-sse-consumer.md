@@ -4,18 +4,18 @@
 1. Create AI Backend client service for SSE connection and REST calls
 2. Update Next.js UI to consume all SSE event types
 3. Implement POST /confirm to AI Backend
-4. Handle reconnection and fallback to dev simulation
+4. Handle reconnection with user-friendly error messages
 
 ---
 
 ## Context
 
-AI Backend (separate Python/FastAPI project) streams SSE events and handles PLC control. This Next.js UI needs to:
-1. Connect to AI Backend SSE endpoint (external server)
-2. Handle all event types: `inspection`, `hardware_status`, `running_status`
+AI Backend (separate Python/FastAPI project at `indusia-ai-backend`) streams SSE events and handles PLC control. This Next.js UI needs to:
+1. Connect to AI Backend SSE endpoint (external server at port 8001)
+2. Handle all event types: `inspection`, `hardware_status`, `running_status`, `session_update`
 3. Send operator confirmation via POST /confirm
 4. Auto-reconnect on connection loss
-5. Fallback to dev simulation when AI Backend unavailable
+5. Show clear error message when AI Backend is unavailable
 
 ---
 
@@ -32,18 +32,16 @@ AI Backend (separate Python/FastAPI project) streams SSE events and handles PLC 
 │  │                 │   • inspection            │  useLiveInsp()  │          │
 │  │  localhost:8001 │   • hardware_status       │                 │          │
 │  │                 │   • running_status        │                 │          │
+│  │                 │   • session_update        │                 │          │
 │  │                 │                           │                 │          │
 │  │                 │◀───────────────────────── │                 │          │
 │  │                 │   POST /confirm           │  aiBackendSvc   │          │
+│  │                 │   POST /session/*         │                 │          │
 │  │                 │   GET /stages             │                 │          │
 │  └─────────────────┘                           └─────────────────┘          │
-│                                                        │                    │
-│                                                        │ fallback           │
-│                                                        ▼                    │
-│                                                ┌─────────────────┐          │
-│                                                │  Dev Simulation │          │
-│                                                │  /api/dev/sse   │          │
-│                                                └─────────────────┘          │
+│                                                                             │
+│  NOTE: AI Backend MUST be running before using LiveView.                    │
+│  Start: cd indusia-ai-backend && uvicorn app.main:app --port 8001           │
 │                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -86,6 +84,18 @@ AI Backend (separate Python/FastAPI project) streams SSE events and handles PLC 
   "completed": false,
   "stage_timestamp": null
 }
+
+// 4. session_update
+{
+  "session_id": "sess-abc123",
+  "status": "RUNNING",
+  "work_order_id": "wo-001",
+  "work_order_number": "WO-2026-001",
+  "line_id": "line-01",
+  "inspected_count": 15,
+  "lot_size": 100,
+  "current_side": "top"
+}
 ```
 
 ### REST Endpoints
@@ -96,7 +106,7 @@ AI Backend (separate Python/FastAPI project) streams SSE events and handles PLC 
   "status_id": "stages-20260103-001",
   "timestamp": "...",
   "stages": [
-    { "stage_id": "stage-01", "name": "unit_comming", "completed": true, "timestamp": "..." },
+    { "stage_id": "stage-01", "name": "unit_coming", "completed": true, "timestamp": "..." },
     { "stage_id": "stage-02", "name": "camera_position_1", "completed": true, "timestamp": "..." },
     // ...
   ]
@@ -117,23 +127,49 @@ AI Backend (separate Python/FastAPI project) streams SSE events and handles PLC 
   "confirmed_at": "2026-01-03T16:30:00Z",
   "is_actual_ng": true
 }
+
+// POST /session/start
+// Request:
+{
+  "work_order_id": "wo-001",
+  "work_order_number": "WO-2026-001",
+  "line_id": "line-01",
+  "line_name": "SMT-01",
+  "board_id": "board-001",
+  "board_name": "PCB-TypeA",
+  "lot_size": 100,
+  "side_count": 2
+}
+// Response:
+{
+  "success": true,
+  "message": "Session started. Ready to run.",
+  "session": { ... }
+}
+
+// POST /session/run, /session/pause, /session/stop
+// Response:
+{
+  "success": true,
+  "message": "...",
+  "session": { ... }
+}
 ```
 
 ---
 
-## Task 1: Create AI Backend Client Service
+## Task 1: AI Backend Client Service
 
-### 1.1 `lib/services/aiBackendService.js`
+### File: `lib/services/aiBackendService.js`
 
 ```javascript
 /**
  * AI Backend Client Service
- * Handles SSE connection and REST calls to AI Backend
+ * Handles SSE connection and REST calls to AI Backend (indusia-ai-backend)
  */
 
 const AI_BACKEND_URL = process.env.NEXT_PUBLIC_AI_BACKEND_URL || 'http://localhost:8001'
 const AI_BACKEND_SSE_URL = process.env.NEXT_PUBLIC_AI_BACKEND_SSE_URL || `${AI_BACKEND_URL}/sse`
-const DEV_SSE_URL = '/api/dev/sse'
 
 // ============================================
 // Transform Layer
@@ -176,6 +212,7 @@ export function calculateFalseCall(aiDecision, operatorDecision) {
 
 /**
  * SSE Connection Manager with auto-reconnect
+ * Connects to external AI Backend at port 8001
  */
 export class SSEConnection {
   constructor(lineId, options = {}) {
@@ -185,25 +222,24 @@ export class SSEConnection {
     this.maxReconnectAttempts = options.maxReconnectAttempts || 10
     this.baseDelay = options.baseDelay || 1000
     this.maxDelay = options.maxDelay || 30000
-    this.useDevSimulation = options.useDevSimulation || false
+    this.reconnectTimeoutId = null
     
     this.listeners = {
       inspection: [],
       hardware_status: [],
       running_status: [],
+      session_update: [],
       connected: [],
       error: [],
-      reconnecting: []
+      reconnecting: [],
+      heartbeat: []
     }
   }
 
   /**
-   * Get SSE URL based on environment
+   * Get SSE URL
    */
   getSSEUrl() {
-    if (this.useDevSimulation) {
-      return `${DEV_SSE_URL}/${this.lineId}`
-    }
     return `${AI_BACKEND_SSE_URL}/${this.lineId}`
   }
 
@@ -222,14 +258,18 @@ export class SSEConnection {
       this.eventSource = new EventSource(url)
 
       this.eventSource.onopen = () => {
-        console.log('[SSE] Connected')
+        console.log('[SSE] Connected to AI Backend')
         this.reconnectAttempts = 0
         this._emit('connected', { url, timestamp: new Date().toISOString() })
       }
 
       this.eventSource.onerror = (error) => {
         console.error('[SSE] Connection error:', error)
-        this._emit('error', { error, timestamp: new Date().toISOString() })
+        this._emit('error', { 
+          error, 
+          timestamp: new Date().toISOString(),
+          message: 'Connection to AI Backend failed'
+        })
         this._handleReconnect()
       }
 
@@ -237,6 +277,7 @@ export class SSEConnection {
       this._registerEventListener('inspection')
       this._registerEventListener('hardware_status')
       this._registerEventListener('running_status')
+      this._registerEventListener('session_update')
       this._registerEventListener('heartbeat')
 
     } catch (error) {
@@ -249,6 +290,8 @@ export class SSEConnection {
    * Register SSE event listener
    */
   _registerEventListener(eventType) {
+    if (!this.eventSource) return
+    
     this.eventSource.addEventListener(eventType, (e) => {
       try {
         const data = JSON.parse(e.data)
@@ -263,20 +306,15 @@ export class SSEConnection {
    * Handle reconnection with exponential backoff
    */
   _handleReconnect() {
+    // Clear any pending reconnect
+    if (this.reconnectTimeoutId) {
+      clearTimeout(this.reconnectTimeoutId)
+    }
+
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
       console.error('[SSE] Max reconnect attempts reached')
-      
-      // Fallback to dev simulation if AI Backend unavailable
-      if (!this.useDevSimulation) {
-        console.log('[SSE] Falling back to dev simulation')
-        this.useDevSimulation = true
-        this.reconnectAttempts = 0
-        this.connect()
-        return
-      }
-      
       this._emit('error', { 
-        message: 'Max reconnect attempts reached',
+        message: 'AI Backend tidak tersedia. Jalankan: cd indusia-ai-backend && uvicorn app.main:app --port 8001',
         fatal: true 
       })
       return
@@ -289,21 +327,25 @@ export class SSEConnection {
     )
     
     this.reconnectAttempts++
-    console.log(`[SSE] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts})`)
+    console.log(`[SSE] Reconnecting in ${Math.round(delay)}ms (attempt ${this.reconnectAttempts})`)
     
     this._emit('reconnecting', { 
       attempt: this.reconnectAttempts, 
-      delay,
-      useDevSimulation: this.useDevSimulation
+      delay: Math.round(delay)
     })
 
-    setTimeout(() => this.connect(), delay)
+    this.reconnectTimeoutId = setTimeout(() => this.connect(), delay)
   }
 
   /**
    * Disconnect SSE
    */
   disconnect() {
+    if (this.reconnectTimeoutId) {
+      clearTimeout(this.reconnectTimeoutId)
+      this.reconnectTimeoutId = null
+    }
+    
     if (this.eventSource) {
       this.eventSource.close()
       this.eventSource = null
@@ -335,7 +377,13 @@ export class SSEConnection {
    */
   _emit(eventType, data) {
     if (this.listeners[eventType]) {
-      this.listeners[eventType].forEach(cb => cb(data))
+      this.listeners[eventType].forEach(cb => {
+        try {
+          cb(data)
+        } catch (err) {
+          console.error(`[SSE] Listener error for ${eventType}:`, err)
+        }
+      })
     }
   }
 
@@ -354,14 +402,9 @@ export class SSEConnection {
 /**
  * POST /confirm - Send operator confirmation to AI Backend
  * This triggers PLC action
- * 
- * @param {string} inspectionId - Inspection ID from SSE event
- * @param {string} operatorDecision - 'GOOD' or 'NG'
- * @param {string} aiDecision - 'PASS' or 'FAIL' (for false call calculation)
- * @param {object} options - Additional options
  */
 export async function postConfirm(inspectionId, operatorDecision, aiDecision, options = {}) {
-  const { unitId, comment, useDev = false } = options
+  const { unitId, comment } = options
   
   // Calculate false call
   const isFalseCall = calculateFalseCall(aiDecision, operatorDecision)
@@ -374,28 +417,22 @@ export async function postConfirm(inspectionId, operatorDecision, aiDecision, op
     ...(comment && { comment })
   }
 
-  // Choose endpoint based on environment
-  const endpoint = useDev 
-    ? '/api/dev/confirm' 
-    : `${AI_BACKEND_URL}/confirm`
+  const endpoint = `${AI_BACKEND_URL}/confirm`
 
   try {
     const response = await fetch(endpoint, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     })
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}))
-      throw new Error(errorData.error || `HTTP ${response.status}`)
+      throw new Error(errorData.detail || errorData.error || `HTTP ${response.status}`)
     }
 
     const data = await response.json()
     
-    // Transform response and add calculated fields
     return {
       success: true,
       data: {
@@ -406,16 +443,9 @@ export async function postConfirm(inspectionId, operatorDecision, aiDecision, op
     }
   } catch (error) {
     console.error('[AI Backend] POST /confirm error:', error)
-    
-    // Fallback to dev endpoint if AI Backend fails
-    if (!useDev) {
-      console.log('[AI Backend] Falling back to dev endpoint')
-      return postConfirm(inspectionId, operatorDecision, aiDecision, { ...options, useDev: true })
-    }
-    
     return {
       success: false,
-      error: error.message
+      error: error.message || 'AI Backend tidak tersedia'
     }
   }
 }
@@ -424,11 +454,9 @@ export async function postConfirm(inspectionId, operatorDecision, aiDecision, op
  * GET /stages - Get conveyor stage definitions
  */
 export async function getStages(options = {}) {
-  const { useDev = false, withProgress = false } = options
+  const { withProgress = false } = options
   
-  const endpoint = useDev 
-    ? `/api/dev/stages${withProgress ? '?progress=true' : ''}`
-    : `${AI_BACKEND_URL}/stages${withProgress ? '?progress=true' : ''}`
+  const endpoint = `${AI_BACKEND_URL}/stages${withProgress ? '?progress=true' : ''}`
 
   try {
     const response = await fetch(endpoint)
@@ -441,13 +469,10 @@ export async function getStages(options = {}) {
     return { success: true, data }
   } catch (error) {
     console.error('[AI Backend] GET /stages error:', error)
-    
-    // Fallback to dev endpoint
-    if (!useDev) {
-      return getStages({ ...options, useDev: true })
+    return { 
+      success: false, 
+      error: error.message || 'AI Backend tidak tersedia'
     }
-    
-    return { success: false, error: error.message }
   }
 }
 
@@ -456,13 +481,125 @@ export async function getStages(options = {}) {
  */
 export async function checkHealth() {
   try {
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 5000)
+    
     const response = await fetch(`${AI_BACKEND_URL}/health`, {
       method: 'GET',
-      signal: AbortSignal.timeout(5000) // 5 second timeout
+      signal: controller.signal
     })
+    
+    clearTimeout(timeoutId)
     return response.ok
   } catch {
     return false
+  }
+}
+
+// ============================================
+// Session API Calls
+// ============================================
+
+/**
+ * POST /session/start - Start new inspection session
+ */
+export async function startSession(sessionData) {
+  try {
+    const response = await fetch(`${AI_BACKEND_URL}/session/start`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(sessionData)
+    })
+
+    const data = await response.json()
+    
+    if (!response.ok) {
+      throw new Error(data.detail || 'Failed to start session')
+    }
+
+    return { success: true, data: data.session }
+  } catch (error) {
+    console.error('[AI Backend] POST /session/start error:', error)
+    return { 
+      success: false, 
+      error: error.message || 'AI Backend tidak tersedia'
+    }
+  }
+}
+
+/**
+ * POST /session/run - Start the inspection machine
+ */
+export async function runSession() {
+  try {
+    const response = await fetch(`${AI_BACKEND_URL}/session/run`, { method: 'POST' })
+    const data = await response.json()
+    
+    if (!response.ok) {
+      throw new Error(data.detail || 'Failed to run session')
+    }
+
+    return { success: true, data: data.session }
+  } catch (error) {
+    console.error('[AI Backend] POST /session/run error:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * POST /session/pause - Pause the inspection machine
+ */
+export async function pauseSession() {
+  try {
+    const response = await fetch(`${AI_BACKEND_URL}/session/pause`, { method: 'POST' })
+    const data = await response.json()
+    
+    if (!response.ok) {
+      throw new Error(data.detail || 'Failed to pause session')
+    }
+
+    return { success: true, data: data.session }
+  } catch (error) {
+    console.error('[AI Backend] POST /session/pause error:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * POST /session/stop - Stop and end session
+ */
+export async function stopSession() {
+  try {
+    const response = await fetch(`${AI_BACKEND_URL}/session/stop`, { method: 'POST' })
+    const data = await response.json()
+    
+    if (!response.ok) {
+      throw new Error(data.detail || 'Failed to stop session')
+    }
+
+    return { success: true, data: data.session }
+  } catch (error) {
+    console.error('[AI Backend] POST /session/stop error:', error)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * GET /session/status - Get current session status
+ */
+export async function getSessionStatus() {
+  try {
+    const response = await fetch(`${AI_BACKEND_URL}/session/status`)
+    const data = await response.json()
+    
+    if (!response.ok) {
+      throw new Error(data.detail || 'Failed to get session status')
+    }
+
+    return { success: true, data: data.session }
+  } catch (error) {
+    console.error('[AI Backend] GET /session/status error:', error)
+    return { success: false, error: error.message }
   }
 }
 
@@ -484,17 +621,20 @@ export function createAiBackendService(lineId, options = {}) {
     off: (event, cb) => connection.off(event, cb),
     isConnected: () => connection.isConnected(),
     
-    // REST
-    postConfirm: (inspectionId, operatorDecision, aiDecision, opts) => 
-      postConfirm(inspectionId, operatorDecision, aiDecision, { 
-        ...opts, 
-        useDev: connection.useDevSimulation 
-      }),
-    getStages: (opts) => getStages({ ...opts, useDev: connection.useDevSimulation }),
+    // REST - Core
+    postConfirm,
+    getStages,
+    checkHealth,
+    
+    // REST - Session
+    startSession,
+    runSession,
+    pauseSession,
+    stopSession,
+    getSessionStatus,
     
     // Utils
-    calculateFalseCall,
-    checkHealth
+    calculateFalseCall
   }
 }
 
@@ -503,6 +643,11 @@ export default {
   postConfirm,
   getStages,
   checkHealth,
+  startSession,
+  runSession,
+  pauseSession,
+  stopSession,
+  getSessionStatus,
   createAiBackendService,
   toAiBackendFormat,
   fromAiBackendFormat,
@@ -514,7 +659,7 @@ export default {
 
 ## Task 2: Update useLiveInspection Hook
 
-### 2.1 `hooks/useLiveInspection.js`
+### File: `hooks/useLiveInspection.js`
 
 ```javascript
 /**
@@ -534,7 +679,6 @@ export function useLiveInspection(lineId, options = {}) {
   const [isConnected, setIsConnected] = useState(false)
   const [connectionError, setConnectionError] = useState(null)
   const [isReconnecting, setIsReconnecting] = useState(false)
-  const [useDevSimulation, setUseDevSimulation] = useState(false)
   
   // Inspection state
   const [currentInspection, setCurrentInspection] = useState(null)
@@ -543,6 +687,9 @@ export function useLiveInspection(lineId, options = {}) {
   // Hardware state
   const [hardwareStatus, setHardwareStatus] = useState(null)
   const [runningStatus, setRunningStatus] = useState(null)
+  
+  // Session state
+  const [sessionInfo, setSessionInfo] = useState(null)
   
   // Confirmation state
   const [isConfirming, setIsConfirming] = useState(false)
@@ -556,8 +703,7 @@ export function useLiveInspection(lineId, options = {}) {
     if (!lineId) return
 
     const service = createAiBackendService(lineId, {
-      maxReconnectAttempts: options.maxReconnectAttempts || 10,
-      useDevSimulation: options.useDevSimulation || false
+      maxReconnectAttempts: options.maxReconnectAttempts || 10
     })
     
     serviceRef.current = service
@@ -580,7 +726,6 @@ export function useLiveInspection(lineId, options = {}) {
 
     service.on('reconnecting', (data) => {
       setIsReconnecting(true)
-      setUseDevSimulation(data.useDevSimulation)
     })
 
     service.on('inspection', (data) => {
@@ -596,6 +741,10 @@ export function useLiveInspection(lineId, options = {}) {
       setRunningStatus(data)
     })
 
+    service.on('session_update', (data) => {
+      setSessionInfo(data)
+    })
+
     // Connect
     service.connect()
 
@@ -603,7 +752,7 @@ export function useLiveInspection(lineId, options = {}) {
     return () => {
       service.disconnect()
     }
-  }, [lineId, options.maxReconnectAttempts, options.useDevSimulation])
+  }, [lineId, options.maxReconnectAttempts])
 
   /**
    * Confirm inspection with operator decision
@@ -654,7 +803,6 @@ export function useLiveInspection(lineId, options = {}) {
     isConnected,
     isReconnecting,
     connectionError,
-    useDevSimulation,
     reconnect,
     
     // Inspection
@@ -664,6 +812,9 @@ export function useLiveInspection(lineId, options = {}) {
     // Hardware
     hardwareStatus,
     runningStatus,
+    
+    // Session
+    sessionInfo,
     
     // Actions
     confirmInspection,
@@ -680,237 +831,9 @@ export default useLiveInspection
 
 ---
 
-## Task 3: Create Hardware Status Panel
+## Task 3: Create Connection Status Component
 
-### 3.1 `components/inspection/HardwareStatusPanel.jsx`
-
-```javascript
-/**
- * Hardware Status Panel
- * Displays camera and PLC status from SSE hardware_status event
- */
-
-'use client'
-
-import { cn } from '@/lib/utils'
-import { Camera, Cpu, AlertCircle } from 'lucide-react'
-
-export default function HardwareStatusPanel({ hardwareStatus, className }) {
-  if (!hardwareStatus) {
-    return (
-      <div className={cn("bg-indusia-surface p-4 rounded-lg", className)}>
-        <div className="flex items-center gap-2 text-indusia-textMuted">
-          <AlertCircle className="w-4 h-4" />
-          <span className="text-sm">Waiting for hardware status...</span>
-        </div>
-      </div>
-    )
-  }
-
-  const { cameras = [], plcs = [] } = hardwareStatus
-
-  const allOnline = [...cameras, ...plcs].every(d => d.status === 'ONLINE')
-
-  return (
-    <div className={cn("bg-indusia-surface p-4 rounded-lg", className)}>
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="font-semibold text-indusia-text">Hardware Status</h3>
-        <StatusIndicator online={allOnline} />
-      </div>
-
-      {/* Cameras */}
-      <div className="mb-3">
-        <div className="flex items-center gap-2 text-sm text-indusia-textMuted mb-2">
-          <Camera className="w-4 h-4" />
-          <span>Cameras</span>
-        </div>
-        <div className="space-y-1">
-          {cameras.map(cam => (
-            <DeviceRow key={cam.id} device={cam} />
-          ))}
-        </div>
-      </div>
-
-      {/* PLCs */}
-      <div>
-        <div className="flex items-center gap-2 text-sm text-indusia-textMuted mb-2">
-          <Cpu className="w-4 h-4" />
-          <span>PLCs</span>
-        </div>
-        <div className="space-y-1">
-          {plcs.map(plc => (
-            <DeviceRow key={plc.id} device={plc} />
-          ))}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function DeviceRow({ device }) {
-  const isOnline = device.status === 'ONLINE'
-  
-  return (
-    <div className="flex items-center justify-between text-sm">
-      <span className="text-indusia-text">{device.name}</span>
-      <div className="flex items-center gap-2">
-        {device.message && (
-          <span className="text-xs text-red-400">{device.message}</span>
-        )}
-        <StatusBadge status={device.status} />
-      </div>
-    </div>
-  )
-}
-
-function StatusBadge({ status }) {
-  const isOnline = status === 'ONLINE'
-  return (
-    <span className={cn(
-      "px-2 py-0.5 rounded text-xs font-medium",
-      isOnline ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"
-    )}>
-      {status}
-    </span>
-  )
-}
-
-function StatusIndicator({ online }) {
-  return (
-    <div className={cn(
-      "w-3 h-3 rounded-full",
-      online ? "bg-green-500" : "bg-red-500",
-      online ? "" : "animate-pulse"
-    )} />
-  )
-}
-```
-
----
-
-## Task 4: Create Running Status Panel
-
-### 4.1 `components/inspection/RunningStatusPanel.jsx`
-
-```javascript
-/**
- * Running Status Panel
- * Displays conveyor stage progress from SSE running_status event
- */
-
-'use client'
-
-import { cn } from '@/lib/utils'
-import { Activity, CheckCircle, Circle } from 'lucide-react'
-
-const STAGE_LABELS = {
-  'unit_comming': 'Unit Coming',
-  'unit_coming': 'Unit Coming',
-  'camera_position_1': 'Camera Position 1',
-  'camera_position_2': 'Camera Position 2',
-  'pcb_flipping': 'PCB Flipping',
-  'done': 'Done'
-}
-
-export default function RunningStatusPanel({ runningStatus, stages, className }) {
-  if (!runningStatus) {
-    return (
-      <div className={cn("bg-indusia-surface p-4 rounded-lg", className)}>
-        <div className="flex items-center gap-2 text-indusia-textMuted">
-          <Activity className="w-4 h-4" />
-          <span className="text-sm">Waiting for conveyor status...</span>
-        </div>
-      </div>
-    )
-  }
-
-  const { stage_name, stage_id, completed } = runningStatus
-
-  return (
-    <div className={cn("bg-indusia-surface p-4 rounded-lg", className)}>
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="font-semibold text-indusia-text">Conveyor Status</h3>
-        <Activity className={cn(
-          "w-4 h-4",
-          completed ? "text-green-400" : "text-yellow-400 animate-pulse"
-        )} />
-      </div>
-
-      <div className="space-y-2">
-        <div className="flex justify-between text-sm">
-          <span className="text-indusia-textMuted">Current Stage</span>
-          <span className="text-indusia-primary font-medium">
-            {STAGE_LABELS[stage_name] || stage_name}
-          </span>
-        </div>
-
-        <div className="flex justify-between text-sm">
-          <span className="text-indusia-textMuted">Stage ID</span>
-          <span className="font-mono text-xs text-indusia-text">{stage_id}</span>
-        </div>
-
-        <div className="flex justify-between text-sm">
-          <span className="text-indusia-textMuted">Status</span>
-          <span className={cn(
-            "px-2 py-0.5 rounded text-xs font-medium",
-            completed ? "bg-green-500/20 text-green-400" : "bg-yellow-500/20 text-yellow-400"
-          )}>
-            {completed ? 'COMPLETED' : 'IN PROGRESS'}
-          </span>
-        </div>
-      </div>
-
-      {/* Stage Progress (if stages available) */}
-      {stages && stages.length > 0 && (
-        <div className="mt-4 pt-3 border-t border-indusia-border">
-          <div className="flex items-center gap-1">
-            {stages.map((stage, i) => (
-              <StageIndicator 
-                key={stage.stage_id} 
-                stage={stage}
-                isCurrent={stage.stage_id === stage_id}
-                isLast={i === stages.length - 1}
-              />
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
-function StageIndicator({ stage, isCurrent, isLast }) {
-  return (
-    <>
-      <div className={cn(
-        "w-4 h-4 rounded-full flex items-center justify-center",
-        stage.completed ? "bg-green-500" : isCurrent ? "bg-yellow-500" : "bg-indusia-border"
-      )}>
-        {stage.completed ? (
-          <CheckCircle className="w-3 h-3 text-white" />
-        ) : (
-          <Circle className={cn(
-            "w-2 h-2",
-            isCurrent ? "text-white" : "text-indusia-textMuted"
-          )} />
-        )}
-      </div>
-      {!isLast && (
-        <div className={cn(
-          "flex-1 h-0.5",
-          stage.completed ? "bg-green-500" : "bg-indusia-border"
-        )} />
-      )}
-    </>
-  )
-}
-```
-
----
-
-## Task 5: Create Connection Status Indicator
-
-### 5.1 `components/inspection/ConnectionStatus.jsx`
+### File: `components/inspection/ConnectionStatus.jsx`
 
 ```javascript
 /**
@@ -926,7 +849,6 @@ import { Wifi, WifiOff, RefreshCw, AlertTriangle } from 'lucide-react'
 export default function ConnectionStatus({ 
   isConnected, 
   isReconnecting, 
-  useDevSimulation,
   error,
   onReconnect,
   className 
@@ -945,9 +867,6 @@ export default function ConnectionStatus({
         <>
           <Wifi className="w-3 h-3" />
           <span>Connected</span>
-          {useDevSimulation && (
-            <span className="text-yellow-400">(Dev)</span>
-          )}
         </>
       ) : isReconnecting ? (
         <>
@@ -972,7 +891,7 @@ export default function ConnectionStatus({
       {error && !isReconnecting && (
         <div className="flex items-center gap-1 ml-2 text-red-400">
           <AlertTriangle className="w-3 h-3" />
-          <span>{error}</span>
+          <span className="max-w-xs truncate">{error}</span>
         </div>
       )}
     </div>
@@ -982,9 +901,9 @@ export default function ConnectionStatus({
 
 ---
 
-## Task 6: Update Environment Variables
+## Task 4: Update Environment Variables
 
-### 6.1 `.env.example`
+### File: `.env.example`
 
 ```env
 # Supabase
@@ -995,145 +914,9 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 AI_BACKEND_API_KEY=your-secure-api-key
 
 # AI Backend URLs (external Python/FastAPI server)
+# Run: cd indusia-ai-backend && uvicorn app.main:app --port 8001
 NEXT_PUBLIC_AI_BACKEND_URL=http://localhost:8001
 NEXT_PUBLIC_AI_BACKEND_SSE_URL=http://localhost:8001/sse
-
-# Set to 'true' to force dev simulation mode
-NEXT_PUBLIC_USE_DEV_SIMULATION=false
-```
-
----
-
-## Task 7: Integrate into LiveView
-
-### 7.1 Update `components/inspection/LiveViewV3.jsx`
-
-```javascript
-'use client'
-
-import { useLiveInspection } from '@/hooks/useLiveInspection'
-import HardwareStatusPanel from './HardwareStatusPanel'
-import RunningStatusPanel from './RunningStatusPanel'
-import ConnectionStatus from './ConnectionStatus'
-import BoardOverview from './BoardOverview'
-import DefectView from './DefectView'
-import OperatorButtons from './OperatorButtons'
-
-export default function LiveViewV3({ lineId, workOrder }) {
-  const {
-    // Connection
-    isConnected,
-    isReconnecting,
-    connectionError,
-    useDevSimulation,
-    reconnect,
-    
-    // Inspection
-    currentInspection,
-    
-    // Hardware
-    hardwareStatus,
-    runningStatus,
-    
-    // Actions
-    confirmInspection,
-    isConfirming,
-    lastConfirmation
-  } = useLiveInspection(lineId)
-
-  // Handle operator decision
-  const handleDecision = async (decision) => {
-    const result = await confirmInspection(decision, {
-      unitId: workOrder?.current_unit_id,
-      comment: null
-    })
-    
-    if (result.success) {
-      console.log('Confirmed:', result.data)
-      // Handle success (e.g., update WO counters)
-    } else {
-      console.error('Confirm failed:', result.error)
-      // Handle error
-    }
-  }
-
-  return (
-    <div className="h-screen flex flex-col bg-indusia-bg">
-      {/* Header */}
-      <header className="flex items-center justify-between px-4 py-2 bg-indusia-surface border-b border-indusia-border">
-        <div className="flex items-center gap-4">
-          <h1 className="text-lg font-semibold text-indusia-text">
-            Live Inspection - {lineId}
-          </h1>
-          <ConnectionStatus
-            isConnected={isConnected}
-            isReconnecting={isReconnecting}
-            useDevSimulation={useDevSimulation}
-            error={connectionError}
-            onReconnect={reconnect}
-          />
-        </div>
-        
-        {workOrder && (
-          <div className="text-sm text-indusia-textMuted">
-            WO: {workOrder.wo_number}
-          </div>
-        )}
-      </header>
-
-      {/* Main Content */}
-      <div className="flex-1 grid grid-cols-12 gap-4 p-4 overflow-hidden">
-        {/* Left: Images */}
-        <div className="col-span-8 flex flex-col gap-4">
-          <div className="flex-1 bg-indusia-surface rounded-lg overflow-hidden">
-            <BoardOverview 
-              inspection={currentInspection}
-              side="top"
-            />
-          </div>
-          <div className="h-48 bg-indusia-surface rounded-lg overflow-hidden">
-            <DefectView 
-              inspection={currentInspection}
-            />
-          </div>
-        </div>
-
-        {/* Right: Status & Controls */}
-        <div className="col-span-4 flex flex-col gap-4">
-          {/* AI Decision */}
-          {currentInspection && (
-            <div className="bg-indusia-surface p-4 rounded-lg">
-              <h3 className="text-sm text-indusia-textMuted mb-2">AI Decision</h3>
-              <div className={cn(
-                "text-2xl font-bold",
-                currentInspection.decision === 'PASS' 
-                  ? "text-green-400" 
-                  : "text-red-400"
-              )}>
-                {currentInspection.decision}
-              </div>
-            </div>
-          )}
-
-          {/* Operator Buttons */}
-          <OperatorButtons
-            onGood={() => handleDecision('GOOD')}
-            onNG={() => handleDecision('NG')}
-            disabled={!currentInspection || isConfirming}
-            isLoading={isConfirming}
-            aiDecision={currentInspection?.decision}
-          />
-
-          {/* Hardware Status */}
-          <HardwareStatusPanel hardwareStatus={hardwareStatus} />
-
-          {/* Running Status */}
-          <RunningStatusPanel runningStatus={runningStatus} />
-        </div>
-      </div>
-    </div>
-  )
-}
 ```
 
 ---
@@ -1144,27 +927,25 @@ export default function LiveViewV3({ lineId, workOrder }) {
 - [ ] `lib/services/aiBackendService.js` created
 - [ ] SSEConnection class with auto-reconnect
 - [ ] Exponential backoff with jitter
-- [ ] Fallback to dev simulation
+- [ ] Clear error message when AI Backend unavailable
 - [ ] `postConfirm()` function
 - [ ] `getStages()` function
+- [ ] Session API functions (start, run, pause, stop, status)
 - [ ] Transform layer (GOOD/NG ↔ is_actual_ng)
 
 ### Hook
 - [ ] `useLiveInspection` updated with service integration
 - [ ] Connection state management
+- [ ] Session state from `session_update` event
 - [ ] `confirmInspection()` function
 - [ ] Manual reconnect function
 
 ### Components
-- [ ] `HardwareStatusPanel` component
-- [ ] `RunningStatusPanel` component
 - [ ] `ConnectionStatus` component
-- [ ] LiveView integration
 
 ### Environment
-- [ ] `.env.example` updated
-- [ ] AI Backend URLs configurable
-- [ ] Dev simulation toggle
+- [ ] `.env.example` updated with AI Backend URLs
+- [ ] No dev simulation references
 
 ---
 
@@ -1177,8 +958,14 @@ export default function LiveViewV3({ lineId, workOrder }) {
 const { 
   currentInspection, 
   confirmInspection,
-  isConnected 
+  isConnected,
+  connectionError
 } = useLiveInspection('line-1')
+
+// Show error if not connected
+if (connectionError) {
+  return <div>Error: {connectionError}</div>
+}
 
 // Confirm with GOOD
 await confirmInspection('GOOD')
@@ -1187,27 +974,25 @@ await confirmInspection('GOOD')
 await confirmInspection('NG', { comment: 'Defect confirmed' })
 ```
 
-### Manual Service Usage
+### With Session Management
 
 ```javascript
-import { createAiBackendService } from '@/lib/services/aiBackendService'
+import { startSession, runSession, stopSession } from '@/lib/services/aiBackendService'
 
-const service = createAiBackendService('line-1')
-
-// Connect to SSE
-service.connect()
-
-// Listen for events
-service.on('inspection', (data) => {
-  console.log('Inspection:', data)
+// Start session first
+const sessionResult = await startSession({
+  work_order_id: 'wo-001',
+  work_order_number: 'WO-2026-001',
+  line_id: 'line-01',
+  board_id: 'board-001',
+  lot_size: 100,
+  side_count: 2
 })
 
-// POST confirm
-const result = await service.postConfirm('insp-123', 'GOOD', 'PASS')
-console.log('Is false call:', result.data.is_false_call) // true if AI=PASS, Op=NG
-
-// Disconnect
-service.disconnect()
+if (sessionResult.success) {
+  // Then connect SSE and run
+  const runResult = await runSession()
+}
 ```
 
 ### Decision Matrix
@@ -1218,3 +1003,22 @@ service.disconnect()
 | PASS | NG | true | **true** |
 | FAIL | GOOD | false | **true** |
 | FAIL | NG | true | false |
+
+---
+
+## Running the System
+
+```bash
+# Terminal 1: Start AI Backend (required)
+cd C:\xampp\htdocs\indusia-ai-backend
+venv\Scripts\activate
+uvicorn app.main:app --port 8001 --reload
+
+# Terminal 2: Start Next.js UI
+cd C:\xampp\htdocs\indusia-ai-hmi
+npm run dev
+
+# Open:
+# - Control Panel: http://localhost:8001
+# - Next.js UI: http://localhost:3000
+```
