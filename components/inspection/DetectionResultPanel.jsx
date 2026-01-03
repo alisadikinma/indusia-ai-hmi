@@ -1,109 +1,107 @@
 'use client';
 
 /**
- * Detection Result Panel
- * Shows AI detection details with severity and IPC reference
+ * Detection Result Panel - Compact Version
+ * Simplified for better focus on inspection
  */
 
 import { AlertTriangle, AlertCircle, Info, CheckCircle2, Target } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-// Severity configuration
 const SEVERITY_CONFIG = {
   critical: {
     label: 'CRITICAL',
     color: 'text-phosphor-red',
     bgColor: 'bg-phosphor-red/10',
     borderColor: 'border-phosphor-red/50',
-    icon: AlertTriangle,
   },
   major: {
     label: 'MAJOR',
     color: 'text-phosphor-amber',
     bgColor: 'bg-phosphor-amber/10',
     borderColor: 'border-phosphor-amber/50',
-    icon: AlertCircle,
   },
   minor: {
     label: 'MINOR',
     color: 'text-yellow-400',
     bgColor: 'bg-yellow-400/10',
     borderColor: 'border-yellow-400/50',
-    icon: Info,
   },
 };
 
-// Defect type to display name mapping
 const DEFECT_DISPLAY_NAMES = {
   solder_bridge: 'Solder Bridge',
-  solder_short: 'Solder Short',
   insufficient_solder: 'Insufficient Solder',
-  excess_solder: 'Excess Solder',
-  cold_solder: 'Cold Solder Joint',
+  cold_solder: 'Cold Solder',
   solder_ball: 'Solder Ball',
-  non_wetting: 'Non-Wetting',
   missing_component: 'Missing Component',
-  wrong_component: 'Wrong Component',
-  reversed_polarity: 'Reversed Polarity',
-  tombstone: 'Tombstoning',
+  tombstone: 'Tombstone',
   misalignment: 'Misalignment',
-  lifted_lead: 'Lifted Lead',
-  damaged_component: 'Damaged Component',
-  contamination: 'Contamination',
-};
-
-// IPC descriptions
-const IPC_DESCRIPTIONS = {
-  solder_bridge: 'Solder connecting adjacent conductors that should not be connected',
-  solder_short: 'Unintended solder connection between conductors',
-  insufficient_solder: 'Solder joint does not meet minimum fillet requirements',
-  excess_solder: 'Solder quantity exceeds acceptable limits',
-  missing_component: 'Component is absent from designated location',
-  tombstone: 'Component standing on end with one termination not soldered',
-  misalignment: 'Component offset from nominal position beyond tolerance',
 };
 
 export function DetectionResultPanel({
   detection,
   isLoading = false,
-  aiResult = 'FAIL', // 'PASS', 'FAIL', 'REVIEW'
+  aiResult = 'WAITING',
   defectIndex = 0,
   defectCount = 0,
 }) {
+  // Loading state
   if (isLoading) {
     return (
       <div className="h-full flex items-center justify-center bg-terminal border border-surface-border">
         <div className="text-center">
-          <div className="w-8 h-8 border-2 border-phosphor-amber border-t-transparent animate-spin mx-auto mb-3" />
+          <div className="w-8 h-8 border-2 border-phosphor-amber border-t-transparent animate-spin mx-auto mb-2" />
           <p className="font-mono text-xs text-text-tertiary">ANALYZING...</p>
         </div>
       </div>
     );
   }
 
-  // No detection = PASS
-  if (!detection || aiResult === 'PASS') {
+  // PASS / GOOD state
+  if (!detection || aiResult === 'GOOD' || aiResult === 'PASS') {
     return (
       <div className="h-full flex flex-col bg-terminal border border-phosphor-green/30">
-        <div className="flex items-center gap-2 px-4 py-3 bg-phosphor-green/10 border-b border-phosphor-green/30">
-          <CheckCircle2 className="w-5 h-5 text-phosphor-green" />
-          <span className="font-display font-bold text-phosphor-green tracking-wide">
+        <div className="flex items-center gap-2 px-3 py-2 bg-phosphor-green/10 border-b border-phosphor-green/30">
+          <CheckCircle2 className="w-4 h-4 text-phosphor-green" />
+          <span className="font-display font-bold text-sm text-phosphor-green tracking-wide">
             AI RESULT: PASS
           </span>
         </div>
-        <div className="flex-1 flex items-center justify-center p-4">
+        <div className="flex-1 flex items-center justify-center p-3">
           <div className="text-center">
-            <CheckCircle2 className="w-16 h-16 text-phosphor-green/50 mx-auto mb-4" />
-            <p className="font-display text-lg text-phosphor-green mb-2">NO DEFECTS DETECTED</p>
-            <p className="font-mono text-xs text-text-tertiary">
-              Board passed AI inspection
-            </p>
+            <CheckCircle2 className="w-12 h-12 text-phosphor-green/50 mx-auto mb-2" />
+            <p className="font-display text-base text-phosphor-green">NO DEFECTS DETECTED</p>
+            <p className="font-mono text-xs text-text-tertiary mt-1">Board passed AI inspection</p>
           </div>
         </div>
       </div>
     );
   }
 
+  // WAITING state
+  if (aiResult === 'WAITING') {
+    return (
+      <div className="h-full flex flex-col bg-terminal border border-surface-border">
+        <div className="flex items-center gap-2 px-3 py-2 bg-panel border-b border-surface-border">
+          <Info className="w-4 h-4 text-text-tertiary" />
+          <span className="font-display font-bold text-sm text-text-tertiary tracking-wide">
+            AI RESULT: WAITING
+          </span>
+        </div>
+        <div className="flex-1 flex items-center justify-center p-3">
+          <div className="text-center">
+            <div className="w-12 h-12 border-2 border-surface-border border-dashed flex items-center justify-center mx-auto mb-2">
+              <Target className="w-6 h-6 text-text-tertiary" />
+            </div>
+            <p className="font-mono text-xs text-text-tertiary">Waiting for inspection...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // NG / DEFECT state
   const {
     class_name,
     confidence,
@@ -113,147 +111,82 @@ export function DetectionResultPanel({
     ipc_reference,
   } = detection;
 
-  const severityConfig = SEVERITY_CONFIG[severity] || SEVERITY_CONFIG.major;
-  const SeverityIcon = severityConfig.icon;
+  const config = SEVERITY_CONFIG[severity] || SEVERITY_CONFIG.major;
   const displayName = DEFECT_DISPLAY_NAMES[class_name] || class_name?.replace(/_/g, ' ');
-  const ipcDescription = IPC_DESCRIPTIONS[class_name];
   const confidencePercent = Math.round((confidence || 0) * 100);
 
   return (
-    <div className="h-full flex flex-col bg-terminal border border-surface-border">
-      {/* Header */}
+    <div className="h-full flex flex-col bg-terminal border border-surface-border overflow-hidden">
+      {/* Header - Compact */}
       <div className={cn(
-        "flex items-center justify-between px-4 py-3 border-b",
-        severityConfig.bgColor,
-        severityConfig.borderColor
+        "flex items-center justify-between px-3 py-2 border-b",
+        config.bgColor,
+        config.borderColor
       )}>
         <div className="flex items-center gap-2">
-          <AlertTriangle className={cn("w-5 h-5", severityConfig.color)} />
-          <span className={cn("font-display font-bold tracking-wide", severityConfig.color)}>
-            AI RESULT: DEFECT DETECTED
+          <AlertTriangle className={cn("w-4 h-4", config.color)} />
+          <span className={cn("font-display font-bold text-sm tracking-wide", config.color)}>
+            DEFECT DETECTED
           </span>
         </div>
         {defectCount > 1 && (
-          <div className="flex items-center gap-2 px-3 py-1 bg-void border border-surface-border">
-            <span className="font-mono text-xs text-text-tertiary">Defect</span>
-            <span className="font-mono text-sm font-bold text-phosphor-amber">
-              {defectIndex + 1}/{defectCount}
-            </span>
-          </div>
+          <span className="font-mono text-xs text-phosphor-amber">
+            {defectIndex + 1}/{defectCount}
+          </span>
         )}
       </div>
 
-      {/* Content */}
-      <div className="flex-1 p-4 space-y-4 overflow-y-auto">
-        {/* Defect Type */}
-        <div className={cn(
-          "p-4 border",
-          severityConfig.bgColor,
-          severityConfig.borderColor
-        )}>
-          <div className="flex items-start gap-3">
-            <SeverityIcon className={cn("w-8 h-8 flex-shrink-0", severityConfig.color)} />
-            <div className="flex-1">
-              <h3 className={cn("font-display text-xl font-bold", severityConfig.color)}>
-                {displayName?.toUpperCase()}
-              </h3>
-              <div className="flex items-center gap-3 mt-2">
-                <span className={cn(
-                  "px-2 py-1 font-mono text-xs font-bold border",
-                  severityConfig.bgColor,
-                  severityConfig.borderColor,
-                  severityConfig.color
-                )}>
-                  {severityConfig.label}
-                </span>
-                <span className="font-mono text-sm text-text-secondary">
-                  Confidence: <span className={severityConfig.color}>{confidencePercent}%</span>
-                </span>
-              </div>
-            </div>
+      {/* Content - Compact */}
+      <div className="flex-1 p-3 space-y-2 overflow-y-auto">
+        {/* Defect Type + Severity */}
+        <div className={cn("p-3 border", config.bgColor, config.borderColor)}>
+          <div className="flex items-center justify-between mb-1">
+            <span className={cn("font-display text-base font-bold uppercase", config.color)}>
+              {displayName}
+            </span>
+            <span className={cn(
+              "px-2 py-0.5 font-mono text-xs font-bold border",
+              config.bgColor, config.borderColor, config.color
+            )}>
+              {config.label}
+            </span>
           </div>
-        </div>
-
-        {/* Confidence Bar */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="font-mono text-xs text-text-tertiary">AI CONFIDENCE</span>
-            <span className={cn("font-mono text-sm font-bold", severityConfig.color)}>
+          
+          {/* Confidence inline */}
+          <div className="flex items-center gap-2 mt-2">
+            <div className="flex-1 h-2 bg-void border border-surface-border">
+              <div
+                className={cn("h-full", {
+                  'bg-phosphor-red': confidencePercent >= 85,
+                  'bg-phosphor-amber': confidencePercent >= 60 && confidencePercent < 85,
+                  'bg-yellow-400': confidencePercent < 60,
+                })}
+                style={{ width: `${confidencePercent}%` }}
+              />
+            </div>
+            <span className={cn("font-mono text-sm font-bold w-12 text-right", config.color)}>
               {confidencePercent}%
             </span>
           </div>
-          <div className="h-3 bg-void border border-surface-border">
-            <div
-              className={cn("h-full transition-all duration-500", {
-                'bg-phosphor-red': confidencePercent >= 85,
-                'bg-phosphor-amber': confidencePercent >= 60 && confidencePercent < 85,
-                'bg-yellow-400': confidencePercent < 60,
-              })}
-              style={{ width: `${confidencePercent}%` }}
-            />
-          </div>
         </div>
 
-        {/* Location */}
+        {/* Location - Compact single row */}
         {(component_ref || pin_number) && (
-          <div className="p-3 bg-void border border-surface-border">
-            <div className="flex items-center gap-2 mb-2">
-              <Target className="w-4 h-4 text-phosphor-cyan" />
-              <span className="font-mono text-xs text-text-tertiary">LOCATION</span>
-            </div>
-            <div className="flex items-center gap-4">
-              {component_ref && (
-                <div>
-                  <span className="font-mono text-xs text-text-tertiary">Component: </span>
-                  <span className="font-mono text-lg font-bold text-phosphor-cyan">
-                    {component_ref}
-                  </span>
-                </div>
-              )}
+          <div className="flex items-center gap-3 px-3 py-2 bg-void border border-surface-border">
+            <Target className="w-4 h-4 text-phosphor-cyan flex-shrink-0" />
+            <span className="font-mono text-sm">
+              <span className="text-phosphor-cyan font-bold">{component_ref}</span>
               {pin_number && (
-                <div>
-                  <span className="font-mono text-xs text-text-tertiary">Pin: </span>
-                  <span className="font-mono text-lg font-bold text-text-primary">
-                    {pin_number}
-                  </span>
-                </div>
+                <span className="text-text-secondary ml-2">• {pin_number}</span>
               )}
-            </div>
-          </div>
-        )}
-
-        {/* IPC Reference */}
-        {(ipc_reference || ipcDescription) && (
-          <div className="p-3 bg-void border border-surface-border">
-            <div className="flex items-center gap-2 mb-2">
-              <Info className="w-4 h-4 text-text-tertiary" />
-              <span className="font-mono text-xs text-text-tertiary">IPC-A-610 REFERENCE</span>
-            </div>
-            {ipc_reference && (
-              <p className="font-mono text-sm text-phosphor-amber mb-2">{ipc_reference}</p>
-            )}
-            {ipcDescription && (
-              <p className="font-mono text-xs text-text-secondary leading-relaxed">
-                "{ipcDescription}"
-              </p>
-            )}
-          </div>
-        )}
-
-        {/* IPC Classification */}
-        <div className="p-3 bg-void border border-surface-border">
-          <div className="flex items-center justify-between">
-            <span className="font-mono text-xs text-text-tertiary">IPC CLASS 2 VERDICT</span>
-            <span className={cn(
-              "px-3 py-1 font-mono text-xs font-bold border",
-              severityConfig.bgColor,
-              severityConfig.borderColor,
-              severityConfig.color
-            )}>
-              DEFECT
             </span>
+            {ipc_reference && (
+              <span className="ml-auto font-mono text-xs text-text-tertiary">
+                {ipc_reference.replace('IPC-A-610 ', '')}
+              </span>
+            )}
           </div>
-        </div>
+        )}
       </div>
     </div>
   );

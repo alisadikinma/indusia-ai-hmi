@@ -9,6 +9,7 @@
     "managerQueue": "Antrian Override",
     "engineering": "Konsol Engineer",
     "masterData": "Master Data",
+    "workOrders": "Work Order",
     "sync": "Sinkron ke Cloud",
     "superAdmin": "Panel Super Admin",
     "users": "Pengguna",

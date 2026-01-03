@@ -22,3 +22,6 @@ export { DetectionResultPanel } from './DetectionResultPanel'
 export { BoardOverview } from './BoardOverview'
 export { FalseCallModal } from './FalseCallModal'
 export { NextPCBConfirmModal } from './NextPCBConfirmModal'
+
+// LiveView V3 - Work Order integrated
+export { LiveViewV3 } from './LiveViewV3'

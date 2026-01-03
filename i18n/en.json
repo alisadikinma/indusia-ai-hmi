@@ -9,6 +9,7 @@
     "managerQueue": "Override Queue",
     "engineering": "Engineering Console",
     "masterData": "Master Data",
+    "workOrders": "Work Orders",
     "sync": "Sync to Cloud",
     "superAdmin": "Super Admin Panel",
     "users": "Users",

@@ -19,7 +19,8 @@ import {
   Radio,
   PanelLeftClose,
   PanelLeft,
-  Zap
+  Zap,
+  FileText
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useI18n } from '@/hooks/useI18n';
@@ -108,6 +109,13 @@ export default function SideNav() {
       icon: Database,
       roles: ['engineer', 'superadmin'],
       code: 'ENG',
+    },
+    {
+      labelKey: 'nav.workOrders',
+      href: '/engineering/work-orders',
+      icon: FileText,
+      roles: ['engineer', 'superadmin'],
+      code: 'WO',
     },
     {
       labelKey: 'nav.sync',

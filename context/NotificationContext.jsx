@@ -35,12 +35,19 @@ export function NotificationProvider({ children, userId }) {
 
   // Fetch notifications from API
   const fetchNotifications = useCallback(async () => {
+    // Skip if no userId
+    if (!userId) {
+      setLoading(false);
+      setNotifications([]);
+      return;
+    }
+    
     setLoading(true);
     setError(null);
     
     try {
       const params = new URLSearchParams();
-      if (userId) params.append('user_id', userId);
+      params.append('user_id', userId);
       params.append('limit', '50');
       
       const res = await fetch(`/api/notifications?${params.toString()}`);
