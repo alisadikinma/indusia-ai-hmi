@@ -22,18 +22,29 @@ import {
   stopSession,
   getSessionStatus,
   postConfirm,
-  checkHealth 
+  checkHealth,
+  getStages
 } from '@/lib/services/aiBackendService'
 
-// Stage definitions for progress tracking (matches dev.py)
-const STAGE_MAP = {
-  'idle': { index: 0, message: 'Waiting for board...', icon: 'hourglass' },
-  'start': { index: 1, message: 'Board incoming...', icon: 'loader' },
-  'running': { index: 2, message: 'Processing...', icon: 'cpu' },
-  'done': { index: 3, message: 'Ready for review', icon: 'check' }
-}
+// Default stage definitions (fallback if /stages fails)
+const DEFAULT_STAGES = [
+  { stage_id: 'stage-01', name: 'start', label: 'Board', icon: 'box' },
+  { stage_id: 'stage-02', name: 'running', label: 'Process', icon: 'cpu' },
+  { stage_id: 'stage-03', name: 'done', label: 'Done', icon: 'check' }
+]
 
-const TOTAL_STAGES = 3
+// Stage message map
+const STAGE_MESSAGES = {
+  'idle': 'Waiting for board...',
+  'start': 'Board incoming...',
+  'position_1': 'Camera Position 1...',
+  'position_2': 'Camera Position 2...',
+  'flip': 'Flipping PCB...',
+  'position_3': 'Camera Position 3...',
+  'position_4': 'Camera Position 4...',
+  'running': 'Processing...',
+  'done': 'Ready for review'
+}
 
 /**
  * useLiveInspection Hook
@@ -63,13 +74,19 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
     timestamp: null
   })
 
+  // Stage definitions (fetched from /stages)
+  const [stageDefinitions, setStageDefinitions] = useState(DEFAULT_STAGES)
+
+  // Computed total stages
+  const totalStages = stageDefinitions.length
+
   // Inspection stage (for loading UI)
   const [inspectionStage, setInspectionStage] = useState({
     status: 'idle',  // 'idle' | 'capturing' | 'processing' | 'ready'
     stageName: 'idle',
     message: 'Waiting for board...',
     stageIndex: 0,
-    totalStages: TOTAL_STAGES,
+    totalStages: DEFAULT_STAGES.length,
     icon: 'hourglass'
   })
 
@@ -88,6 +105,12 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
   // Service reference
   const serviceRef = useRef(null)
   const sessionStartedRef = useRef(false)
+  const stageDefinitionsRef = useRef(DEFAULT_STAGES) // Track latest stageDefinitions
+
+  // Keep ref in sync with state
+  useEffect(() => {
+    stageDefinitionsRef.current = stageDefinitions
+  }, [stageDefinitions])
 
   // ============================================
   // Check AI Backend Health
@@ -102,6 +125,27 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
     }
     
     return healthy
+  }, [])
+
+  // ============================================
+  // Fetch Stage Definitions
+  // ============================================
+
+  const fetchStages = useCallback(async () => {
+    try {
+      const result = await getStages()
+      if (result.success && result.data?.stages?.length > 0) {
+        console.log('[LiveInspection] Stages loaded:', result.data.stages)
+        setStageDefinitions(result.data.stages)
+        // Update totalStages in current inspectionStage
+        setInspectionStage(prev => ({
+          ...prev,
+          totalStages: result.data.stages.length
+        }))
+      }
+    } catch (error) {
+      console.warn('[LiveInspection] Failed to fetch stages, using defaults:', error)
+    }
   }, [])
 
   // ============================================
@@ -203,27 +247,39 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
     console.log('[LiveInspection] Running status:', data)
     
     const stageName = data.stage_name || 'idle'
-    const stageInfo = STAGE_MAP[stageName] || STAGE_MAP['idle']
+    const message = STAGE_MESSAGES[stageName] || 'Processing...'
     
-    // Determine status based on stage (dev.py: start, running, done)
+    // Use ref to get latest stageDefinitions (avoid closure issue)
+    const stages = stageDefinitionsRef.current
+    
+    // Find stage index from stageDefinitions
+    const stageIndex = stages.findIndex(s => s.name === stageName) + 1
+    const currentTotalStages = stages.length
+    
+    // Find stage icon from definitions
+    const stageDef = stages.find(s => s.name === stageName)
+    const icon = stageDef?.icon || 'cpu'
+    
+    // Determine status based on stage name
     let status = 'idle'
     if (stageName === 'done') {
       status = 'ready'
-    } else if (stageName === 'running') {
+    } else if (stageName === 'idle') {
+      status = 'idle'
+    } else {
+      // All other stages (start, position_1, position_2, flip, etc) are processing
       status = 'processing'
-    } else if (stageName === 'start') {
-      status = 'capturing'
     }
     
     setInspectionStage({
       status,
       stageName,
-      message: stageInfo.message,
-      stageIndex: stageInfo.index,
-      totalStages: TOTAL_STAGES,
-      icon: stageInfo.icon
+      message,
+      stageIndex: stageIndex > 0 ? stageIndex : 0,
+      totalStages: currentTotalStages,
+      icon
     })
-  }, [])
+  }, []) // No dependencies - uses ref
 
   const handleInspection = useCallback((data) => {
     console.log('[LiveInspection] Inspection result:', data)
@@ -262,14 +318,14 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
     }
     
     setCurrentInspection(inspection)
-    setInspectionStage({
+    setInspectionStage(prev => ({
       status: 'ready',
       stageName: 'done',
       message: 'Ready for review',
-      stageIndex: TOTAL_STAGES,
-      totalStages: TOTAL_STAGES,
+      stageIndex: prev.totalStages,
+      totalStages: prev.totalStages,
       icon: 'check'
-    })
+    }))
     
     onInspectionComplete?.(inspection)
   }, [onInspectionComplete])
@@ -280,14 +336,14 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
     
     // Reset for next inspection
     setCurrentInspection(null)
-    setInspectionStage({
+    setInspectionStage(prev => ({
       status: 'idle',
       stageName: 'idle',
       message: 'Waiting for board...',
       stageIndex: 0,
-      totalStages: TOTAL_STAGES,
+      totalStages: prev.totalStages,
       icon: 'hourglass'
-    })
+    }))
   }, [])
 
   const handleSessionUpdate = useCallback((data) => {
@@ -336,6 +392,9 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
       return
     }
 
+    // Fetch stage definitions
+    await fetchStages()
+
     // Initialize session if WO available
     if (workOrder && !sessionStartedRef.current) {
       const sessionOk = await initSession()
@@ -366,7 +425,8 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
   }, [
     lineId, 
     workOrder, 
-    checkAiBackend, 
+    checkAiBackend,
+    fetchStages,
     initSession,
     handleConnected, 
     handleError, 
@@ -520,14 +580,14 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
 
         // Reset for next inspection
         setCurrentInspection(null)
-        setInspectionStage({
+        setInspectionStage(prev => ({
           status: 'idle',
           stageName: 'idle',
           message: 'Waiting for board...',
           stageIndex: 0,
-          totalStages: TOTAL_STAGES,
+          totalStages: prev.totalStages,
           icon: 'hourglass'
-        })
+        }))
       }
 
       return result
@@ -579,6 +639,9 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
 
     // Hardware
     hardwareStatus,
+
+    // Stage definitions (from /stages endpoint)
+    stageDefinitions,
 
     // Inspection stage (for loading UI)
     inspectionStage,

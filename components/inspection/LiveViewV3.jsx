@@ -76,6 +76,7 @@ export function LiveViewV3({
     connectionError,
     aiBackendAvailable,
     hardwareStatus,
+    stageDefinitions,
     inspectionStage,
     currentInspection,
     sessionStatus,
@@ -867,6 +868,7 @@ export function LiveViewV3({
             /* Inspection Stage Progress */
             <InspectionStage
               stage={activeStage}
+              stageDefinitions={stageDefinitions}
               className="flex-1 bg-panel rounded-lg border border-surface-border"
             />
           )}
