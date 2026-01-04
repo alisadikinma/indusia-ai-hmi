@@ -80,7 +80,7 @@ Navigation items in `SideNav.jsx` are filtered by role. Each route should check 
 - `components/layout/` - SideNav, TopNav
 - `components/system/` - SystemHealthBar, SystemStatusChip, SystemStatusDetailsModal
 - `components/notifications/` - NotificationBell, NotificationDrawer, NotificationFilters
-- `components/inspection/` - FalseCallOverrideModal, OverrideReviewModal, HMIOperatorView, HMIActionPanel, HMITimer, DetectionOverlay, LiveView
+- `components/inspection/` - FalseCallOverrideModal, OverrideReviewModal, HMIOperatorView, HMIActionPanel, HMITimer, DetectionOverlay, LiveView, LiveViewV3, InspectionStage, InspectionResult, SidePanel, AIDecisionPanel
 - `components/sync/` - Sync progress and queue components
 - `components/event-log/` - Event log table and filters
 - `components/help/` - HelpOverlay system with context-aware shortcuts
@@ -360,6 +360,7 @@ Detailed implementation prompts are stored in `.claude/prompts/` directory:
 | 12 | ✅ Done | 2026-01-04 | SSE consumer & client |
 | 13 | ✅ Done | 2026-01-04 | Work Order flow hardening |
 | 14 | ✅ Done | 2026-01-04 | Zod validation schemas & DB migrations |
+| 15 | ✅ Done | 2026-01-04 | HMI LiveView rework (dual view) |
 
 ### Codebase Cleanup (2026-01-04)
 

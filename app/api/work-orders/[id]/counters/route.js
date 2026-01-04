@@ -80,4 +80,6 @@ async function handlePUT(request, { params }) {
 }
 
 // Export with auth middleware
-export const PUT = withAuth('work-orders:update')(handlePUT);
+// Note: Using 'inspection:create' because counter updates happen during inspection workflow
+// Operators need this permission to update counters when making GOOD/NG decisions
+export const PUT = withAuth('inspection:create')(handlePUT);

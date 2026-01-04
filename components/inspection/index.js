@@ -23,3 +23,9 @@ export { DefectViewPanel } from './DefectViewPanel'
 export { DetectionResultPanel } from './DetectionResultPanel'
 export { BoardOverview } from './BoardOverview'
 export { FalseCallModal } from './FalseCallModal'
+
+// LiveViewV3 Dual View components (Phase 15)
+export { InspectionStage } from './InspectionStage'
+export { InspectionResult } from './InspectionResult'
+export { SidePanel } from './SidePanel'
+export { AIDecisionPanel } from './AIDecisionPanel'

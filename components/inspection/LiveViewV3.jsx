@@ -1,71 +1,56 @@
 /**
- * LiveView V3 - Work Order Integrated AOI Inspection Interface
+ * LiveView V3 - SSE-Based AOI Inspection Interface
  * 
- * Changes from V2:
- * - Work Order integration (load active WO, update counters)
- * - 2-button flow: APPROVE / FALSE CALL (removed REJECT)
- * - Side tracking: TOP / BOTTOM for 2-sided PCB
- * - 15-second GOOD auto-proceed
- * - Updated YIELD calculation based on WO data
+ * Flow:
+ * 1. Load active Work Order
+ * 2. Connect to AI Backend SSE
+ * 3. Display loading during capture/processing (running_status events)
+ * 4. Display dual-side images when inspection arrives (inspection event)
+ * 5. Operator clicks GOOD or NG
+ * 6. POST /confirm → PLC action
+ * 7. Reset and wait for next board
  * 
- * Button Logic:
- * - APPROVE: AI detection is CORRECT
- *   - For GOOD detection: Confirm board is good → good_qty++
- *   - For NG detection: Confirm defect is real → ng_qty++
- * - FALSE CALL: AI detection is WRONG (requires reason)
- *   - For NG detection: Board is actually good → good_qty++, false_call_qty++
+ * Button Logic (GOOD/NG Workflow):
+ * - GOOD button: Pass the board
+ *   - If AI says PASS: Confirm AI is correct → good_qty++
+ *   - If AI says FAIL: Override AI (false call) → board passes, false_call_qty++
+ * - NG button: Reject the board
+ *   - If AI says FAIL: Confirm AI is correct → ng_qty++
+ *   - If AI says PASS: Override AI (missed defect) → board rejected, false_call_qty++
  * 
- * Side Logic:
- * - If side_count=2 and current_side=TOP → FLIP_BOTTOM → inspect BOTTOM
- * - If side_count=1 OR current_side=BOTTOM → NEXT_PCB → completed_qty++
+ * False Call Auto-Detection:
+ * - is_false_call = true when operator disagrees with AI
+ * - (AI PASS + Operator NG) OR (AI FAIL + Operator GOOD)
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+'use client'
+
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { useRouter } from 'next/navigation'
 import { 
   Wifi, WifiOff, Clock, User, Package, Pause, Play,
-  CheckCircle2, XCircle, Flag, AlertTriangle,
+  CheckCircle2, XCircle, AlertTriangle, AlertCircle,
   Volume2, VolumeX, Square, FlaskConical, Menu,
-  RotateCcw, ArrowRight, Layers
-} from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { useSidebar } from '@/context/SidebarContext';
-import { useActiveWorkOrder, useWorkOrderMutations } from '@/hooks/useWorkOrders';
+  Layers, RefreshCw, Settings, Camera, Cpu, RotateCcw,
+  Loader2, Activity, CircleDot
+} from 'lucide-react'
+import { cn } from '@/lib/utils'
+import { useSidebar } from '@/context/SidebarContext'
+import { useActiveWorkOrder, useWorkOrderMutations } from '@/hooks/useWorkOrders'
+import { useLiveInspection } from '@/hooks/useLiveInspection'
 
 // Components
-import { DefectViewPanel } from './DefectViewPanel';
-import { DetectionResultPanel } from './DetectionResultPanel';
-import { BoardOverview } from './BoardOverview';
-import { FalseCallModal } from './FalseCallModal';
+import { InspectionStage } from './InspectionStage'
+import { InspectionResult } from './InspectionResult'
+import { FalseCallModal } from './FalseCallModal'
 
 // Services
-import { 
-  signalGood, 
-  signalNG, 
-  signalFlipBottom, 
-  signalNextPCB,
-  determinePLCSignal 
-} from '@/lib/services/plcSignal';
-import { saveInspection } from '@/lib/services/inspectionService';
-import { getInspectionResult } from '@/lib/services/imageService';
-import { cropAndSaveAllDefects } from '@/lib/utils/cropImage';
+import { saveInspection } from '@/lib/services/inspectionService'
+import { getInspectionResult } from '@/lib/services/imageService'
 
 // Constants
-const GOOD_AUTO_PROCEED_SECONDS = 15;
-const DEV_MODE = true; // Set to false in production to hide SIM buttons
-
-// Fallback mock detection data
-const MOCK_DETECTIONS = [
-  {
-    class_name: 'solder_bridge',
-    confidence: 0.94,
-    severity: 'critical',
-    component_ref: 'U15',
-    pin_number: 'Pin 3-4',
-    ipc_reference: 'IPC-A-610 8.2.9',
-    bbox: { x: 280, y: 180, width: 80, height: 60 },
-  },
-];
+const NG_REVIEW_TIMEOUT_SECONDS = 15 // Timeout for NG review → auto NG
+const DEV_MODE = process.env.NODE_ENV === 'development'
 
 export function LiveViewV3({
   lineId,
@@ -76,808 +61,438 @@ export function LiveViewV3({
   onExit,
   isOperator = false,
 }) {
-  const router = useRouter();
-  const { showSidebar } = useSidebar();
+  const router = useRouter()
+  const { showSidebar } = useSidebar()
   
   // Work Order hooks
-  const { workOrder, hasActiveWO, loading: woLoading, refresh: refreshWO } = useActiveWorkOrder(lineId);
-  const { updateCounters } = useWorkOrderMutations();
+  const { workOrder, hasActiveWO, loading: woLoading, refresh: refreshWO } = useActiveWorkOrder(lineId)
+  const { updateCounters } = useWorkOrderMutations()
 
-  // Board sequence counter
-  const boardSequenceRef = useRef(1);
+  // Live Inspection hook (SSE connection)
+  const {
+    isConnected,
+    isReconnecting,
+    connectionError,
+    aiBackendAvailable,
+    hardwareStatus,
+    inspectionStage,
+    currentInspection,
+    sessionStatus,
+    processStatus,
+    isControlling,
+    isConfirming,
+    lastConfirmation,
+    confirmInspection,
+    connect,
+    disconnect,
+    reconnect,
+    checkAiBackend,
+    runProcess,
+    pauseProcess,
+    stopProcess
+  } = useLiveInspection(lineId, workOrder, {
+    autoConnect: true,
+    onError: (err) => console.error('[LiveView] SSE Error:', err)
+  })
 
-  // Connection state
-  const [connected, setConnected] = useState(true);
-  const [isPaused, setIsPaused] = useState(false);
-
-  // Current inspection data
-  const [boardId, setBoardId] = useState('---');
-  const [currentImage, setCurrentImage] = useState(null);
-  const [imageSize, setImageSize] = useState({ width: 2400, height: 1792 });
+  // UI State
+  const [isPaused, setIsPaused] = useState(false)
+  const [soundEnabled, setSoundEnabled] = useState(true)
+  const [showFalseCallModal, setShowFalseCallModal] = useState(false)
+  const [pendingDecision, setPendingDecision] = useState(null) // 'GOOD' or 'NG'
   
-  // Side tracking
-  const [currentSide, setCurrentSide] = useState('TOP'); // 'TOP' or 'BOTTOM'
+  // Timer states for NG review timeout
+  const [reviewCountdown, setReviewCountdown] = useState(NG_REVIEW_TIMEOUT_SECONDS)
+  const reviewTimerRef = useRef(null)
   
-  // Multi-defect state
-  const [defects, setDefects] = useState([]);
-  const [currentDefectIndex, setCurrentDefectIndex] = useState(0);
-  const currentDefect = defects[currentDefectIndex] || null;
-  
-  // AI Result: 'WAITING' | 'GOOD' | 'NG'
-  const [aiResult, setAiResult] = useState('WAITING');
+  // Track if current inspection has been processed (prevent double submit)
+  const processedInspectionRef = useRef(null)
 
-  // Timer states
-  const [waitTime, setWaitTime] = useState(0);
-  const [goodCountdown, setGoodCountdown] = useState(GOOD_AUTO_PROCEED_SECONDS);
-  const timerRef = useRef(null);
-  const goodTimerRef = useRef(null);
-  const inspectionStartTime = useRef(Date.now());
+  // Board sequence (for local tracking)
+  const boardSequenceRef = useRef(workOrder?.completedQty || 0)
 
-  // Modal states
-  const [showFalseCallModal, setShowFalseCallModal] = useState(false);
-  const [showFlipNotice, setShowFlipNotice] = useState(false);
-  
-  // Processing state
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [lastAction, setLastAction] = useState(null);
-
-  // Audio
-  const [soundEnabled, setSoundEnabled] = useState(true);
-
-  // Track inspection count for alternating pattern
-  const inspectionCountRef = useRef(0);
-  
-  // Track if initial load done
-  const initialLoadDone = useRef(false);
+  // Dev mode: Mock inspection state
+  const [devMockInspection, setDevMockInspection] = useState(null)
+  const [devMockStage, setDevMockStage] = useState({
+    status: 'idle',
+    stageName: 'idle',
+    message: 'Waiting for board...',
+    stageIndex: 0,
+    totalStages: 7,
+    icon: 'hourglass'
+  })
 
   // Real-time clock
-  const [currentTime, setCurrentTime] = useState('');
+  const [currentTime, setCurrentTime] = useState('')
   useEffect(() => {
     const updateTime = () => {
-      setCurrentTime(new Date().toLocaleTimeString('en-US', { hour12: false }));
-    };
-    updateTime();
-    const interval = setInterval(updateTime, 1000);
-    return () => clearInterval(interval);
-  }, []);
-
-  // NG Wait timer
-  useEffect(() => {
-    if (aiResult === 'NG' && !isPaused) {
-      inspectionStartTime.current = Date.now();
-      timerRef.current = setInterval(() => {
-        setWaitTime(prev => prev + 1);
-      }, 1000);
+      setCurrentTime(new Date().toLocaleTimeString('en-US', { hour12: false }))
     }
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
-  }, [aiResult, isPaused]);
-
-  // GOOD auto-proceed countdown
-  useEffect(() => {
-    if (aiResult === 'GOOD' && !isPaused && isOperator) {
-      setGoodCountdown(GOOD_AUTO_PROCEED_SECONDS);
-      
-      goodTimerRef.current = setInterval(() => {
-        setGoodCountdown(prev => {
-          if (prev <= 1) {
-            // Auto-proceed
-            handleApproveGood();
-            return GOOD_AUTO_PROCEED_SECONDS;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    }
-    return () => {
-      if (goodTimerRef.current) clearInterval(goodTimerRef.current);
-    };
-  }, [aiResult, isPaused, isOperator]);
-
-  // Format wait time
-  const formatWaitTime = (seconds) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-  };
-
-  // Get timer color based on wait time
-  const getTimerColor = () => {
-    if (waitTime < 30) return 'text-text-secondary';
-    if (waitTime < 60) return 'text-phosphor-amber';
-    return 'text-phosphor-red animate-pulse';
-  };
+    updateTime()
+    const interval = setInterval(updateTime, 1000)
+    return () => clearInterval(interval)
+  }, [])
 
   // Calculate yield from WO data
   const yieldPercent = workOrder?.completedQty > 0 
     ? ((workOrder.goodQty / workOrder.completedQty) * 100).toFixed(1) 
-    : '0.0';
+    : '0.0'
 
-  // Calculate cycle time
-  const getCycleTimeMs = () => {
-    return Date.now() - inspectionStartTime.current;
-  };
-
-  // Get current shift
-  const getCurrentShift = () => {
-    const hour = new Date().getHours();
-    if (hour >= 6 && hour < 14) return 'day';
-    if (hour >= 14 && hour < 22) return 'swing';
-    return 'night';
-  };
-
-  // ============ AUTO-LOAD INSPECTION ============
+  // Determine active inspection data (real SSE or dev mock)
+  const activeInspection = currentInspection || devMockInspection
   
+  // Determine active stage - use SSE inspectionStage when connected, devMockStage for simulation
+  const activeStage = isConnected ? inspectionStage : devMockStage
+
+  // Determine AI result for UI
+  const aiResult = activeInspection?.decision === 'PASS' ? 'GOOD' : 
+                   activeInspection?.decision === 'FAIL' ? 'NG' : 'WAITING'
+
+  // ============================================
+  // Action Handlers
+  // ============================================
+
   /**
-   * Load next inspection - simulates camera capture + AI detection
-   * In production: this would be triggered by camera/conveyor signal
-   * For demo: auto-loads random GOOD/NG result
+   * Submit decision to AI Backend
+   * (Defined first as other handlers depend on it)
    */
-  const loadNextInspection = useCallback(async (side = 'TOP') => {
-    console.log('[LiveView] loadNextInspection called:', { side, hasWO: !!workOrder, isProcessing, isPaused });
-    
-    if (!workOrder || isProcessing || isPaused) {
-      console.log('[LiveView] loadNextInspection skipped - conditions not met');
-      return;
-    }
-    
-    setIsProcessing(true);
-    
+  const submitDecision = useCallback(async (operatorDecision, falseCallData = null) => {
+    if (!activeInspection || !workOrder) return
+
     try {
-      const newBoardId = `${workOrder.woNumber}-${String(boardSequenceRef.current).padStart(4, '0')}`;
-      setBoardId(newBoardId);
-      
-      // Increment inspection counter
-      inspectionCountRef.current += 1;
-      const inspCount = inspectionCountRef.current;
-      
-      // Pattern: NG on every 2nd and 5th inspection in cycle of 6
-      const ngPattern = [2, 5];
-      const cyclePosition = ((inspCount - 1) % 6) + 1;
-      const isGood = !ngPattern.includes(cyclePosition);
-      
-      console.log('[LiveView] loadNextInspection pattern:', { inspCount, cyclePosition, isGood });
-      
-      // Get inspection result from imageService
-      const result = await getInspectionResult({ 
-        side, 
-        result: isGood ? 'GOOD' : 'NG' 
-      });
-      
-      if (result) {
-        setCurrentImage(result.imageUrl);
-        setImageSize({ width: result.imageWidth, height: result.imageHeight });
-        
-        if (result.isGood || result.defects.length === 0) {
-          setAiResult('GOOD');
-          setDefects([]);
-          setCurrentDefectIndex(0);
-        } else {
-          setAiResult('NG');
-          setDefects(result.defects);
-          setCurrentDefectIndex(0);
-          setWaitTime(0);
+      // 1. Send to AI Backend (triggers PLC)
+      if (currentInspection) {
+        const result = await confirmInspection(operatorDecision)
+        if (!result.success) {
+          console.error('[LiveView] Confirm failed:', result.error)
+          // Continue anyway for local updates
         }
-      } else {
-        // Fallback to GOOD
-        setCurrentImage('/images/pcb_golden_TOP.png');
-        setImageSize({ width: 1024, height: 768 });
-        setAiResult('GOOD');
-        setDefects([]);
       }
-      
-      inspectionStartTime.current = Date.now();
-      console.log('[LiveView] loadNextInspection complete:', { boardId: newBoardId, result: isGood ? 'GOOD' : 'NG' });
-      
-    } catch (error) {
-      console.error('[LiveView] Load inspection error:', error);
-    } finally {
-      setIsProcessing(false);
-    }
-  }, [workOrder, isProcessing, isPaused]);
 
-  // Auto-load first inspection when workOrder is ready
-  useEffect(() => {
-    console.log('[LiveView] Auto-load check:', { 
-      hasWO: !!workOrder, 
-      woLoading, 
-      initialLoadDone: initialLoadDone.current,
-      isPaused 
-    });
-    
-    // Skip if already loaded or conditions not met
-    if (!workOrder || woLoading || initialLoadDone.current || isPaused) {
-      return;
-    }
-    
-    console.log('[LiveView] Starting initial load NOW');
-    initialLoadDone.current = true;
-    
-    // Immediately invoke async function
-    (async () => {
-      console.log('[LiveView] Async function executing');
-      setIsProcessing(true);
-      
-      try {
-        const newBoardId = `${workOrder.woNumber}-${String(boardSequenceRef.current).padStart(4, '0')}`;
-        console.log('[LiveView] Generated boardId:', newBoardId);
-        setBoardId(newBoardId);
-        
-        // Increment inspection counter
-        inspectionCountRef.current += 1;
-        const inspCount = inspectionCountRef.current;
-        
-        // Pattern: NG on every 2nd and 5th inspection in cycle of 6
-        // Gives roughly 33% NG rate with predictable pattern for demo
-        const ngPattern = [2, 5]; // NG on 2nd and 5th
-        const cyclePosition = ((inspCount - 1) % 6) + 1; // 1-6
-        const isGood = !ngPattern.includes(cyclePosition);
-        
-        console.log('[LiveView] Inspection pattern:', { 
-          inspCount, 
-          cyclePosition, 
-          isGood,
-          pattern: 'NG on positions 2,5 of every 6'
-        });
-        
-        const result = await getInspectionResult({ side: currentSide, result: isGood ? 'GOOD' : 'NG' });
-        console.log('[LiveView] getInspectionResult returned:', result);
-        
-        if (result) {
-          console.log('[LiveView] Setting image:', result.imageUrl);
-          setCurrentImage(result.imageUrl);
-          setImageSize({ width: result.imageWidth, height: result.imageHeight });
-          
-          if (result.isGood || result.defects.length === 0) {
-            setAiResult('GOOD');
-            setDefects([]);
-          } else {
-            setAiResult('NG');
-            setDefects(result.defects);
-            setCurrentDefectIndex(0);
-            setWaitTime(0);
-          }
-        } else {
-          console.log('[LiveView] No result, using fallback');
-          setCurrentImage('/images/pcb_golden_TOP.png');
-          setImageSize({ width: 1024, height: 768 });
-          setAiResult('GOOD');
-          setDefects([]);
-        }
-        
-        inspectionStartTime.current = Date.now();
-        console.log('[LiveView] Initial load COMPLETE');
-        
-      } catch (error) {
-        console.error('[LiveView] Initial load error:', error);
-      } finally {
-        setIsProcessing(false);
-      }
-    })();
-    
-  }, [workOrder, woLoading, isPaused, currentSide]);
+      // 2. Calculate false call
+      const isFalseCall = (activeInspection.decision === 'PASS' && operatorDecision === 'NG') ||
+                         (activeInspection.decision === 'FAIL' && operatorDecision === 'GOOD')
 
-  // ============ SIDE LOGIC ============
-
-  const handleSideComplete = useCallback(async (result) => {
-    if (!workOrder) return;
-
-    const sideCount = workOrder.sideCount || 1;
-    const { signal, nextSide } = determinePLCSignal(sideCount, currentSide, result);
-
-    if (signal === 'FLIP_BOTTOM') {
-      // Need to inspect bottom side
-      await signalFlipBottom(lineId, boardId, user?.id);
-      setCurrentSide('BOTTOM');
-      setShowFlipNotice(true);
-      
-      // Reset for bottom inspection - pass 'BOTTOM' as next side
-      setTimeout(() => {
-        setShowFlipNotice(false);
-        resetForSameBoard('BOTTOM');
-      }, 2000);
-      
-    } else if (signal === 'NEXT_PCB') {
-      // Full cycle complete
-      await signalNextPCB(lineId, boardId, user?.id, currentSide, {
-        woNumber: workOrder.woNumber,
-        boardSequence: boardSequenceRef.current,
-      });
-      
-      // Increment completed qty
-      await updateCounters(workOrder.id, { completedQty: 1 });
-      
-      // Reset for next board
-      boardSequenceRef.current += 1;
-      setCurrentSide('TOP');
-      resetForNextBoard();
-      
-      // Refresh WO data
-      refreshWO();
-    }
-  }, [workOrder, currentSide, lineId, boardId, user, updateCounters, refreshWO]);
-
-  // Reset for same board (after flip) - then auto-load
-  const resetForSameBoard = useCallback((nextSide = 'BOTTOM') => {
-    setWaitTime(0);
-    setDefects([]);
-    setCurrentDefectIndex(0);
-    setCurrentImage(null);
-    setAiResult('WAITING');
-    setLastAction(null);
-    inspectionStartTime.current = Date.now();
-    
-    // Auto-load inspection for the flipped side after short delay
-    setTimeout(() => {
-      loadNextInspection(nextSide);
-    }, 300);
-  }, [loadNextInspection]);
-
-  // Reset for next board - then auto-load
-  const resetForNextBoard = useCallback(() => {
-    setWaitTime(0);
-    setDefects([]);
-    setCurrentDefectIndex(0);
-    setCurrentImage(null);
-    setAiResult('WAITING');
-    setLastAction(null);
-    setBoardId('---');
-    inspectionStartTime.current = Date.now();
-    
-    // Auto-load inspection for next board after short delay
-    setTimeout(() => {
-      loadNextInspection('TOP');
-    }, 300);
-  }, [loadNextInspection]);
-
-  // ============ DEFECT NAVIGATION ============
-
-  const handlePrevDefect = useCallback(() => {
-    if (currentDefectIndex > 0) {
-      setCurrentDefectIndex(prev => prev - 1);
-    }
-  }, [currentDefectIndex]);
-
-  const handleNextDefect = useCallback(() => {
-    if (currentDefectIndex < defects.length - 1) {
-      setDefects(prev => prev.map((d, i) => 
-        i === currentDefectIndex ? { ...d, reviewed: true } : d
-      ));
-      setCurrentDefectIndex(prev => prev + 1);
-    }
-  }, [currentDefectIndex, defects.length]);
-
-  const handleDefectSelect = useCallback((index) => {
-    if (index >= 0 && index < defects.length) {
-      setCurrentDefectIndex(index);
-    }
-  }, [defects.length]);
-
-  // ============ SIMULATE ============
-
-  // Simulate GOOD detection
-  const simulateGood = useCallback(async () => {
-    if (aiResult !== 'WAITING' || isProcessing || !workOrder) return;
-    
-    setIsProcessing(true);
-    
-    try {
-      const newBoardId = `${workOrder.woNumber}-${String(boardSequenceRef.current).padStart(4, '0')}`;
-      setBoardId(newBoardId);
-      
-      // Get good reference for current side
-      const result = await getInspectionResult({ side: currentSide, result: 'GOOD' });
-      
-      setAiResult('GOOD');
-      setDefects([]);
-      setCurrentImage(result?.imageUrl || '/images/pcb_golden_TOP.png');
-      setImageSize({ width: result?.imageWidth || 1024, height: result?.imageHeight || 768 });
-      inspectionStartTime.current = Date.now();
-      
-      console.log('[DEV] Simulated GOOD:', { boardId: newBoardId, side: currentSide });
-      
-    } finally {
-      setIsProcessing(false);
-    }
-  }, [aiResult, isProcessing, workOrder, currentSide]);
-
-  // Simulate NG detection
-  const simulateNG = useCallback(async () => {
-    if (aiResult !== 'WAITING' || isProcessing || !workOrder) return;
-    
-    setIsProcessing(true);
-    
-    try {
-      const newBoardId = `${workOrder.woNumber}-${String(boardSequenceRef.current).padStart(4, '0')}`;
-      setBoardId(newBoardId);
-      
-      // Get inspection result with defects for current side
-      const result = await getInspectionResult({ side: currentSide, result: 'NG' });
-      
-      if (result?.imageUrl && result?.defects?.length > 0) {
-        setCurrentImage(result.imageUrl);
-        setImageSize({ width: result.imageWidth, height: result.imageHeight });
-        setDefects(result.defects);
-        setCurrentDefectIndex(0);
-      } else {
-        // Fallback to mock
-        const randomDetection = MOCK_DETECTIONS[Math.floor(Math.random() * MOCK_DETECTIONS.length)];
-        setDefects([{ ...randomDetection, id: 1, reviewed: false }]);
-        setCurrentDefectIndex(0);
-        setCurrentImage('/images/pcb_golden_TOP.png');
-        setImageSize({ width: 1024, height: 768 });
-      }
-      
-      setAiResult('NG');
-      setWaitTime(0);
-      inspectionStartTime.current = Date.now();
-      
-      console.log('[DEV] Simulated NG:', { boardId: newBoardId, side: currentSide, defects: result?.defects?.length || 0 });
-      
-    } catch (error) {
-      console.error('[DEV] SimulateNG error:', error);
-    } finally {
-      setIsProcessing(false);
-    }
-  }, [aiResult, isProcessing, workOrder, currentSide]);
-
-  // ============ ACTION HANDLERS ============
-
-  // Build defects array for database save
-  const buildDefectsArray = useCallback((defectsList, disposition = null, falseCallData = null) => {
-    if (!defectsList || defectsList.length === 0) return [];
-    
-    return defectsList.map(det => ({
-      defectType: det.class_name,
-      severity: det.severity,
-      confidence: det.confidence,
-      bbox: det.bbox,
-      componentRef: det.component_ref,
-      pinNumber: det.pin_number,
-      operatorDisposition: disposition,
-      falseCallNotes: falseCallData?.notes,
-    }));
-  }, []);
-
-  // APPROVE for GOOD detection
-  const handleApproveGood = useCallback(async () => {
-    if (!isOperator || isProcessing || !workOrder) return;
-    if (aiResult !== 'GOOD') return;
-    
-    setIsProcessing(true);
-    setLastAction('APPROVE_GOOD');
-    
-    // Clear countdown timer
-    if (goodTimerRef.current) clearInterval(goodTimerRef.current);
-    
-    try {
-      // 1. Send GOOD signal to PLC
-      await signalGood(lineId, boardId, user?.id, currentSide);
-      
-      // 2. Save to database
+      // 3. Save to database
       const inspectionData = {
-        boardId,
+        boardId: `${workOrder.woNumber}-${String(boardSequenceRef.current + 1).padStart(4, '0')}`,
         workOrderId: workOrder.id,
         lineId,
         sectionId,
         customerId,
-        side: currentSide,
-        boardSequence: boardSequenceRef.current,
-        aiResult: 'GOOD',
-        aiConfidence: 1.0,
-        operatorDecision: 'APPROVE',
+        boardSequence: boardSequenceRef.current + 1,
+        aiResult: activeInspection.decision === 'PASS' ? 'GOOD' : 'NG',
+        aiConfidence: calculateAvgConfidence(activeInspection),
+        operatorDecision,
         operatorId: user?.id,
-        plcSignalSent: 'GOOD',
-        cycleTimeMs: getCycleTimeMs(),
+        isFalseCall,
+        falseCallReasonCode: falseCallData?.reason,
+        plcSignalSent: operatorDecision,
         shift: getCurrentShift(),
-        defects: [],
-        defectCount: 0,
-      };
+        defectCount: getTotalDefects(activeInspection),
+        imageTopUrl: activeInspection.results?.top?.image_url,
+        imageBottomUrl: activeInspection.results?.bottom?.image_url,
+      }
+
+      await saveInspection(inspectionData)
+
+      // 4. Update WO counters
+      const counterUpdate = operatorDecision === 'GOOD' 
+        ? { goodQty: 1, completedQty: 1 }
+        : { ngQty: 1, completedQty: 1 }
       
-      await saveInspection(inspectionData);
+      if (isFalseCall) {
+        counterUpdate.falseCallQty = 1
+      }
       
-      // 3. Update WO counters (good_qty++)
-      await updateCounters(workOrder.id, { goodQty: 1 });
+      await updateCounters(workOrder.id, counterUpdate)
       
-      console.log('GOOD approved:', { boardId, side: currentSide });
-      
-      // 4. Handle side logic
-      await handleSideComplete('GOOD');
-      
+      // 5. Update local sequence
+      boardSequenceRef.current += 1
+
+      // 6. Refresh WO data
+      refreshWO()
+
+      // 7. Reset dev mock if used
+      if (devMockInspection) {
+        setDevMockInspection(null)
+        setDevMockStage({
+          status: 'idle',
+          stageName: 'idle',
+          message: 'Waiting for board...',
+          stageIndex: 0,
+          totalStages: 7,
+          icon: 'hourglass'
+        })
+      }
+
+      console.log('[LiveView] Decision submitted:', { operatorDecision, isFalseCall })
+
     } catch (error) {
-      console.error('Approve GOOD error:', error);
-    } finally {
-      setIsProcessing(false);
+      console.error('[LiveView] Submit decision error:', error)
     }
-  }, [isOperator, isProcessing, workOrder, aiResult, lineId, boardId, currentSide, 
-      sectionId, customerId, user, updateCounters, handleSideComplete]);
+  }, [activeInspection, workOrder, currentInspection, confirmInspection, 
+      lineId, sectionId, customerId, user, updateCounters, refreshWO, devMockInspection])
 
-  // APPROVE for NG detection (confirm defect is real)
-  const handleApproveNG = useCallback(async () => {
-    if (!isOperator || isProcessing || !workOrder) return;
-    if (aiResult !== 'NG') return;
+  /**
+   * Handle GOOD button click
+   * - If AI says PASS: Confirm (agree with AI)
+   * - If AI says FAIL: False call (disagree with AI)
+   */
+  const handleGoodClick = useCallback(async () => {
+    if (!isOperator || !activeInspection || isConfirming) return
     
-    setIsProcessing(true);
-    setLastAction('APPROVE_NG');
+    // Clear review timer
+    if (reviewTimerRef.current) clearInterval(reviewTimerRef.current)
     
-    try {
-      // 1. Send NG signal to PLC
-      await signalNG(lineId, boardId, user?.id, currentSide);
-      
-      // 2. Save to database
-      const avgConfidence = defects.length > 0 
-        ? defects.reduce((sum, d) => sum + d.confidence, 0) / defects.length 
-        : 0;
-      
-      const inspectionData = {
-        boardId,
-        workOrderId: workOrder.id,
-        lineId,
-        sectionId,
-        customerId,
-        side: currentSide,
-        boardSequence: boardSequenceRef.current,
-        aiResult: 'NG',
-        aiConfidence: avgConfidence,
-        operatorDecision: 'APPROVE',
-        operatorId: user?.id,
-        plcSignalSent: 'NG',
-        cycleTimeMs: getCycleTimeMs(),
-        shift: getCurrentShift(),
-        defects: buildDefectsArray(defects, 'TRUE_DEFECT'),
-        defectCount: defects.length,
-        imageFullPath: currentImage,
-      };
-      
-      await saveInspection(inspectionData);
-      
-      // 3. Update WO counters (ng_qty++)
-      await updateCounters(workOrder.id, { ngQty: 1 });
-      
-      console.log('NG approved (confirmed defect):', { boardId, side: currentSide, defects: defects.length });
-      
-      // 4. Handle side logic (NG always goes to NEXT_PCB, board rejected)
-      await signalNextPCB(lineId, boardId, user?.id, currentSide, {
-        woNumber: workOrder.woNumber,
-        boardSequence: boardSequenceRef.current,
-      });
-      
-      // Increment completed qty
-      await updateCounters(workOrder.id, { completedQty: 1 });
-      
-      // Reset for next board
-      boardSequenceRef.current += 1;
-      setCurrentSide('TOP');
-      resetForNextBoard();
-      refreshWO();
-      
-    } catch (error) {
-      console.error('Approve NG error:', error);
-    } finally {
-      setIsProcessing(false);
+    // Mark as processed
+    const inspectionId = activeInspection.inspection_id || activeInspection.inspectionId
+    processedInspectionRef.current = inspectionId
+    
+    const isFalseCall = activeInspection.decision === 'FAIL'
+    
+    if (isFalseCall) {
+      // AI said FAIL but operator says GOOD → show false call modal
+      setPendingDecision('GOOD')
+      setShowFalseCallModal(true)
+    } else {
+      // AI said PASS, operator confirms → direct confirm
+      await submitDecision('GOOD')
     }
-  }, [isOperator, isProcessing, workOrder, aiResult, lineId, boardId, currentSide,
-      sectionId, customerId, user, defects, currentImage, buildDefectsArray, 
-      updateCounters, resetForNextBoard, refreshWO]);
+  }, [isOperator, activeInspection, isConfirming, submitDecision])
 
-  // FALSE CALL - AI wrong, show modal (works for both NG and GOOD)
-  const handleFalseCall = useCallback(() => {
-    if (!isOperator || aiResult === 'WAITING') return;
-    // Stop auto-proceed countdown if GOOD
-    if (goodTimerRef.current) clearInterval(goodTimerRef.current);
-    setShowFalseCallModal(true);
-  }, [isOperator, aiResult]);
+  /**
+   * Handle NG button click
+   * - If AI says FAIL: Confirm (agree with AI)
+   * - If AI says PASS: Missed defect (disagree with AI)
+   */
+  const handleNGClick = useCallback(async () => {
+    if (!isOperator || !activeInspection || isConfirming) return
+    
+    // Clear review timer
+    if (reviewTimerRef.current) clearInterval(reviewTimerRef.current)
+    
+    // Mark as processed
+    const inspectionId = activeInspection.inspection_id || activeInspection.inspectionId
+    processedInspectionRef.current = inspectionId
+    
+    const isMissedDefect = activeInspection.decision === 'PASS'
+    
+    if (isMissedDefect) {
+      // AI said PASS but operator says NG → show false call modal
+      setPendingDecision('NG')
+      setShowFalseCallModal(true)
+    } else {
+      // AI said FAIL, operator confirms → direct confirm
+      await submitDecision('NG')
+    }
+  }, [isOperator, activeInspection, isConfirming, submitDecision])
 
-  // FALSE CALL submit - handles both false positive (NG→GOOD) and missed defect (GOOD→NG)
+  /**
+   * Handle false call modal submit
+   */
   const handleFalseCallSubmit = useCallback(async (formData) => {
-    if (!workOrder) return;
-    
-    setIsProcessing(true);
-    const isMissedDefect = formData.falseCallType === 'MISSED_DEFECT';
-    setLastAction(isMissedDefect ? 'MISSED_DEFECT' : 'FALSE_CALL');
-    
-    try {
-      const avgConfidence = defects.length > 0 
-        ? defects.reduce((sum, d) => sum + d.confidence, 0) / defects.length 
-        : 0;
-      
-      if (isMissedDefect) {
-        // AI said GOOD but operator found defect → REJECT board
-        const inspectionData = {
-          boardId,
-          workOrderId: workOrder.id,
-          lineId,
-          sectionId,
-          customerId,
-          side: currentSide,
-          boardSequence: boardSequenceRef.current,
-          aiResult: 'GOOD',
-          aiConfidence: 1.0,
-          operatorDecision: 'MISSED_DEFECT',
-          operatorId: user?.id,
-          plcSignalSent: 'NG', // Board is actually NG
-          cycleTimeMs: getCycleTimeMs(),
-          shift: getCurrentShift(),
-          defects: [{
-            defectType: formData.reason.toLowerCase().replace('_missed', ''),
-            severity: 'critical',
-            confidence: 0,
-            operatorDisposition: 'MISSED_DEFECT',
-            falseCallNotes: formData.notes,
-          }],
-          defectCount: 1,
-          falseCallReasonCode: formData.reason,
-          imageFullPath: currentImage,
-        };
-        
-        const saveResult = await saveInspection(inspectionData);
-        
-        // Add to sync queue for training (missed defect)
-        try {
-          await fetch('/api/sync-queue', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              inspectionId: saveResult.data?.id,
-              boardId,
-              lineName: lineName || `Line ${lineId}`,
-              defectType: formData.reason,
-              defectCount: 1,
-              localImagePath: currentImage,
-              recordType: 'missed_defect',
-            }),
-          });
-        } catch (syncError) {
-          console.error('Failed to add to sync queue:', syncError);
-        }
-        
-        // Update WO counters (ng_qty++, false_call_qty++)
-        await updateCounters(workOrder.id, { ngQty: 1, falseCallQty: 1 });
-        
-        // Send NG signal (board is actually NG)
-        await signalNG(lineId, boardId, user?.id, currentSide);
-        
-        console.log('Missed defect reported:', { boardId, side: currentSide, reason: formData.reason });
-        
-        setShowFalseCallModal(false);
-        
-        // NG always goes to NEXT_PCB
-        await signalNextPCB(lineId, boardId, user?.id, currentSide, {
-          woNumber: workOrder.woNumber,
-          boardSequence: boardSequenceRef.current,
-        });
-        
-        await updateCounters(workOrder.id, { completedQty: 1 });
-        boardSequenceRef.current += 1;
-        setCurrentSide('TOP');
-        resetForNextBoard();
-        refreshWO();
-        
-      } else {
-        // AI said NG but board is actually GOOD → PASS board
-        const inspectionData = {
-          boardId,
-          workOrderId: workOrder.id,
-          lineId,
-          sectionId,
-          customerId,
-          side: currentSide,
-          boardSequence: boardSequenceRef.current,
-          aiResult: 'NG',
-          aiConfidence: avgConfidence,
-          operatorDecision: 'FALSE_CALL',
-          operatorId: user?.id,
-          plcSignalSent: 'GOOD', // Board is actually good
-          cycleTimeMs: getCycleTimeMs(),
-          shift: getCurrentShift(),
-          defects: buildDefectsArray(defects, 'FALSE_CALL', formData),
-          defectCount: defects.length,
-          falseCallReasonCode: formData.reason,
-          imageFullPath: currentImage,
-        };
-        
-        const saveResult = await saveInspection(inspectionData);
-        
-        // Add to sync queue for training (false positive)
-        try {
-          await fetch('/api/sync-queue', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              inspectionId: saveResult.data?.id,
-              boardId,
-              lineName: lineName || `Line ${lineId}`,
-              defectType: defects[0]?.class_name || 'unknown',
-              defectCount: defects.length,
-              localImagePath: currentImage,
-              recordType: 'false_call',
-            }),
-          });
-        } catch (syncError) {
-          console.error('Failed to add to sync queue:', syncError);
-        }
-        
-        // Update WO counters (good_qty++, false_call_qty++)
-        await updateCounters(workOrder.id, { goodQty: 1, falseCallQty: 1 });
-        
-        // Send GOOD signal (board is actually good)
-        await signalGood(lineId, boardId, user?.id, currentSide);
-        
-        console.log('False call reported:', { boardId, side: currentSide, reason: formData.reason });
-        
-        setShowFalseCallModal(false);
-        
-        // Handle side logic (treat as GOOD)
-        await handleSideComplete('GOOD');
-      }
-      
-    } catch (error) {
-      console.error('False call error:', error);
-    } finally {
-      setIsProcessing(false);
-    }
-  }, [workOrder, lineId, lineName, boardId, currentSide, sectionId, customerId, 
-      user, defects, currentImage, buildDefectsArray, updateCounters, handleSideComplete,
-      resetForNextBoard, refreshWO]);
+    setShowFalseCallModal(false)
+    await submitDecision(pendingDecision, formData)
+    setPendingDecision(null)
+  }, [pendingDecision, submitDecision])
 
-  // Keyboard shortcuts
+  // ============================================
+  // Auto-proceed logic:
+  // - AI GOOD (PASS): auto proceed immediately
+  // - AI NG (FAIL): 15s timeout for review → auto NG
+  // ============================================
+  
+  useEffect(() => {
+    // Clear timer when no inspection or paused
+    if (!activeInspection || !isOperator || isPaused) {
+      if (reviewTimerRef.current) clearInterval(reviewTimerRef.current)
+      return
+    }
+
+    // Check if already processed this inspection
+    const inspectionId = activeInspection.inspection_id || activeInspection.inspectionId
+    if (processedInspectionRef.current === inspectionId) {
+      return // Already processed
+    }
+
+    if (aiResult === 'GOOD') {
+      // AI says PASS → auto proceed immediately (conveyor continues)
+      processedInspectionRef.current = inspectionId
+      submitDecision('GOOD')
+    } else if (aiResult === 'NG') {
+      // AI says FAIL → start review countdown
+      setReviewCountdown(NG_REVIEW_TIMEOUT_SECONDS)
+      
+      reviewTimerRef.current = setInterval(() => {
+        setReviewCountdown(prev => {
+          if (prev <= 1) {
+            // Timeout → auto confirm NG
+            processedInspectionRef.current = inspectionId
+            submitDecision('NG') // Direct call instead of handleNGClick to avoid modal
+            return NG_REVIEW_TIMEOUT_SECONDS
+          }
+          return prev - 1
+        })
+      }, 1000)
+    }
+
+    return () => {
+      if (reviewTimerRef.current) clearInterval(reviewTimerRef.current)
+    }
+  }, [aiResult, isPaused, isOperator, activeInspection, submitDecision])
+
+  // ============================================
+  // Dev Mode: Simulate Inspection
+  // ============================================
+
+  const simulateInspection = useCallback(async (result) => {
+    if (!workOrder || activeInspection) return
+
+    // Simulate stages
+    const stages = ['camera_capture_top', 'ai_processing_top', 'pcb_flipping', 
+                   'camera_capture_bottom', 'ai_processing_bottom', 'inspection_complete']
+    
+    for (const stage of stages) {
+      setDevMockStage({
+        status: stage === 'inspection_complete' ? 'ready' : 'capturing',
+        stageName: stage,
+        message: getStageMessage(stage),
+        stageIndex: stages.indexOf(stage) + 2,
+        totalStages: 7,
+        icon: getStageIcon(stage)
+      })
+      await new Promise(r => setTimeout(r, 300)) // Fast simulation
+    }
+
+    // Get mock images
+    const topResult = await getInspectionResult({ side: 'TOP', result })
+    const bottomResult = await getInspectionResult({ side: 'BOTTOM', result })
+
+    // Create mock inspection
+    const mockInspection = {
+      inspectionId: `mock-${Date.now()}`,
+      modelName: 'YOLOv8-AOI-Mock',
+      results: {
+        top: topResult ? {
+          image_url: topResult.imageUrl,
+          objects: (topResult.defects || []).map(d => ({
+            name: d.class_name,
+            box: d.bbox ? [d.bbox.x, d.bbox.y, d.bbox.x + d.bbox.width, d.bbox.y + d.bbox.height] : [0, 0, 100, 100],
+            score: d.confidence,
+            side: 'TOP'
+          }))
+        } : null,
+        bottom: bottomResult ? {
+          image_url: bottomResult.imageUrl,
+          objects: (bottomResult.defects || []).map(d => ({
+            name: d.class_name,
+            box: d.bbox ? [d.bbox.x, d.bbox.y, d.bbox.x + d.bbox.width, d.bbox.y + d.bbox.height] : [0, 0, 100, 100],
+            score: d.confidence,
+            side: 'BOTTOM'
+          }))
+        } : null
+      },
+      decision: result === 'GOOD' ? 'PASS' : 'FAIL',
+      timestamp: new Date().toISOString()
+    }
+
+    setDevMockInspection(mockInspection)
+  }, [workOrder, activeInspection])
+
+  // ============================================
+  // Keyboard Shortcuts
+  // ============================================
+
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if (showFalseCallModal) return;
-      if (!workOrder) return;
-      
-      // Simulate shortcuts (dev mode)
-      if (aiResult === 'WAITING' && !isProcessing) {
-        if (e.key.toLowerCase() === 'g') {
-          simulateGood();
-          return;
+      if (showFalseCallModal) return
+      if (!workOrder) return
+
+      const key = e.key.toLowerCase()
+
+      // Dev mode simulation (only when no active inspection)
+      if (DEV_MODE && !activeInspection && !aiBackendAvailable) {
+        if (key === 's') {
+          simulateInspection('GOOD')
+          return
         }
-        if (e.key.toLowerCase() === 'n') {
-          simulateNG();
-          return;
+        if (key === 'd') {
+          simulateInspection('NG')
+          return
         }
       }
-      
-      if (!isOperator || isProcessing) return;
-      
-      switch (e.key.toLowerCase()) {
-        case 'a':
-          if (aiResult === 'GOOD') {
-            handleApproveGood();
-          } else if (aiResult === 'NG') {
-            handleApproveNG();
-          }
-          break;
-        case 'f':
-          if (aiResult === 'NG' || aiResult === 'GOOD') {
-            handleFalseCall();
-          }
-          break;
+
+      if (!isOperator || isConfirming || !activeInspection) return
+
+      switch (key) {
+        case 'g':
+          handleGoodClick()
+          break
+        case 'n':
+          handleNGClick()
+          break
         case ' ':
-          e.preventDefault();
-          setIsPaused(prev => !prev);
-          break;
-        case 'arrowleft':
-        case 'j':
-          e.preventDefault();
-          handlePrevDefect();
-          break;
-        case 'arrowright':
-        case 'k':
-          e.preventDefault();
-          handleNextDefect();
-          break;
+          e.preventDefault()
+          setIsPaused(prev => !prev)
+          break
       }
-    };
+    }
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOperator, isProcessing, showFalseCallModal, aiResult, workOrder,
-      handleApproveGood, handleApproveNG, handleFalseCall, simulateGood, simulateNG,
-      handlePrevDefect, handleNextDefect]);
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [isOperator, isConfirming, showFalseCallModal, activeInspection, workOrder,
+      handleGoodClick, handleNGClick, aiBackendAvailable, simulateInspection])
 
-  // ============ NO ACTIVE WO STATE ============
+  // ============================================
+  // Helper Functions
+  // ============================================
+
+  const calculateAvgConfidence = (inspection) => {
+    const allObjects = [
+      ...(inspection?.results?.top?.objects || []),
+      ...(inspection?.results?.bottom?.objects || [])
+    ]
+    if (allObjects.length === 0) return 1.0
+    return allObjects.reduce((sum, obj) => sum + obj.score, 0) / allObjects.length
+  }
+
+  const getTotalDefects = (inspection) => {
+    const topCount = inspection?.results?.top?.objects?.length || 0
+    const bottomCount = inspection?.results?.bottom?.objects?.length || 0
+    return topCount + bottomCount
+  }
+
+  const getCurrentShift = () => {
+    const hour = new Date().getHours()
+    if (hour >= 6 && hour < 14) return 'day'
+    if (hour >= 14 && hour < 22) return 'swing'
+    return 'night'
+  }
+
+  const getStageMessage = (stage) => {
+    const messages = {
+      'camera_capture_top': 'Capturing TOP side...',
+      'ai_processing_top': 'Processing TOP side...',
+      'pcb_flipping': 'Flipping PCB...',
+      'camera_capture_bottom': 'Capturing BOTTOM side...',
+      'ai_processing_bottom': 'Processing BOTTOM side...',
+      'inspection_complete': 'Ready for review'
+    }
+    return messages[stage] || 'Processing...'
+  }
+
+  const getStageIcon = (stage) => {
+    if (stage.includes('capture')) return 'camera'
+    if (stage.includes('processing')) return 'cpu'
+    if (stage === 'pcb_flipping') return 'rotate'
+    if (stage === 'inspection_complete') return 'check'
+    return 'loader'
+  }
+
+  // ============================================
+  // No Active WO State
+  // ============================================
 
   if (!woLoading && !hasActiveWO) {
     return (
@@ -907,11 +522,15 @@ export function LiveViewV3({
           </div>
         </div>
       </div>
-    );
+    )
   }
 
-  // Determine if actions should be disabled
-  const actionsDisabled = !isOperator || isProcessing || isPaused || !connected || aiResult === 'WAITING';
+  // Actions disabled?
+  const actionsDisabled = !isOperator || isConfirming || isPaused || !activeInspection
+
+  // ============================================
+  // Render
+  // ============================================
 
   return (
     <div className="h-screen flex flex-col bg-void overflow-hidden">
@@ -943,25 +562,32 @@ export function LiveViewV3({
           {/* Connection Status */}
           <div className={cn(
             "flex items-center gap-2 px-3 py-1.5 border",
-            connected 
+            isConnected 
               ? "border-phosphor-green/50 bg-phosphor-green/10" 
-              : "border-phosphor-red/50 bg-phosphor-red/10"
+              : aiBackendAvailable === false
+                ? "border-phosphor-amber/50 bg-phosphor-amber/10"
+                : "border-phosphor-red/50 bg-phosphor-red/10"
           )}>
-            {connected ? (
+            {isConnected ? (
               <Wifi className="w-4 h-4 text-phosphor-green" />
+            ) : isReconnecting ? (
+              <RefreshCw className="w-4 h-4 text-phosphor-amber animate-spin" />
             ) : (
               <WifiOff className="w-4 h-4 text-phosphor-red" />
             )}
             <span className={cn(
               "font-mono text-xs font-bold",
-              connected ? "text-phosphor-green" : "text-phosphor-red"
+              isConnected ? "text-phosphor-green" : 
+              isReconnecting ? "text-phosphor-amber" : "text-phosphor-red"
             )}>
-              {connected ? 'CONNECTED' : 'DISCONNECTED'}
+              {isConnected ? 'CONNECTED' : isReconnecting ? 'RECONNECTING' : 
+               aiBackendAvailable === false ? 'DEV MODE' : 'DISCONNECTED'}
             </span>
           </div>
+
         </div>
 
-        {/* Center: WO Info + Side + Status */}
+        {/* Center: WO Info + Status */}
         <div className="flex items-center gap-4">
           {/* Work Order */}
           {workOrder && (
@@ -974,32 +600,16 @@ export function LiveViewV3({
             </div>
           )}
 
-          {/* Current Side */}
-          {workOrder?.sideCount === 2 && (
-            <div className={cn(
-              "flex items-center gap-2 px-3 py-2 border",
-              currentSide === 'TOP' 
-                ? "border-phosphor-amber/50 bg-phosphor-amber/10"
-                : "border-phosphor-cyan/50 bg-phosphor-cyan/10"
-            )}>
-              <Layers className={cn(
-                "w-4 h-4",
-                currentSide === 'TOP' ? "text-phosphor-amber" : "text-phosphor-cyan"
-              )} />
-              <span className={cn(
-                "font-mono text-sm font-bold",
-                currentSide === 'TOP' ? "text-phosphor-amber" : "text-phosphor-cyan"
-              )}>
-                {currentSide}
-              </span>
-            </div>
-          )}
-
           {/* Board ID */}
           <div className="flex items-center gap-2 px-4 py-2 bg-terminal border border-surface-border">
             <div>
               <p className="font-mono text-xxs text-text-tertiary">BOARD</p>
-              <p className="font-mono text-sm font-bold text-text-primary">{boardId}</p>
+              <p className="font-mono text-sm font-bold text-text-primary">
+                {activeInspection 
+                  ? `${workOrder?.woNumber}-${String(boardSequenceRef.current + 1).padStart(4, '0')}`
+                  : '---'
+                }
+              </p>
             </div>
           </div>
 
@@ -1023,22 +633,23 @@ export function LiveViewV3({
             </span>
           </div>
 
-          {/* Timer */}
-          {aiResult === 'NG' && (
-            <div className="flex items-center gap-2 px-3 py-2 bg-terminal border border-surface-border">
-              <Clock className={cn("w-4 h-4", getTimerColor())} />
-              <span className={cn("font-mono text-lg font-bold", getTimerColor())}>
-                {formatWaitTime(waitTime)}
-              </span>
-            </div>
-          )}
-
-          {/* GOOD Countdown */}
-          {aiResult === 'GOOD' && (
-            <div className="flex items-center gap-2 px-3 py-2 bg-phosphor-green/10 border border-phosphor-green/50">
-              <span className="font-mono text-sm text-phosphor-green">Auto in</span>
-              <span className="font-mono text-xl font-bold text-phosphor-green">
-                {goodCountdown}s
+          {/* NG Review Countdown */}
+          {aiResult === 'NG' && activeInspection && (
+            <div className={cn(
+              "flex items-center gap-2 px-3 py-2 border",
+              reviewCountdown <= 5 
+                ? "bg-phosphor-red/20 border-phosphor-red animate-pulse" 
+                : "bg-phosphor-amber/10 border-phosphor-amber/50"
+            )}>
+              <span className={cn(
+                "font-mono text-sm",
+                reviewCountdown <= 5 ? "text-phosphor-red" : "text-phosphor-amber"
+              )}>Auto NG in</span>
+              <span className={cn(
+                "font-mono text-2xl font-bold",
+                reviewCountdown <= 5 ? "text-phosphor-red" : "text-phosphor-amber"
+              )}>
+                {reviewCountdown}s
               </span>
             </div>
           )}
@@ -1056,8 +667,8 @@ export function LiveViewV3({
             onClick={() => setSoundEnabled(!soundEnabled)}
             className={cn(
               "p-2 border transition-colors",
-              soundEnabled 
-                ? "border-phosphor-amber text-phosphor-amber" 
+              soundEnabled
+                ? "border-phosphor-amber text-phosphor-amber"
                 : "border-surface-border text-text-tertiary"
             )}
           >
@@ -1073,87 +684,235 @@ export function LiveViewV3({
         </div>
       </header>
 
-      {/* ============ MAIN CONTENT ============ */}
-      <main className="flex-1 flex overflow-hidden">
-        {/* Left Panel: Defect View - 70% */}
-        <div className="w-[70%] flex flex-col p-3 gap-2">
-          <DefectViewPanel
-            imageSrc={currentImage}
-            detection={currentDefect}
-            imageWidth={imageSize.width}
-            imageHeight={imageSize.height}
-            title={`DEFECT VIEW - ${currentSide}`}
-            className="flex-1"
-          />
-          
-          {/* Defect Navigation - Always show when NG */}
-          {aiResult === 'NG' && (
-            <div className="flex items-center justify-center gap-4 py-2 bg-panel border border-surface-border">
-              <button
-                onClick={handlePrevDefect}
-                disabled={currentDefectIndex === 0 || defects.length <= 1}
-                className={cn(
-                  "px-4 py-2 border font-mono text-sm transition-colors",
-                  (currentDefectIndex === 0 || defects.length <= 1)
-                    ? "border-surface-border text-text-tertiary cursor-not-allowed opacity-50"
-                    : "border-phosphor-amber text-phosphor-amber hover:bg-phosphor-amber/10"
-                )}
-              >
-                ◄ PREV (J)
-              </button>
-              
-              <div className="flex items-center gap-2 px-4 py-1 bg-terminal border border-surface-border">
-                <span className="font-mono text-sm text-text-tertiary">DEFECT</span>
-                <span className="font-mono text-lg font-bold text-phosphor-amber">
-                  {currentDefectIndex + 1}
-                </span>
-                <span className="font-mono text-sm text-text-tertiary">of</span>
-                <span className="font-mono text-lg font-bold text-phosphor-amber">
-                  {defects.length || 1}
-                </span>
-              </div>
-              
-              <button
-                onClick={handleNextDefect}
-                disabled={currentDefectIndex >= defects.length - 1 || defects.length <= 1}
-                className={cn(
-                  "px-4 py-2 border font-mono text-sm transition-colors",
-                  (currentDefectIndex >= defects.length - 1 || defects.length <= 1)
-                    ? "border-surface-border text-text-tertiary cursor-not-allowed opacity-50"
-                    : "border-phosphor-amber text-phosphor-amber hover:bg-phosphor-amber/10"
-                )}
-              >
-                NEXT (K) ►
-              </button>
-            </div>
-          )}
+      {/* ============ HARDWARE & MACHINE STATUS BAR ============ */}
+      <div className="h-14 flex-shrink-0 bg-terminal border-b border-surface-border flex items-center justify-between px-4">
+        {/* Left: Machine Control Buttons */}
+        <div className="flex items-center gap-3">
+          {/* RUN Button */}
+          <button
+            onClick={runProcess}
+            disabled={!isConnected || isControlling || processStatus === 'RUNNING'}
+            className={cn(
+              "h-10 px-4 flex items-center gap-2 border-2 transition-all",
+              "font-display text-xs font-bold tracking-wider",
+              processStatus === 'RUNNING'
+                ? "bg-phosphor-green border-phosphor-green text-void"
+                : isConnected && processStatus !== 'RUNNING'
+                  ? "border-phosphor-green text-phosphor-green hover:bg-phosphor-green hover:text-void"
+                  : "border-surface-border text-text-tertiary cursor-not-allowed"
+            )}
+          >
+            <Play className="w-4 h-4" />
+            <span>RUN</span>
+          </button>
+
+          {/* PAUSE Button */}
+          <button
+            onClick={pauseProcess}
+            disabled={!isConnected || isControlling || processStatus !== 'RUNNING'}
+            className={cn(
+              "h-10 px-4 flex items-center gap-2 border-2 transition-all",
+              "font-display text-xs font-bold tracking-wider",
+              processStatus === 'PAUSED'
+                ? "bg-phosphor-amber border-phosphor-amber text-void"
+                : isConnected && processStatus === 'RUNNING'
+                  ? "border-phosphor-amber text-phosphor-amber hover:bg-phosphor-amber hover:text-void"
+                  : "border-surface-border text-text-tertiary cursor-not-allowed"
+            )}
+          >
+            <Pause className="w-4 h-4" />
+            <span>PAUSE</span>
+          </button>
+
+          {/* STOP Button */}
+          <button
+            onClick={stopProcess}
+            disabled={!isConnected || isControlling || processStatus === 'IDLE' || processStatus === 'STOPPED'}
+            className={cn(
+              "h-10 px-4 flex items-center gap-2 border-2 transition-all",
+              "font-display text-xs font-bold tracking-wider",
+              processStatus === 'STOPPED'
+                ? "bg-phosphor-red border-phosphor-red text-void"
+                : isConnected && processStatus !== 'IDLE' && processStatus !== 'STOPPED'
+                  ? "border-phosphor-red text-phosphor-red hover:bg-phosphor-red hover:text-void"
+                  : "border-surface-border text-text-tertiary cursor-not-allowed"
+            )}
+          >
+            <Square className="w-4 h-4" />
+            <span>STOP</span>
+          </button>
+
+          {/* Machine Status Badge */}
+          <div className={cn(
+            "flex items-center gap-2 px-3 py-1.5 border ml-2",
+            processStatus === 'IDLE' && "border-surface-border bg-surface-border/10",
+            processStatus === 'READY' && "border-phosphor-cyan bg-phosphor-cyan/10",
+            processStatus === 'RUNNING' && "border-phosphor-green bg-phosphor-green/10",
+            processStatus === 'PAUSED' && "border-phosphor-amber bg-phosphor-amber/10",
+            processStatus === 'STOPPED' && "border-phosphor-red bg-phosphor-red/10"
+          )}>
+            {processStatus === 'RUNNING' && <Loader2 className="w-4 h-4 text-phosphor-green animate-spin" />}
+            {processStatus === 'PAUSED' && <Pause className="w-4 h-4 text-phosphor-amber" />}
+            {(processStatus === 'IDLE' || processStatus === 'STOPPED') && <CircleDot className="w-4 h-4 text-text-tertiary" />}
+            {processStatus === 'READY' && <CheckCircle2 className="w-4 h-4 text-phosphor-cyan" />}
+            <span className={cn(
+              "font-mono text-xs font-bold",
+              processStatus === 'IDLE' && "text-text-tertiary",
+              processStatus === 'READY' && "text-phosphor-cyan",
+              processStatus === 'RUNNING' && "text-phosphor-green",
+              processStatus === 'PAUSED' && "text-phosphor-amber",
+              processStatus === 'STOPPED' && "text-phosphor-red"
+            )}>
+              {processStatus}
+            </span>
+          </div>
         </div>
 
-        {/* Right Panel - 30% */}
-        <div className="w-[30%] flex flex-col p-3 pl-0 gap-2 overflow-hidden">
-          {/* Detection Info - Compact */}
-          <DetectionResultPanel
-            detection={currentDefect}
-            aiResult={aiResult}
-            defectIndex={currentDefectIndex}
-            defectCount={defects.length}
-          />
+        {/* Center: Inspection Stage */}
+        <div className="flex items-center gap-4">
+          {/* Current Stage Detail */}
+          <div className={cn(
+            "flex items-center gap-2 px-3 py-1.5 border",
+            activeStage.status === 'idle' && "border-surface-border bg-surface-border/10",
+            activeStage.status === 'capturing' && "border-phosphor-cyan bg-phosphor-cyan/10",
+            activeStage.status === 'processing' && "border-phosphor-amber bg-phosphor-amber/10",
+            activeStage.status === 'ready' && "border-phosphor-green bg-phosphor-green/10"
+          )}>
+            {activeStage.status === 'idle' && <CircleDot className="w-4 h-4 text-text-tertiary" />}
+            {activeStage.status === 'capturing' && <Camera className="w-4 h-4 text-phosphor-cyan animate-pulse" />}
+            {activeStage.status === 'processing' && <Cpu className="w-4 h-4 text-phosphor-amber animate-pulse" />}
+            {activeStage.status === 'ready' && <CheckCircle2 className="w-4 h-4 text-phosphor-green" />}
+            
+            {activeStage.stageName?.includes('top') && (
+              <span className="font-mono text-xs font-bold text-phosphor-cyan">TOP</span>
+            )}
+            {activeStage.stageName?.includes('bottom') && (
+              <span className="font-mono text-xs font-bold text-phosphor-magenta">BOTTOM</span>
+            )}
+            {activeStage.stageName === 'pcb_flipping' && (
+              <RotateCcw className="w-4 h-4 text-phosphor-amber animate-spin" />
+            )}
+            <span className="font-mono text-xs text-text-secondary">
+              {activeStage.message}
+            </span>
+          </div>
 
-          {/* Board Overview - Shows full board with defect markers */}
-          <BoardOverview
-            imageSrc={currentImage}
-            defects={defects}
-            currentDefectIndex={currentDefectIndex}
-            imageWidth={imageSize.width}
-            imageHeight={imageSize.height}
-            onDefectSelect={handleDefectSelect}
-            className="flex-1 min-h-[200px]"
-          />
+          {/* Stage Progress Dots */}
+          <div className="flex items-center gap-1">
+            {Array.from({ length: activeStage.totalStages }).map((_, i) => (
+              <div
+                key={i}
+                className={cn(
+                  "w-2 h-2 rounded-full transition-colors",
+                  i < activeStage.stageIndex ? "bg-phosphor-green" :
+                  i === activeStage.stageIndex ? "bg-phosphor-amber animate-pulse" :
+                  "bg-surface-border"
+                )}
+              />
+            ))}
+          </div>
+        </div>
+
+        {/* Right: Hardware Status */}
+        <div className="flex items-center gap-3">
+          {/* Camera Status */}
+          <div className={cn(
+            "flex items-center gap-2 px-3 py-1.5 border",
+            hardwareStatus.cameras?.[0]?.status === 'ONLINE' 
+              ? "border-phosphor-green/50 bg-phosphor-green/5" 
+              : hardwareStatus.cameras?.length > 0
+                ? "border-phosphor-red/50 bg-phosphor-red/5"
+                : "border-surface-border bg-surface-border/10"
+          )}>
+            <Camera className={cn(
+              "w-4 h-4",
+              hardwareStatus.cameras?.[0]?.status === 'ONLINE' 
+                ? "text-phosphor-green" 
+                : hardwareStatus.cameras?.length > 0
+                  ? "text-phosphor-red"
+                  : "text-text-tertiary"
+            )} />
+            <span className="font-mono text-xs text-text-secondary">CAM</span>
+            <div className={cn(
+              "w-2 h-2 rounded-full",
+              hardwareStatus.cameras?.[0]?.status === 'ONLINE' 
+                ? "bg-phosphor-green" 
+                : hardwareStatus.cameras?.length > 0
+                  ? "bg-phosphor-red animate-pulse"
+                  : "bg-surface-border"
+            )} />
+          </div>
+
+          {/* PLC Status */}
+          <div className={cn(
+            "flex items-center gap-2 px-3 py-1.5 border",
+            hardwareStatus.plcs?.[0]?.status === 'ONLINE' 
+              ? "border-phosphor-green/50 bg-phosphor-green/5" 
+              : hardwareStatus.plcs?.length > 0
+                ? "border-phosphor-red/50 bg-phosphor-red/5"
+                : "border-surface-border bg-surface-border/10"
+          )}>
+            <Activity className={cn(
+              "w-4 h-4",
+              hardwareStatus.plcs?.[0]?.status === 'ONLINE' 
+                ? "text-phosphor-green" 
+                : hardwareStatus.plcs?.length > 0
+                  ? "text-phosphor-red"
+                  : "text-text-tertiary"
+            )} />
+            <span className="font-mono text-xs text-text-secondary">PLC</span>
+            <div className={cn(
+              "w-2 h-2 rounded-full",
+              hardwareStatus.plcs?.[0]?.status === 'ONLINE' 
+                ? "bg-phosphor-green" 
+                : hardwareStatus.plcs?.length > 0
+                  ? "bg-phosphor-red animate-pulse"
+                  : "bg-surface-border"
+            )} />
+          </div>
+
+          {/* AI Backend Connection */}
+          <div className={cn(
+            "flex items-center gap-2 px-3 py-1.5 border",
+            isConnected 
+              ? "border-phosphor-cyan/50 bg-phosphor-cyan/5" 
+              : "border-surface-border bg-surface-border/10"
+          )}>
+            {isConnected ? (
+              <Wifi className="w-4 h-4 text-phosphor-cyan" />
+            ) : (
+              <WifiOff className="w-4 h-4 text-text-tertiary" />
+            )}
+            <span className="font-mono text-xs text-text-secondary">AI</span>
+            <div className={cn(
+              "w-2 h-2 rounded-full",
+              isConnected ? "bg-phosphor-cyan" : "bg-surface-border"
+            )} />
+          </div>
+        </div>
+      </div>
+
+      {/* ============ MAIN CONTENT ============ */}
+      <main className="flex-1 flex overflow-hidden">
+        <div className="flex-1 flex flex-col p-3">
+          {activeInspection ? (
+            /* Inspection Result - Dual Side View */
+            <InspectionResult
+              inspection={activeInspection}
+              className="flex-1"
+            />
+          ) : (
+            /* Inspection Stage Progress */
+            <InspectionStage
+              stage={activeStage}
+              className="flex-1 bg-panel rounded-lg border border-surface-border"
+            />
+          )}
         </div>
       </main>
 
       {/* ============ FOOTER: ACTIONS ============ */}
-      <footer className="h-24 flex-shrink-0 bg-panel border-t border-surface-border flex items-center justify-between px-4">
+      <footer className="h-28 flex-shrink-0 bg-panel border-t border-surface-border flex items-center justify-between px-4">
         {/* Left: WO Stats */}
         <div className="flex items-center gap-4">
           {workOrder && (
@@ -1191,12 +950,12 @@ export function LiveViewV3({
 
         {/* Center: Action Buttons */}
         <div className="flex items-center gap-4">
-          {/* Simulate buttons (dev mode only) */}
-          {DEV_MODE && aiResult === 'WAITING' && (
+          {/* Dev Mode Simulate Buttons */}
+          {DEV_MODE && !activeInspection && !aiBackendAvailable && (
             <>
               <button
-                onClick={simulateGood}
-                disabled={isProcessing || !workOrder}
+                onClick={() => simulateInspection('GOOD')}
+                disabled={!workOrder}
                 className={cn(
                   "h-14 px-5 flex items-center gap-2 border-2 transition-all",
                   "font-display text-sm font-bold tracking-wider",
@@ -1206,11 +965,11 @@ export function LiveViewV3({
                 )}
               >
                 <FlaskConical className="w-5 h-5" />
-                <span>SIM GOOD (G)</span>
+                <span>SIM PASS (S)</span>
               </button>
               <button
-                onClick={simulateNG}
-                disabled={isProcessing || !workOrder}
+                onClick={() => simulateInspection('NG')}
+                disabled={!workOrder}
                 className={cn(
                   "h-14 px-5 flex items-center gap-2 border-2 transition-all",
                   "font-display text-sm font-bold tracking-wider",
@@ -1220,76 +979,58 @@ export function LiveViewV3({
                 )}
               >
                 <FlaskConical className="w-5 h-5" />
-                <span>SIM NG (N)</span>
+                <span>SIM FAIL (D)</span>
               </button>
             </>
           )}
 
-          {/* APPROVE */}
+          {/* GOOD Button - Large for glove operation (min 30mm) */}
           <button
-            onClick={aiResult === 'GOOD' ? handleApproveGood : handleApproveNG}
+            onClick={handleGoodClick}
             disabled={actionsDisabled}
             className={cn(
-              "h-16 px-10 flex items-center gap-3 border-2 transition-all",
-              "font-display text-lg font-bold tracking-wider",
+              "h-20 px-14 flex items-center gap-4 border-4 transition-all",
+              "font-display text-2xl font-bold tracking-wider",
               actionsDisabled
                 ? "bg-surface-border/20 border-surface-border text-text-tertiary cursor-not-allowed"
                 : "bg-phosphor-green/10 border-phosphor-green text-phosphor-green hover:bg-phosphor-green hover:text-void hover:shadow-glow-green"
             )}
           >
-            <CheckCircle2 className="w-6 h-6" />
-            <span>APPROVE</span>
-            <span className="font-mono text-xs opacity-60">(A)</span>
+            <CheckCircle2 className="w-8 h-8" />
+            <span>GOOD</span>
+            <span className="font-mono text-sm opacity-60">(G)</span>
           </button>
 
-          {/* FALSE CALL - works for both NG and GOOD */}
+          {/* NG Button - Large for glove operation (min 30mm) */}
           <button
-            onClick={handleFalseCall}
+            onClick={handleNGClick}
             disabled={actionsDisabled}
             className={cn(
-              "h-16 px-10 flex items-center gap-3 border-2 transition-all",
-              "font-display text-lg font-bold tracking-wider",
+              "h-20 px-14 flex items-center gap-4 border-4 transition-all",
+              "font-display text-2xl font-bold tracking-wider",
               actionsDisabled
                 ? "bg-surface-border/20 border-surface-border text-text-tertiary cursor-not-allowed"
-                : aiResult === 'GOOD'
-                  ? "bg-phosphor-red/10 border-phosphor-red text-phosphor-red hover:bg-phosphor-red hover:text-void hover:shadow-glow-red"
-                  : "bg-phosphor-amber/10 border-phosphor-amber text-phosphor-amber hover:bg-phosphor-amber hover:text-void hover:shadow-glow-amber"
+                : "bg-phosphor-red/10 border-phosphor-red text-phosphor-red hover:bg-phosphor-red hover:text-void hover:shadow-glow-red"
             )}
           >
-            <Flag className="w-6 h-6" />
-            <span>{aiResult === 'GOOD' ? 'MISSED DEFECT' : 'FALSE CALL'}</span>
-            <span className="font-mono text-xs opacity-60">(F)</span>
+            <XCircle className="w-8 h-8" />
+            <span>NG</span>
+            <span className="font-mono text-sm opacity-60">(N)</span>
           </button>
         </div>
 
-        {/* Right: Pause + Stop */}
+        {/* Right: Exit Button Only */}
         <div className="flex items-center gap-3">
-          <button
-            onClick={() => setIsPaused(!isPaused)}
-            disabled={!isOperator}
-            className={cn(
-              "h-12 px-4 flex items-center gap-2 border transition-colors",
-              "font-display text-sm font-bold tracking-wider",
-              isPaused
-                ? "bg-phosphor-amber/10 border-phosphor-amber text-phosphor-amber"
-                : "border-surface-border text-text-secondary hover:border-phosphor-amber/50",
-              !isOperator && "opacity-50 cursor-not-allowed"
-            )}
-          >
-            {isPaused ? <Play className="w-4 h-4" /> : <Pause className="w-4 h-4" />}
-            <span>{isPaused ? 'RESUME' : 'PAUSE'}</span>
-          </button>
-
           <button
             onClick={onExit}
             className={cn(
               "h-12 px-6 flex items-center gap-2 transition-colors",
               "font-display text-sm font-bold tracking-wider",
-              "bg-phosphor-red text-void hover:shadow-glow-red"
+              "border border-phosphor-red text-phosphor-red hover:bg-phosphor-red hover:text-void"
             )}
           >
             <Square className="w-4 h-4" />
-            <span>{isOperator ? 'STOP' : 'EXIT'}</span>
+            <span>EXIT</span>
           </button>
         </div>
       </footer>
@@ -1299,30 +1040,33 @@ export function LiveViewV3({
       {/* False Call Modal */}
       <FalseCallModal
         isOpen={showFalseCallModal}
-        onClose={() => setShowFalseCallModal(false)}
+        onClose={() => {
+          setShowFalseCallModal(false)
+          setPendingDecision(null)
+        }}
         onSubmit={handleFalseCallSubmit}
-        boardId={boardId}
-        defectType={currentDefect?.class_name}
-        aiResult={aiResult}
-        isProcessing={isProcessing}
+        boardId={`${workOrder?.woNumber}-${String(boardSequenceRef.current + 1).padStart(4, '0')}`}
+        defectType={activeInspection?.results?.top?.objects?.[0]?.name}
+        aiResult={activeInspection?.decision === 'PASS' ? 'GOOD' : 'NG'}
+        isProcessing={isConfirming}
+        isMissedDefect={pendingDecision === 'NG'}
       />
 
-      {/* Flip Notice */}
-      {showFlipNotice && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-          <div className="bg-panel border-2 border-phosphor-cyan p-8 text-center">
-            <RotateCcw className="w-16 h-16 text-phosphor-cyan mx-auto mb-4 animate-spin" />
-            <h2 className="font-display text-2xl font-bold text-phosphor-cyan mb-2">
-              FLIP TO BOTTOM
-            </h2>
-            <p className="text-text-secondary">
-              Please flip the PCB to inspect the bottom side
-            </p>
-          </div>
+      {/* Connection Error Banner */}
+      {connectionError && !isConnected && (
+        <div className="fixed bottom-28 left-1/2 -translate-x-1/2 px-6 py-3 bg-phosphor-red/20 border border-phosphor-red text-phosphor-red flex items-center gap-3">
+          <AlertCircle className="w-5 h-5" />
+          <span className="font-mono text-sm">{connectionError}</span>
+          <button
+            onClick={reconnect}
+            className="px-3 py-1 bg-phosphor-red text-void text-xs font-bold hover:bg-phosphor-red/80"
+          >
+            RETRY
+          </button>
         </div>
       )}
     </div>
-  );
+  )
 }
 
-export default LiveViewV3;
+export default LiveViewV3
