@@ -3,6 +3,7 @@
 /**
  * InspectionResult Component
  * Displays both TOP and BOTTOM side images with defects after inspection complete
+ * Supports multiple frames per side (carousel)
  */
 
 import { cn } from '@/lib/utils'
@@ -13,9 +14,15 @@ export function InspectionResult({ inspection, className }) {
 
   const { results } = inspection
 
-  // Check what sides we have
-  const hasTop = !!results?.top?.image_url
-  const hasBottom = !!results?.bottom?.image_url
+  // results.top and results.bottom are now arrays of frames
+  // Handle both array format (new) and object format (legacy)
+  const topFrames = Array.isArray(results?.top) ? results.top : 
+                    results?.top?.image_url ? [results.top] : []
+  const bottomFrames = Array.isArray(results?.bottom) ? results.bottom : 
+                       results?.bottom?.image_url ? [results.bottom] : []
+
+  const hasTop = topFrames.length > 0
+  const hasBottom = bottomFrames.length > 0
   const hasBothSides = hasTop && hasBottom
   const hasSingleSide = (hasTop || hasBottom) && !hasBothSides
 
@@ -30,8 +37,7 @@ export function InspectionResult({ inspection, className }) {
         {hasTop && (
           <SidePanel
             side="TOP"
-            imageUrl={results.top.image_url}
-            objects={results.top.objects || []}
+            frames={topFrames}
             className={hasSingleSide ? "max-w-3xl w-full" : ""}
           />
         )}
@@ -40,8 +46,7 @@ export function InspectionResult({ inspection, className }) {
         {hasBottom && (
           <SidePanel
             side="BOTTOM"
-            imageUrl={results.bottom.image_url}
-            objects={results.bottom.objects || []}
+            frames={bottomFrames}
             className={hasSingleSide ? "max-w-3xl w-full" : ""}
           />
         )}

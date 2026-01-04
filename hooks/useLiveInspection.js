@@ -25,19 +25,15 @@ import {
   checkHealth 
 } from '@/lib/services/aiBackendService'
 
-// Stage definitions for progress tracking
+// Stage definitions for progress tracking (matches dev.py)
 const STAGE_MAP = {
   'idle': { index: 0, message: 'Waiting for board...', icon: 'hourglass' },
-  'unit_coming': { index: 1, message: 'Board incoming...', icon: 'loader' },
-  'camera_capture_top': { index: 2, message: 'Capturing TOP side...', icon: 'camera' },
-  'ai_processing_top': { index: 3, message: 'Processing TOP side...', icon: 'cpu' },
-  'pcb_flipping': { index: 4, message: 'Flipping PCB...', icon: 'rotate' },
-  'camera_capture_bottom': { index: 5, message: 'Capturing BOTTOM side...', icon: 'camera' },
-  'ai_processing_bottom': { index: 6, message: 'Processing BOTTOM side...', icon: 'cpu' },
-  'inspection_complete': { index: 7, message: 'Ready for review', icon: 'check' }
+  'start': { index: 1, message: 'Board incoming...', icon: 'loader' },
+  'running': { index: 2, message: 'Processing...', icon: 'cpu' },
+  'done': { index: 3, message: 'Ready for review', icon: 'check' }
 }
 
-const TOTAL_STAGES = 7
+const TOTAL_STAGES = 3
 
 /**
  * useLiveInspection Hook
@@ -209,15 +205,13 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
     const stageName = data.stage_name || 'idle'
     const stageInfo = STAGE_MAP[stageName] || STAGE_MAP['idle']
     
-    // Determine status based on stage
+    // Determine status based on stage (dev.py: start, running, done)
     let status = 'idle'
-    if (stageName === 'inspection_complete') {
+    if (stageName === 'done') {
       status = 'ready'
-    } else if (stageName.includes('capture')) {
-      status = 'capturing'
-    } else if (stageName.includes('processing')) {
+    } else if (stageName === 'running') {
       status = 'processing'
-    } else if (stageName !== 'idle') {
+    } else if (stageName === 'start') {
       status = 'capturing'
     }
     
@@ -234,34 +228,34 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
   const handleInspection = useCallback((data) => {
     console.log('[LiveInspection] Inspection result:', data)
     
-    // Transform to UI format
+    // Get results - handle nested structure from dev.py
+    const resultsData = data.results?.results || data.results
+    
+    // Transform to UI format - top/bottom are arrays of frames
+    const transformFrames = (frames, side) => {
+      if (!frames) return []
+      // Ensure it's an array
+      const frameArray = Array.isArray(frames) ? frames : [frames]
+      return frameArray.map(frame => ({
+        image_url: frame.image_url,
+        objects: (frame.objects || []).map(obj => ({
+          name: obj.name,
+          box: obj.box,
+          score: obj.score,
+          label: obj.label,
+          crop_url: obj.crop_url,
+          side
+        }))
+      })).filter(f => f.image_url) // Only include frames with images
+    }
+    
     const inspection = {
       inspectionId: data.inspection_id,
       modelId: data.model_id,
       modelName: data.model_name,
       results: {
-        top: data.results?.top ? {
-          image_url: data.results.top.image_url,
-          objects: (data.results.top.objects || []).map(obj => ({
-            name: obj.name,
-            box: obj.box,
-            score: obj.score,
-            label: obj.label,
-            crop_url: obj.crop_url,
-            side: 'TOP'
-          }))
-        } : null,
-        bottom: data.results?.bottom ? {
-          image_url: data.results.bottom.image_url,
-          objects: (data.results.bottom.objects || []).map(obj => ({
-            name: obj.name,
-            box: obj.box,
-            score: obj.score,
-            label: obj.label,
-            crop_url: obj.crop_url,
-            side: 'BOTTOM'
-          }))
-        } : null
+        top: transformFrames(resultsData?.top, 'TOP'),
+        bottom: transformFrames(resultsData?.bottom, 'BOTTOM')
       },
       decision: data.decision, // 'PASS' or 'FAIL'
       timestamp: data.timestamp
@@ -270,7 +264,7 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
     setCurrentInspection(inspection)
     setInspectionStage({
       status: 'ready',
-      stageName: 'inspection_complete',
+      stageName: 'done',
       message: 'Ready for review',
       stageIndex: TOTAL_STAGES,
       totalStages: TOTAL_STAGES,
@@ -542,12 +536,25 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
   }, [currentInspection])
 
   // ============================================
-  // Auto-connect on mount
+  // Auto-connect and Auto-run on mount
   // ============================================
 
   useEffect(() => {
     if (autoConnect && lineId && workOrder) {
-      connect()
+      // Auto connect and auto run
+      const autoStartSequence = async () => {
+        await connect()
+        
+        // Wait a bit for connection to establish, then auto-run
+        setTimeout(async () => {
+          if (serviceRef.current?.isConnected()) {
+            console.log('[LiveInspection] Auto-starting process...')
+            await runProcess()
+          }
+        }, 1000)
+      }
+      
+      autoStartSequence()
     }
 
     return () => {

@@ -118,7 +118,7 @@ export function LiveViewV3({
     stageName: 'idle',
     message: 'Waiting for board...',
     stageIndex: 0,
-    totalStages: 7,
+    totalStages: 3,
     icon: 'hourglass'
   })
 
@@ -221,7 +221,7 @@ export function LiveViewV3({
           stageName: 'idle',
           message: 'Waiting for board...',
           stageIndex: 0,
-          totalStages: 7,
+          totalStages: 3,
           icon: 'hourglass'
         })
       }
@@ -349,17 +349,16 @@ export function LiveViewV3({
   const simulateInspection = useCallback(async (result) => {
     if (!workOrder || activeInspection) return
 
-    // Simulate stages
-    const stages = ['camera_capture_top', 'ai_processing_top', 'pcb_flipping', 
-                   'camera_capture_bottom', 'ai_processing_bottom', 'inspection_complete']
+    // Simulate stages (matches dev.py: start, running, done)
+    const stages = ['start', 'running', 'done']
     
     for (const stage of stages) {
       setDevMockStage({
-        status: stage === 'inspection_complete' ? 'ready' : 'capturing',
+        status: stage === 'done' ? 'ready' : stage === 'running' ? 'processing' : 'capturing',
         stageName: stage,
         message: getStageMessage(stage),
-        stageIndex: stages.indexOf(stage) + 2,
-        totalStages: 7,
+        stageIndex: stages.indexOf(stage) + 1,
+        totalStages: 3,
         icon: getStageIcon(stage)
       })
       await new Promise(r => setTimeout(r, 300)) // Fast simulation
@@ -449,17 +448,25 @@ export function LiveViewV3({
   // ============================================
 
   const calculateAvgConfidence = (inspection) => {
+    // Handle array of frames structure
+    const topFrames = inspection?.results?.top || []
+    const bottomFrames = inspection?.results?.bottom || []
+    
     const allObjects = [
-      ...(inspection?.results?.top?.objects || []),
-      ...(inspection?.results?.bottom?.objects || [])
+      ...topFrames.flatMap(f => f.objects || []),
+      ...bottomFrames.flatMap(f => f.objects || [])
     ]
     if (allObjects.length === 0) return 1.0
     return allObjects.reduce((sum, obj) => sum + obj.score, 0) / allObjects.length
   }
 
   const getTotalDefects = (inspection) => {
-    const topCount = inspection?.results?.top?.objects?.length || 0
-    const bottomCount = inspection?.results?.bottom?.objects?.length || 0
+    // Handle array of frames structure
+    const topFrames = inspection?.results?.top || []
+    const bottomFrames = inspection?.results?.bottom || []
+    
+    const topCount = topFrames.reduce((sum, f) => sum + (f.objects?.length || 0), 0)
+    const bottomCount = bottomFrames.reduce((sum, f) => sum + (f.objects?.length || 0), 0)
     return topCount + bottomCount
   }
 
@@ -472,21 +479,17 @@ export function LiveViewV3({
 
   const getStageMessage = (stage) => {
     const messages = {
-      'camera_capture_top': 'Capturing TOP side...',
-      'ai_processing_top': 'Processing TOP side...',
-      'pcb_flipping': 'Flipping PCB...',
-      'camera_capture_bottom': 'Capturing BOTTOM side...',
-      'ai_processing_bottom': 'Processing BOTTOM side...',
-      'inspection_complete': 'Ready for review'
+      'start': 'Board incoming...',
+      'running': 'Processing...',
+      'done': 'Ready for review'
     }
     return messages[stage] || 'Processing...'
   }
 
   const getStageIcon = (stage) => {
-    if (stage.includes('capture')) return 'camera'
-    if (stage.includes('processing')) return 'cpu'
-    if (stage === 'pcb_flipping') return 'rotate'
-    if (stage === 'inspection_complete') return 'check'
+    if (stage === 'start') return 'loader'
+    if (stage === 'running') return 'cpu'
+    if (stage === 'done') return 'check'
     return 'loader'
   }
 

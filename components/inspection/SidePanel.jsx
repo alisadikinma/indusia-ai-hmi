@@ -1,13 +1,19 @@
 'use client'
 
 /**
- * SidePanel Component
- * Displays a single side (TOP/BOTTOM) with image, bounding boxes, and defect list
+ * SidePanel Component V2
+ * Displays a single side (TOP/BOTTOM) with carousel for multiple frames
+ * 
+ * Features:
+ * - Thumbnail strip carousel
+ * - Frame indicator "Frame 1/3"
+ * - Defect badge per frame
+ * - Bounding box overlay per frame
  */
 
 import { useState, useRef, useEffect } from 'react'
 import { cn } from '@/lib/utils'
-import { ZoomIn, ZoomOut, Maximize2 } from 'lucide-react'
+import { ZoomIn, ZoomOut, Maximize2, AlertCircle, CheckCircle2 } from 'lucide-react'
 
 // Defect type color mapping
 const DEFECT_COLORS = {
@@ -19,17 +25,34 @@ const DEFECT_COLORS = {
   'insufficient_solder': '#F97316',
   'excess_solder': '#EAB308',
   'lifted_lead': '#A855F7',
+  'target-d': '#10B981',
+  'target-u': '#EF4444',
+  'target-x': '#F59E0B',
   'default': '#EF4444'
 }
 
-export function SidePanel({ side, imageUrl, objects = [], className }) {
+export function SidePanel({ side, frames = [], className }) {
+  const [activeFrameIndex, setActiveFrameIndex] = useState(0)
   const [zoom, setZoom] = useState(1)
   const [showFullscreen, setShowFullscreen] = useState(false)
   const [imageSize, setImageSize] = useState({ natural: { w: 0, h: 0 }, rendered: { w: 0, h: 0 } })
   const imgRef = useRef(null)
   const containerRef = useRef(null)
   
-  const hasDefects = objects.length > 0
+  // Current active frame
+  const activeFrame = frames[activeFrameIndex] || null
+  const imageUrl = activeFrame?.image_url
+  const objects = activeFrame?.objects || []
+  
+  // Total defects across all frames
+  const totalDefects = frames.reduce((sum, f) => sum + (f.objects?.length || 0), 0)
+  const hasDefects = totalDefects > 0
+  const frameCount = frames.length
+
+  // Reset active frame when frames change
+  useEffect(() => {
+    setActiveFrameIndex(0)
+  }, [frames])
 
   // Track image load and resize
   useEffect(() => {
@@ -48,7 +71,6 @@ export function SidePanel({ side, imageUrl, objects = [], className }) {
     img.addEventListener('load', updateSize)
     window.addEventListener('resize', updateSize)
     
-    // Initial check
     if (img.complete) updateSize()
 
     return () => {
@@ -65,6 +87,23 @@ export function SidePanel({ side, imageUrl, objects = [], className }) {
   // Calculate scale factor for bounding boxes
   const scaleX = imageSize.rendered.w / (imageSize.natural.w || 1)
   const scaleY = imageSize.rendered.h / (imageSize.natural.h || 1)
+
+  // No frames available
+  if (frameCount === 0) {
+    return (
+      <div className={cn(
+        "bg-panel rounded-lg overflow-hidden flex flex-col border border-surface-border",
+        className
+      )}>
+        <div className="px-4 py-3 bg-terminal">
+          <span className="font-display font-bold text-lg text-text-primary">{side} Side</span>
+        </div>
+        <div className="flex-1 flex items-center justify-center text-text-tertiary min-h-[250px]">
+          <p className="font-mono text-sm">No image available</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className={cn(
@@ -85,8 +124,15 @@ export function SidePanel({ side, imageUrl, objects = [], className }) {
               ? "bg-phosphor-red/20 text-phosphor-red"
               : "bg-phosphor-green/20 text-phosphor-green"
           )}>
-            {hasDefects ? `${objects.length} defect(s)` : 'PASS'}
+            {hasDefects ? `${totalDefects} defect(s)` : 'PASS'}
           </span>
+          
+          {/* Frame Indicator */}
+          {frameCount > 1 && (
+            <span className="text-xs font-mono text-text-tertiary bg-terminal px-2 py-1 rounded">
+              Frame {activeFrameIndex + 1}/{frameCount}
+            </span>
+          )}
         </div>
 
         {/* Zoom Controls */}
@@ -134,11 +180,11 @@ export function SidePanel({ side, imageUrl, objects = [], className }) {
               <img
                 ref={imgRef}
                 src={imageUrl}
-                alt={`${side} side inspection`}
-                className="max-w-full max-h-[350px] object-contain"
+                alt={`${side} side inspection frame ${activeFrameIndex + 1}`}
+                className="max-w-full max-h-[300px] object-contain"
               />
 
-              {/* Bounding Boxes Overlay - positioned absolutely over image */}
+              {/* Bounding Boxes Overlay */}
               {imageSize.rendered.w > 0 && objects.length > 0 && (
                 <svg
                   className="absolute top-0 left-0 pointer-events-none"
@@ -151,7 +197,6 @@ export function SidePanel({ side, imageUrl, objects = [], className }) {
                     const [x1, y1, x2, y2] = obj.box || [0, 0, 0, 0]
                     const color = getDefectColor(obj.name)
                     
-                    // Scale coordinates to rendered size
                     const sx1 = x1 * scaleX
                     const sy1 = y1 * scaleY
                     const sx2 = x2 * scaleX
@@ -163,7 +208,6 @@ export function SidePanel({ side, imageUrl, objects = [], className }) {
                     
                     return (
                       <g key={i}>
-                        {/* Bounding Box */}
                         <rect
                           x={sx1}
                           y={sy1}
@@ -174,7 +218,6 @@ export function SidePanel({ side, imageUrl, objects = [], className }) {
                           strokeWidth={2}
                           strokeDasharray="4 2"
                         />
-                        {/* Corner markers */}
                         <line x1={sx1} y1={sy1} x2={sx1 + 10} y2={sy1} stroke={color} strokeWidth={3} />
                         <line x1={sx1} y1={sy1} x2={sx1} y2={sy1 + 10} stroke={color} strokeWidth={3} />
                         <line x1={sx2} y1={sy1} x2={sx2 - 10} y2={sy1} stroke={color} strokeWidth={3} />
@@ -184,7 +227,6 @@ export function SidePanel({ side, imageUrl, objects = [], className }) {
                         <line x1={sx2} y1={sy2} x2={sx2 - 10} y2={sy2} stroke={color} strokeWidth={3} />
                         <line x1={sx2} y1={sy2} x2={sx2} y2={sy2 - 10} stroke={color} strokeWidth={3} />
                         
-                        {/* Label Background */}
                         <rect
                           x={sx1}
                           y={sy1 - 20}
@@ -193,7 +235,6 @@ export function SidePanel({ side, imageUrl, objects = [], className }) {
                           fill={color}
                           rx={2}
                         />
-                        {/* Label Text */}
                         <text
                           x={sx1 + 4}
                           y={sy1 - 6}
@@ -218,11 +259,65 @@ export function SidePanel({ side, imageUrl, objects = [], className }) {
         )}
       </div>
 
-      {/* Defect List */}
-      {hasDefects && (
+      {/* Thumbnail Carousel Strip */}
+      {frameCount > 1 && (
+        <div className="px-3 py-2 bg-terminal border-t border-surface-border">
+          <div className="flex items-center gap-2 overflow-x-auto pb-1">
+            {frames.map((frame, index) => {
+              const frameHasDefects = (frame.objects?.length || 0) > 0
+              const isActive = index === activeFrameIndex
+              
+              return (
+                <button
+                  key={index}
+                  onClick={() => setActiveFrameIndex(index)}
+                  className={cn(
+                    "relative flex-shrink-0 w-16 h-12 rounded overflow-hidden border-2 transition-all",
+                    isActive
+                      ? "border-phosphor-amber ring-2 ring-phosphor-amber/30"
+                      : frameHasDefects
+                        ? "border-phosphor-red/50 hover:border-phosphor-red"
+                        : "border-surface-border hover:border-phosphor-green/50"
+                  )}
+                >
+                  {/* Thumbnail Image */}
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={frame.image_url}
+                    alt={`Frame ${index + 1}`}
+                    className="w-full h-full object-cover"
+                  />
+                  
+                  {/* Defect Badge */}
+                  <div className={cn(
+                    "absolute top-0.5 right-0.5 w-4 h-4 rounded-full flex items-center justify-center",
+                    frameHasDefects ? "bg-phosphor-red" : "bg-phosphor-green"
+                  )}>
+                    {frameHasDefects ? (
+                      <AlertCircle className="w-3 h-3 text-white" />
+                    ) : (
+                      <CheckCircle2 className="w-3 h-3 text-white" />
+                    )}
+                  </div>
+                  
+                  {/* Defect Count Badge */}
+                  {frameHasDefects && (
+                    <div className="absolute bottom-0.5 left-0.5 bg-phosphor-red text-white text-xxs font-mono font-bold px-1 rounded">
+                      {frame.objects.length}
+                    </div>
+                  )}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Defect List for Active Frame */}
+      {objects.length > 0 && (
         <div className="p-3 border-t border-surface-border bg-terminal max-h-28 overflow-y-auto">
           <div className="text-xs font-mono text-text-tertiary mb-2">
-            Detected Defects:
+            Detected Defects (Frame {activeFrameIndex + 1}):
           </div>
           <div className="space-y-1">
             {objects.map((obj, i) => (
@@ -264,12 +359,15 @@ export function SidePanel({ side, imageUrl, objects = [], className }) {
             <span className="text-text-primary text-xl font-bold">&times;</span>
           </button>
           <div className="text-center">
-            <p className="text-phosphor-amber font-display font-bold text-lg mb-4">{side} Side</p>
+            <p className="text-phosphor-amber font-display font-bold text-lg mb-2">{side} Side</p>
+            {frameCount > 1 && (
+              <p className="text-text-tertiary font-mono text-sm mb-4">Frame {activeFrameIndex + 1}/{frameCount}</p>
+            )}
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={imageUrl}
               alt={`${side} side fullscreen`}
-              className="max-w-[90vw] max-h-[85vh] object-contain border border-surface-border"
+              className="max-w-[90vw] max-h-[80vh] object-contain border border-surface-border"
             />
           </div>
         </div>
