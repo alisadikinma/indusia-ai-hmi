@@ -44,8 +44,10 @@ export function SidePanel({ side, frames = [], className }) {
   const imageUrl = activeFrame?.image_url
   const objects = activeFrame?.objects || []
   
-  // Total defects across all frames
-  const totalDefects = frames.reduce((sum, f) => sum + (f.objects?.length || 0), 0)
+  // Only count objects with label=1 as defects
+  const getDefectCount = (objs) => objs.filter(o => o.label === 1).length
+  const totalDefects = frames.reduce((sum, f) => sum + getDefectCount(f.objects || []), 0)
+  const activeFrameDefects = getDefectCount(objects)
   const hasDefects = totalDefects > 0
   const frameCount = frames.length
 
@@ -195,7 +197,9 @@ export function SidePanel({ side, frames = [], className }) {
                 >
                   {objects.map((obj, i) => {
                     const [x1, y1, x2, y2] = obj.box || [0, 0, 0, 0]
-                    const color = getDefectColor(obj.name)
+                    const isDefect = obj.label === 1
+                    // Green for good (label=0), Red for defect (label=1)
+                    const color = isDefect ? getDefectColor(obj.name) : '#10B981'
                     
                     const sx1 = x1 * scaleX
                     const sy1 = y1 * scaleY
@@ -264,7 +268,8 @@ export function SidePanel({ side, frames = [], className }) {
         <div className="px-3 py-2 bg-terminal border-t border-surface-border">
           <div className="flex items-center gap-2 overflow-x-auto pb-1">
             {frames.map((frame, index) => {
-              const frameHasDefects = (frame.objects?.length || 0) > 0
+              const frameDefectCount = getDefectCount(frame.objects || [])
+              const frameHasDefects = frameDefectCount > 0
               const isActive = index === activeFrameIndex
               
               return (
@@ -303,45 +308,12 @@ export function SidePanel({ side, frames = [], className }) {
                   {/* Defect Count Badge */}
                   {frameHasDefects && (
                     <div className="absolute bottom-0.5 left-0.5 bg-phosphor-red text-white text-xxs font-mono font-bold px-1 rounded">
-                      {frame.objects.length}
+                      {frameDefectCount}
                     </div>
                   )}
                 </button>
               )
             })}
-          </div>
-        </div>
-      )}
-
-      {/* Defect List for Active Frame */}
-      {objects.length > 0 && (
-        <div className="p-3 border-t border-surface-border bg-terminal max-h-28 overflow-y-auto">
-          <div className="text-xs font-mono text-text-tertiary mb-2">
-            Detected Defects (Frame {activeFrameIndex + 1}):
-          </div>
-          <div className="space-y-1">
-            {objects.map((obj, i) => (
-              <div
-                key={i}
-                className="flex items-center justify-between text-sm py-1.5 px-2 rounded bg-panel border border-surface-border"
-              >
-                <div className="flex items-center gap-2">
-                  <div
-                    className="w-3 h-3 rounded"
-                    style={{ backgroundColor: getDefectColor(obj.name) }}
-                  />
-                  <span className="text-text-primary font-mono">{obj.name}</span>
-                </div>
-                <span className={cn(
-                  "text-xs font-mono px-2 py-0.5 rounded",
-                  obj.score >= 0.85 ? "bg-phosphor-red/20 text-phosphor-red" :
-                  obj.score >= 0.70 ? "bg-phosphor-amber/20 text-phosphor-amber" :
-                  "bg-phosphor-cyan/20 text-phosphor-cyan"
-                )}>
-                  {(obj.score * 100).toFixed(0)}%
-                </span>
-              </div>
-            ))}
           </div>
         </div>
       )}

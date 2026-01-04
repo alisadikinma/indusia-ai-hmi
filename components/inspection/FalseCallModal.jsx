@@ -106,7 +106,7 @@ export function FalseCallModal({
       />
 
       {/* Modal */}
-      <div className="relative w-full max-w-lg mx-4 animate-fade-in">
+      <div className="relative w-full max-w-md mx-4 animate-fade-in">
         <div className={cn(
           "bg-panel border-2 shadow-lg",
           isMissedDefect 
@@ -115,35 +115,35 @@ export function FalseCallModal({
         )}>
           {/* Header */}
           <div className={cn(
-            "flex items-center justify-between px-6 py-4 border-b",
+            "flex items-center justify-between px-4 py-3 border-b",
             isMissedDefect 
               ? "bg-phosphor-red/10 border-phosphor-red/30" 
               : "bg-phosphor-amber/10 border-phosphor-amber/30"
           )}>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
               <div className={cn(
-                "w-10 h-10 flex items-center justify-center border",
+                "w-8 h-8 flex items-center justify-center border",
                 isMissedDefect 
                   ? "bg-phosphor-red/20 border-phosphor-red" 
                   : "bg-phosphor-amber/20 border-phosphor-amber"
               )}>
                 {isMissedDefect ? (
-                  <AlertTriangle className="w-5 h-5 text-phosphor-red" />
+                  <AlertTriangle className="w-4 h-4 text-phosphor-red" />
                 ) : (
-                  <Flag className="w-5 h-5 text-phosphor-amber" />
+                  <Flag className="w-4 h-4 text-phosphor-amber" />
                 )}
               </div>
               <div>
                 <h2 className={cn(
-                  "font-display text-lg font-bold tracking-wide",
+                  "font-display text-sm font-bold tracking-wide",
                   isMissedDefect ? "text-phosphor-red" : "text-phosphor-amber"
                 )}>
-                  {isMissedDefect ? 'REPORT MISSED DEFECT' : 'REPORT FALSE CALL'}
+                  {isMissedDefect ? 'MISSED DEFECT' : 'FALSE CALL'}
                 </h2>
-                <p className="font-mono text-xs text-text-tertiary">
+                <p className="font-mono text-xxs text-text-tertiary">
                   {isMissedDefect 
-                    ? 'AI detected GOOD but defect exists' 
-                    : `AI Detection: ${defectType?.replace(/_/g, ' ').toUpperCase()}`
+                    ? 'AI passed but defect exists' 
+                    : 'AI flagged but board is good'
                   }
                 </p>
               </div>
@@ -152,21 +152,21 @@ export function FalseCallModal({
             {!isProcessing && (
               <button
                 onClick={onClose}
-                className="p-2 hover:bg-surface-border/50 transition-colors"
+                className="p-1.5 hover:bg-surface-border/50 transition-colors"
               >
-                <X className="w-5 h-5 text-text-tertiary" />
+                <X className="w-4 h-4 text-text-tertiary" />
               </button>
             )}
           </div>
 
           {/* Content */}
-          <div className="px-6 py-6 space-y-5">
+          <div className="px-4 py-4 space-y-3">
             {/* Board ID */}
-            <div className="flex items-center gap-3 p-3 bg-terminal border border-surface-border">
-              <span className="font-mono text-xs text-text-tertiary">Board:</span>
-              <span className="font-mono text-sm font-bold text-text-primary">{boardId}</span>
+            <div className="flex items-center gap-2 p-2 bg-terminal border border-surface-border">
+              <span className="font-mono text-xxs text-text-tertiary">Board:</span>
+              <span className="font-mono text-xs font-bold text-text-primary">{boardId}</span>
               <span className={cn(
-                "ml-auto px-2 py-0.5 font-mono text-xs font-bold border",
+                "ml-auto px-1.5 py-0.5 font-mono text-xxs font-bold border",
                 isMissedDefect 
                   ? "bg-phosphor-green/10 border-phosphor-green/50 text-phosphor-green" 
                   : "bg-phosphor-red/10 border-phosphor-red/50 text-phosphor-red"
@@ -175,42 +175,16 @@ export function FalseCallModal({
               </span>
             </div>
 
-            {/* Info banner */}
-            <div className={cn(
-              "flex items-start gap-3 p-3 border",
-              isMissedDefect 
-                ? "bg-phosphor-red/5 border-phosphor-red/30" 
-                : "bg-phosphor-amber/5 border-phosphor-amber/30"
-            )}>
-              <Eye className={cn(
-                "w-5 h-5 flex-shrink-0 mt-0.5",
-                isMissedDefect ? "text-phosphor-red" : "text-phosphor-amber"
-              )} />
-              <div className="font-mono text-xs text-text-secondary">
-                {isMissedDefect ? (
-                  <>
-                    <strong className="text-phosphor-red">Missed Defect:</strong> AI passed this board but you found a defect. 
-                    Board will be <strong>REJECTED</strong> and data collected for AI retraining.
-                  </>
-                ) : (
-                  <>
-                    <strong className="text-phosphor-amber">False Positive:</strong> AI flagged a defect but board is actually good. 
-                    Board will <strong>CONTINUE</strong> and data collected for AI retraining.
-                  </>
-                )}
-              </div>
-            </div>
-
             {/* Reason Selection */}
             <div>
-              <label className="flex items-center gap-2 mb-3">
-                <AlertCircle className="w-4 h-4 text-text-tertiary" />
-                <span className="font-mono text-xs text-text-tertiary">
+              <label className="flex items-center gap-1 mb-2">
+                <AlertCircle className="w-3 h-3 text-text-tertiary" />
+                <span className="font-mono text-xxs text-text-tertiary">
                   SELECT REASON <span className="text-phosphor-red">*</span>
                 </span>
               </label>
               
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-2 gap-1.5">
                 {reasons.map((reason) => (
                   <button
                     key={reason.code}
@@ -219,7 +193,7 @@ export function FalseCallModal({
                       setError('');
                     }}
                     className={cn(
-                      "p-3 text-left border transition-all",
+                      "p-2 text-left border transition-all",
                       selectedReason === reason.code
                         ? isMissedDefect
                           ? "bg-phosphor-red/10 border-phosphor-red text-phosphor-red"
@@ -227,37 +201,27 @@ export function FalseCallModal({
                         : "bg-terminal border-surface-border text-text-secondary hover:border-text-tertiary"
                     )}
                   >
-                    <p className="font-mono text-xs font-bold truncate">{reason.name}</p>
+                    <p className="font-mono text-xxs font-bold truncate">{reason.name}</p>
                   </button>
                 ))}
               </div>
-
-              {/* Selected reason description */}
-              {selectedReasonData && (
-                <p className="mt-2 font-mono text-xs text-text-tertiary italic">
-                  "{selectedReasonData.description}"
-                </p>
-              )}
             </div>
 
             {/* Notes */}
             <div>
-              <label className="flex items-center gap-2 mb-2">
-                <MessageSquare className="w-4 h-4 text-text-tertiary" />
-                <span className="font-mono text-xs text-text-tertiary">
-                  ADDITIONAL NOTES {(selectedReason === 'OTHER' || selectedReason === 'OTHER_DEFECT') && <span className="text-phosphor-red">*</span>}
+              <label className="flex items-center gap-1 mb-1">
+                <MessageSquare className="w-3 h-3 text-text-tertiary" />
+                <span className="font-mono text-xxs text-text-tertiary">
+                  NOTES {(selectedReason === 'OTHER' || selectedReason === 'OTHER_DEFECT') && <span className="text-phosphor-red">*</span>}
                 </span>
               </label>
               <textarea
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                placeholder={isMissedDefect 
-                  ? "Describe the defect you found (location, type)..." 
-                  : "Optional notes for this false call..."
-                }
-                rows={3}
+                placeholder="Optional notes..."
+                rows={2}
                 className={cn(
-                  "w-full px-3 py-2 bg-terminal border font-mono text-sm",
+                  "w-full px-2 py-1.5 bg-terminal border font-mono text-xs",
                   "placeholder:text-text-tertiary text-text-primary",
                   "focus:outline-none",
                   isMissedDefect ? "focus:border-phosphor-red" : "focus:border-phosphor-amber",
@@ -276,12 +240,12 @@ export function FalseCallModal({
           </div>
 
           {/* Actions */}
-          <div className="flex items-center gap-3 px-6 py-4 bg-terminal border-t border-surface-border">
+          <div className="flex items-center gap-2 px-4 py-3 bg-terminal border-t border-surface-border">
             <button
               onClick={onClose}
               disabled={isProcessing}
               className={cn(
-                "flex-1 h-12 font-display text-sm font-bold tracking-wider",
+                "flex-1 h-10 font-display text-xs font-bold tracking-wider",
                 "border border-surface-border text-text-secondary",
                 "hover:border-text-tertiary transition-colors",
                 "disabled:opacity-50 disabled:cursor-not-allowed"
@@ -294,8 +258,8 @@ export function FalseCallModal({
               onClick={handleSubmit}
               disabled={isProcessing || !selectedReason}
               className={cn(
-                "flex-1 h-12 flex items-center justify-center gap-2",
-                "font-display text-sm font-bold tracking-wider",
+                "flex-1 h-10 flex items-center justify-center gap-2",
+                "font-display text-xs font-bold tracking-wider",
                 "transition-all",
                 "disabled:opacity-50 disabled:cursor-not-allowed",
                 isMissedDefect
@@ -305,13 +269,13 @@ export function FalseCallModal({
             >
               {isProcessing ? (
                 <>
-                  <div className="w-4 h-4 border-2 border-void border-t-transparent animate-spin" />
+                  <div className="w-3 h-3 border-2 border-void border-t-transparent animate-spin" />
                   <span>SUBMITTING...</span>
                 </>
               ) : (
                 <>
-                  <Send className="w-4 h-4" />
-                  <span>{isMissedDefect ? 'REJECT BOARD' : 'SUBMIT & CONTINUE'}</span>
+                  <Send className="w-3 h-3" />
+                  <span>{isMissedDefect ? 'REJECT' : 'SUBMIT'}</span>
                 </>
               )}
             </button>

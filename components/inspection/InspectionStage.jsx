@@ -4,40 +4,23 @@
  * InspectionStage Component
  * Shows loading/progress animation during inspection capture and processing
  * 
- * Stages:
- * 1. idle - Waiting for board
- * 2. unit_coming - Board detected
- * 3. camera_capture_top - Capturing TOP side
- * 4. ai_processing_top - AI processing TOP
- * 5. pcb_flipping - Flipping PCB
- * 6. camera_capture_bottom - Capturing BOTTOM side
- * 7. ai_processing_bottom - AI processing BOTTOM
- * 8. inspection_complete - Ready for review
+ * Stages (dev.py):
+ * 1. start - Board incoming
+ * 2. running - AI processing
+ * 3. done - Ready for review
  */
 
 import { cn } from '@/lib/utils'
-import { Loader2, Camera, Cpu, RotateCw, CheckCircle, Clock, Box } from 'lucide-react'
+import { Loader2, Camera, Cpu, CheckCircle, Clock, Box } from 'lucide-react'
 
 const STAGE_CONFIG = {
   'idle': { icon: Clock, color: 'text-text-tertiary', label: 'Idle', shortLabel: 'Idle' },
-  'unit_coming': { icon: Box, color: 'text-phosphor-cyan', label: 'Board Incoming', shortLabel: 'Board' },
-  'camera_capture_top': { icon: Camera, color: 'text-phosphor-cyan', label: 'Capture TOP', shortLabel: 'Cap TOP' },
-  'ai_processing_top': { icon: Cpu, color: 'text-phosphor-amber', label: 'Process TOP', shortLabel: 'Proc TOP' },
-  'pcb_flipping': { icon: RotateCw, color: 'text-phosphor-amber', label: 'Flipping', shortLabel: 'Flip' },
-  'camera_capture_bottom': { icon: Camera, color: 'text-phosphor-cyan', label: 'Capture BOTTOM', shortLabel: 'Cap BOT' },
-  'ai_processing_bottom': { icon: Cpu, color: 'text-phosphor-amber', label: 'Process BOTTOM', shortLabel: 'Proc BOT' },
-  'inspection_complete': { icon: CheckCircle, color: 'text-phosphor-green', label: 'Complete', shortLabel: 'Done' }
+  'start': { icon: Box, color: 'text-phosphor-cyan', label: 'Board Incoming', shortLabel: 'Board' },
+  'running': { icon: Cpu, color: 'text-phosphor-amber', label: 'Processing', shortLabel: 'Process' },
+  'done': { icon: CheckCircle, color: 'text-phosphor-green', label: 'Complete', shortLabel: 'Done' }
 }
 
-const STAGE_ORDER = [
-  'unit_coming',
-  'camera_capture_top',
-  'ai_processing_top',
-  'pcb_flipping',
-  'camera_capture_bottom',
-  'ai_processing_bottom',
-  'inspection_complete'
-]
+const STAGE_ORDER = ['start', 'running', 'done']
 
 export function InspectionStage({ stage, className }) {
   const { status, stageName, message, stageIndex, totalStages } = stage
@@ -102,7 +85,7 @@ export function InspectionStage({ stage, className }) {
           <Icon className={cn(
             "w-16 h-16 transition-colors",
             config.color,
-            !isComplete && (stageName === 'pcb_flipping' || stageName.includes('processing')) && "animate-spin"
+            !isComplete && stageName === 'running' && "animate-spin"
           )} />
         </div>
         
@@ -141,37 +124,34 @@ export function InspectionStage({ stage, className }) {
         Stage {stageIndex} of {totalStages}
       </p>
 
-      {/* Stage Progress Dots with Alternating Labels */}
-      <div className="flex items-center gap-2">
+      {/* Stage Progress Dots */}
+      <div className="flex items-center gap-6">
         {STAGE_ORDER.map((key, index) => {
           const stageNum = index + 1
           const isActive = stageNum === stageIndex
           const isPast = stageNum < stageIndex
           const stageConfig = STAGE_CONFIG[key]
-          const labelOnTop = index % 2 === 0 // Alternate: even=top, odd=bottom
           
           return (
             <div
               key={key}
               className="flex flex-col items-center"
             >
-              {/* Label on top (for even indices) */}
-              {labelOnTop && (
-                <span
-                  className={cn(
-                    "text-xxs font-mono mb-1 whitespace-nowrap",
-                    isActive ? "text-phosphor-amber font-bold" : 
-                    isPast ? "text-phosphor-green" : "text-text-tertiary"
-                  )}
-                >
-                  {stageConfig?.shortLabel}
-                </span>
-              )}
+              {/* Label */}
+              <span
+                className={cn(
+                  "text-xs font-mono mb-2 whitespace-nowrap",
+                  isActive ? "text-phosphor-amber font-bold" : 
+                  isPast ? "text-phosphor-green" : "text-text-tertiary"
+                )}
+              >
+                {stageConfig?.shortLabel}
+              </span>
               
               {/* Icon */}
               <div
                 className={cn(
-                  "w-10 h-10 rounded-full flex items-center justify-center transition-all border-2",
+                  "w-12 h-12 rounded-full flex items-center justify-center transition-all border-2",
                   isActive && "bg-phosphor-amber/20 border-phosphor-amber scale-110",
                   isPast && "bg-phosphor-green/20 border-phosphor-green",
                   !isActive && !isPast && "bg-terminal border-surface-border"
@@ -179,27 +159,15 @@ export function InspectionStage({ stage, className }) {
                 title={stageConfig?.label}
               >
                 {isPast ? (
-                  <CheckCircle className="w-5 h-5 text-phosphor-green" />
+                  <CheckCircle className="w-6 h-6 text-phosphor-green" />
                 ) : (
                   <stageConfig.icon className={cn(
-                    "w-5 h-5",
-                    isActive ? stageConfig.color : "text-text-tertiary"
+                    "w-6 h-6",
+                    isActive ? stageConfig.color : "text-text-tertiary",
+                    isActive && stageName === 'running' && "animate-spin"
                   )} />
                 )}
               </div>
-              
-              {/* Label on bottom (for odd indices) */}
-              {!labelOnTop && (
-                <span
-                  className={cn(
-                    "text-xxs font-mono mt-1 whitespace-nowrap",
-                    isActive ? "text-phosphor-amber font-bold" : 
-                    isPast ? "text-phosphor-green" : "text-text-tertiary"
-                  )}
-                >
-                  {stageConfig?.shortLabel}
-                </span>
-              )}
             </div>
           )
         })}

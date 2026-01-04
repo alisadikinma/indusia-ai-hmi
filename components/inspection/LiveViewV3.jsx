@@ -50,6 +50,7 @@ import { getInspectionResult } from '@/lib/services/imageService'
 
 // Constants
 const NG_REVIEW_TIMEOUT_SECONDS = 15 // Timeout for NG review → auto NG
+const PASS_DISPLAY_DELAY_MS = 2000 // Display PASS result for 2 seconds before auto-proceed
 const DEV_MODE = process.env.NODE_ENV === 'development'
 
 export function LiveViewV3({
@@ -162,7 +163,10 @@ export function LiveViewV3({
     try {
       // 1. Send to AI Backend (triggers PLC)
       if (currentInspection) {
-        const result = await confirmInspection(operatorDecision)
+        const result = await confirmInspection(operatorDecision, {
+          falseCallReason: falseCallData?.reason,
+          comment: falseCallData?.notes
+        })
         if (!result.success) {
           console.error('[LiveView] Confirm failed:', result.error)
           // Continue anyway for local updates
@@ -317,9 +321,13 @@ export function LiveViewV3({
     }
 
     if (aiResult === 'GOOD') {
-      // AI says PASS → auto proceed immediately (conveyor continues)
-      processedInspectionRef.current = inspectionId
-      submitDecision('GOOD')
+      // AI says PASS → delay to show result, then auto proceed
+      const timeoutId = setTimeout(() => {
+        processedInspectionRef.current = inspectionId
+        submitDecision('GOOD')
+      }, PASS_DISPLAY_DELAY_MS)
+      
+      return () => clearTimeout(timeoutId)
     } else if (aiResult === 'NG') {
       // AI says FAIL → start review countdown
       setReviewCountdown(NG_REVIEW_TIMEOUT_SECONDS)
@@ -528,8 +536,8 @@ export function LiveViewV3({
     )
   }
 
-  // Actions disabled?
-  const actionsDisabled = !isOperator || isConfirming || isPaused || !activeInspection
+  // Actions disabled? Only enable when AI says FAIL (NG)
+  const actionsDisabled = !isOperator || isConfirming || isPaused || !activeInspection || aiResult !== 'NG'
 
   // ============================================
   // Render
@@ -590,21 +598,11 @@ export function LiveViewV3({
 
         </div>
 
-        {/* Center: WO Info + Status */}
+        {/* Center: Board ID only */}
         <div className="flex items-center gap-4">
-          {/* Work Order */}
-          {workOrder && (
-            <div className="flex items-center gap-2 px-4 py-2 bg-terminal border border-surface-border">
-              <Package className="w-4 h-4 text-text-tertiary" />
-              <div>
-                <p className="font-mono text-xxs text-text-tertiary">WORK ORDER</p>
-                <p className="font-mono text-sm font-bold text-phosphor-cyan">{workOrder.woNumber}</p>
-              </div>
-            </div>
-          )}
-
           {/* Board ID */}
           <div className="flex items-center gap-2 px-4 py-2 bg-terminal border border-surface-border">
+            <Package className="w-4 h-4 text-text-tertiary" />
             <div>
               <p className="font-mono text-xxs text-text-tertiary">BOARD</p>
               <p className="font-mono text-sm font-bold text-text-primary">
@@ -616,27 +614,7 @@ export function LiveViewV3({
             </div>
           </div>
 
-          {/* AI Result Status */}
-          <div className={cn(
-            "flex items-center gap-2 px-4 py-2 border",
-            aiResult === 'NG' && "bg-phosphor-red/10 border-phosphor-red/50",
-            aiResult === 'GOOD' && "bg-phosphor-green/10 border-phosphor-green/50",
-            aiResult === 'WAITING' && "bg-terminal border-surface-border"
-          )}>
-            {aiResult === 'NG' && <AlertTriangle className="w-5 h-5 text-phosphor-red" />}
-            {aiResult === 'GOOD' && <CheckCircle2 className="w-5 h-5 text-phosphor-green" />}
-            {aiResult === 'WAITING' && <Clock className="w-5 h-5 text-text-tertiary" />}
-            <span className={cn(
-              "font-display font-bold text-sm tracking-wider",
-              aiResult === 'NG' && "text-phosphor-red",
-              aiResult === 'GOOD' && "text-phosphor-green",
-              aiResult === 'WAITING' && "text-text-tertiary"
-            )}>
-              {aiResult === 'NG' ? 'NG DETECTED' : aiResult === 'GOOD' ? 'GOOD' : 'WAITING'}
-            </span>
-          </div>
-
-          {/* NG Review Countdown */}
+          {/* NG Review Countdown - only show when AI FAIL */}
           {aiResult === 'NG' && activeInspection && (
             <div className={cn(
               "flex items-center gap-2 px-3 py-2 border",
@@ -871,25 +849,6 @@ export function LiveViewV3({
                 : hardwareStatus.plcs?.length > 0
                   ? "bg-phosphor-red animate-pulse"
                   : "bg-surface-border"
-            )} />
-          </div>
-
-          {/* AI Backend Connection */}
-          <div className={cn(
-            "flex items-center gap-2 px-3 py-1.5 border",
-            isConnected 
-              ? "border-phosphor-cyan/50 bg-phosphor-cyan/5" 
-              : "border-surface-border bg-surface-border/10"
-          )}>
-            {isConnected ? (
-              <Wifi className="w-4 h-4 text-phosphor-cyan" />
-            ) : (
-              <WifiOff className="w-4 h-4 text-text-tertiary" />
-            )}
-            <span className="font-mono text-xs text-text-secondary">AI</span>
-            <div className={cn(
-              "w-2 h-2 rounded-full",
-              isConnected ? "bg-phosphor-cyan" : "bg-surface-border"
             )} />
           </div>
         </div>

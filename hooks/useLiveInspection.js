@@ -492,7 +492,7 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
   // Confirm Inspection (Operator Decision)
   // ============================================
 
-  const confirmInspection = useCallback(async (operatorDecision) => {
+  const confirmInspection = useCallback(async (operatorDecision, options = {}) => {
     if (!currentInspection) {
       return { success: false, error: 'No active inspection' }
     }
@@ -503,7 +503,11 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
       const result = await postConfirm(
         currentInspection.inspectionId,
         operatorDecision,
-        currentInspection.decision
+        currentInspection.decision,
+        {
+          falseCallReason: options.falseCallReason,
+          comment: options.comment
+        }
       )
 
       if (result.success) {
