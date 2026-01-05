@@ -54,6 +54,7 @@ import { VolumeControl } from './VolumeControl'
 // Services
 import { saveInspection } from '@/lib/services/inspectionService'
 import { getInspectionResult } from '@/lib/services/imageService'
+import { authFetch } from '@/lib/utils/authFetch'
 
 // Constants
 const NG_REVIEW_TIMEOUT_SECONDS = 15 // Timeout for NG review → auto NG
@@ -256,9 +257,8 @@ export function LiveViewV3({
           const overrideType = activeInspection.decision === 'PASS' ? 'MISSED_DEFECT' : 'FALSE_POSITIVE'
           
           // Step 1: Save images to LOCAL storage
-          const uploadResponse = await fetch('/api/inspection/upload-false-call', {
+          const uploadResponse = await authFetch('/api/inspection/upload-false-call', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               inspection: activeInspection,
               workOrder,
@@ -278,9 +278,8 @@ export function LiveViewV3({
           }
           
           // Step 2: Create Override record for Manager review
-          const overrideResponse = await fetch('/api/overrides', {
+          const overrideResponse = await authFetch('/api/overrides', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               board_id: boardId,
               section_id: sectionId,
@@ -292,8 +291,9 @@ export function LiveViewV3({
               operator_notes: falseCallData?.notes || '',
               operator_id: user?.id,
               operator_name: user?.name,
-              // Local paths for sync later
-              image_url: localPaths?.top?.[0] || '',
+              // Local paths for cloud sync after approval
+              local_image_path: localPaths?.top?.[0]?.path || localPaths?.bottom?.[0]?.path || '',
+              local_image_paths: JSON.stringify(localPaths), // Store all paths
             })
           })
           

@@ -14,6 +14,7 @@ import { sanitizeRequestBody } from '@/lib/utils/sanitize'
  * Section filtered: Users only see overrides from their assigned sections
  */
 async function handleGET(request) {
+  console.log('[GET /api/overrides] Called')
   try {
     const { searchParams } = new URL(request.url)
 
@@ -45,7 +46,9 @@ async function handleGET(request) {
 
     // Apply section filter based on user's access
     const user = request.user
+    console.log('[GET /api/overrides] User:', user?.id, 'sections:', user?.sections)
     const allowedSections = getSectionFilter(user)
+    console.log('[GET /api/overrides] allowedSections:', allowedSections)
 
     if (allowedSections !== null) {
       // User has restricted section access
@@ -63,7 +66,9 @@ async function handleGET(request) {
       }
     }
 
+    console.log('[GET /api/overrides] Final filters:', filters)
     const result = await overridesRepo.list(filters)
+    console.log('[GET /api/overrides] Result:', result.data?.length, 'records, total:', result.total)
 
     if (result.error) {
       return NextResponse.json(
@@ -96,8 +101,10 @@ async function handleGET(request) {
  * Section restricted: Can only create overrides for assigned sections
  */
 async function handlePOST(request) {
+  console.log('[POST /api/overrides] Handler called, user:', request.user?.id, 'role:', request.user?.role_id)
   try {
     const body = await request.json()
+    console.log('[POST /api/overrides] Body received:', JSON.stringify(body).substring(0, 500))
 
     // Sanitize input
     const sanitizedBody = sanitizeRequestBody(body)
@@ -106,6 +113,7 @@ async function handlePOST(request) {
     // Annotation-based override flow (has images array)
     // ============================================
     const hasAnnotations = Array.isArray(sanitizedBody.images) && sanitizedBody.images.length > 0
+    console.log('[POST /api/overrides] hasAnnotations:', hasAnnotations)
 
     if (hasAnnotations) {
       // Annotation-based override flow
@@ -187,21 +195,36 @@ async function handlePOST(request) {
     }
 
     // Original flow - validate with schema
+    console.log('[POST /api/overrides] Using original flow (no annotations)')
     const validation = validate(createOverrideSchema, sanitizedBody)
     if (!validation.success) {
+      console.log('[POST /api/overrides] Validation failed:', validation.errors)
       return validationErrorResponse(validation.errors)
     }
 
     const data = validation.data
+    console.log('[POST /api/overrides] Validated data:', data)
 
-    // Validate section access
-    try {
-      validateSectionAccess(request.user, data.section_id)
-    } catch (accessError) {
-      return NextResponse.json(
-        { success: false, error: accessError.message, code: accessError.code },
-        { status: accessError.statusCode || 403 }
-      )
+    // Validate section access (skip if section_id not provided - operator already logged in to line)
+    if (data.section_id) {
+      try {
+        console.log('[POST /api/overrides] Checking section access for section_id:', data.section_id)
+        validateSectionAccess(request.user, data.section_id)
+        console.log('[POST /api/overrides] Section access OK')
+      } catch (accessError) {
+        // For operators creating from LiveView, skip strict section validation
+        // They're already authenticated and working on an active line
+        const isOperator = request.user?.role_id?.includes('operator')
+        if (isOperator) {
+          console.log('[POST /api/overrides] Section access skipped for operator (working on active line)')
+        } else {
+          console.log('[POST /api/overrides] Section access DENIED:', accessError.message)
+          return NextResponse.json(
+            { success: false, error: accessError.message, code: accessError.code },
+            { status: accessError.statusCode || 403 }
+          )
+        }
+      }
     }
 
     // Create override

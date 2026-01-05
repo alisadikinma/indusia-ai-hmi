@@ -57,6 +57,7 @@ export default function OverrideApprovalsPage() {
   }
 
   const allowedSectionIds = user?.sections || [];
+  const userRole = user?.role || '';
 
   const filteredOverrides = overrides
     .filter((override) => {

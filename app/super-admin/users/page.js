@@ -5,7 +5,8 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { useUsers } from '@/hooks/useUsers';
 import { useToast } from '@/hooks/useToast';
-import { roles, sections } from '@/data/masterData';
+import { useSections } from '@/hooks/useSections';
+import { roles } from '@/data/masterData';
 import SectionHeader from '@/components/common/SectionHeader';
 import StatusBadge from '@/components/common/StatusBadge';
 import Drawer from '@/components/Drawer';
@@ -17,6 +18,7 @@ export default function UsersManagementPage() {
   const { user } = useAuth();
   const { showToast } = useToast();
   const { users, create, update, remove, disable, enable, resetPassword } = useUsers();
+  const { sections, loading: sectionsLoading } = useSections();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
@@ -352,17 +354,23 @@ export default function UsersManagementPage() {
               <div>
                 <label className="block text-sm font-medium text-indusia-text mb-2">Sections</label>
                 <div className="space-y-2">
-                  {sections.map(sec => (
-                    <label key={sec.id} className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={formData.sections.includes(sec.id)}
-                        onChange={() => toggleSection(sec.id)}
-                        className="w-4 h-4 text-indusia-primary"
-                      />
-                      <span className="text-sm text-indusia-text">{sec.name}</span>
-                    </label>
-                  ))}
+                  {sectionsLoading ? (
+                    <p className="text-sm text-indusia-textMuted">Loading sections...</p>
+                  ) : sections.length === 0 ? (
+                    <p className="text-sm text-indusia-textMuted">No sections available</p>
+                  ) : (
+                    sections.map(sec => (
+                      <label key={sec.id} className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={formData.sections.includes(sec.id)}
+                          onChange={() => toggleSection(sec.id)}
+                          className="w-4 h-4 text-indusia-primary"
+                        />
+                        <span className="text-sm text-indusia-text">{sec.name}</span>
+                      </label>
+                    ))
+                  )}
                 </div>
                 {formErrors.sections && <p className="text-xs text-indusia-fail mt-1">{formErrors.sections}</p>}
               </div>
@@ -455,17 +463,23 @@ export default function UsersManagementPage() {
           <div>
             <label className="block text-sm font-medium text-indusia-text mb-2">Sections</label>
             <div className="space-y-2">
-              {sections.map(sec => (
-                <label key={sec.id} className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={formData.sections.includes(sec.id)}
-                    onChange={() => toggleSection(sec.id)}
-                    className="w-4 h-4 text-indusia-primary"
-                  />
-                  <span className="text-sm text-indusia-text">{sec.name}</span>
-                </label>
-              ))}
+              {sectionsLoading ? (
+                <p className="text-sm text-indusia-textMuted">Loading sections...</p>
+              ) : sections.length === 0 ? (
+                <p className="text-sm text-indusia-textMuted">No sections available</p>
+              ) : (
+                sections.map(sec => (
+                  <label key={sec.id} className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={formData.sections.includes(sec.id)}
+                      onChange={() => toggleSection(sec.id)}
+                      className="w-4 h-4 text-indusia-primary"
+                    />
+                    <span className="text-sm text-indusia-text">{sec.name}</span>
+                  </label>
+                ))
+              )}
             </div>
           </div>
 

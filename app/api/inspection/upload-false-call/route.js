@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 import fs from 'fs/promises'
 import path from 'path'
 
@@ -8,24 +7,20 @@ const LOCAL_STORAGE_PATH = process.env.FALSE_CALL_STORAGE_PATH || 'D:/Projects/i
 
 /**
  * POST /api/inspection/upload-false-call
- * Save false call images to LOCAL storage (not cloud)
- * Cloud sync happens later via Manager's "Sync to Cloud" action
+ * Save false call images to LOCAL storage only
+ * 
+ * Flow:
+ * 1. Operator confirms false call → images saved locally here
+ * 2. Override record created with local_image_path
+ * 3. Manager approves → added to sync_queue
+ * 4. Manager clicks "Sync to Cloud" → uploads to Supabase Storage
  */
 export async function POST(request) {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-  
   console.log('[UploadFalseCall] Saving to LOCAL storage...')
-  
-  if (!supabaseUrl || !supabaseKey) {
-    return NextResponse.json({ success: false, error: 'Missing Supabase credentials' }, { status: 500 })
-  }
-  
-  const supabase = createClient(supabaseUrl, supabaseKey)
   
   try {
     const body = await request.json()
-    const { inspection, workOrder, customerName, boardSequence, falseCallReason, inspectionResultId } = body
+    const { inspection, workOrder, customerName, boardSequence, falseCallReason } = body
     
     console.log('[UploadFalseCall] WO:', workOrder?.woNumber, 'Customer:', customerName)
 
@@ -44,7 +39,6 @@ export async function POST(request) {
     const reason = sanitize(falseCallReason)
 
     const savedPaths = { top: [], bottom: [] }
-    const pendingSync = [] // Track for cloud sync
     const errors = []
 
     // Helper: check if frame has defects (label=1)
@@ -105,12 +99,6 @@ export async function POST(request) {
       
       if (result.success) {
         savedPaths.top.push({ path: result.localPath, frameIndex: i })
-        pendingSync.push({
-          localPath: result.localPath,
-          cloudPath: `false-calls/${relativePath}`,
-          side: 'TOP',
-          frameIndex: i
-        })
       } else {
         errors.push(`TOP ${i + 1}: ${result.error}`)
       }
@@ -136,44 +124,8 @@ export async function POST(request) {
       
       if (result.success) {
         savedPaths.bottom.push({ path: result.localPath, frameIndex: i })
-        pendingSync.push({
-          localPath: result.localPath,
-          cloudPath: `false-calls/${relativePath}`,
-          side: 'BOTTOM',
-          frameIndex: i
-        })
       } else {
         errors.push(`BOTTOM ${i + 1}: ${result.error}`)
-      }
-    }
-
-    // Save pending sync records to database
-    if (pendingSync.length > 0) {
-      console.log(`[UploadFalseCall] Recording ${pendingSync.length} images for cloud sync...`)
-      try {
-        const { error: insertError } = await supabase
-          .from('pending_cloud_sync')
-          .insert(pendingSync.map(p => ({
-            local_path: p.localPath,
-            cloud_path: p.cloudPath,
-            side: p.side,
-            frame_index: p.frameIndex,
-            work_order_id: workOrder?.id,
-            wo_number: wo,
-            customer: customer,
-            reason: reason,
-            inspection_result_id: inspectionResultId,
-            status: 'pending',
-            created_at: now.toISOString()
-          })))
-        
-        if (insertError) {
-          console.error('[UploadFalseCall] Failed to record pending sync:', insertError)
-        } else {
-          console.log(`[UploadFalseCall] ✅ Recorded ${pendingSync.length} for cloud sync`)
-        }
-      } catch (dbErr) {
-        console.error('[UploadFalseCall] DB error:', dbErr)
       }
     }
 
@@ -193,9 +145,8 @@ export async function POST(request) {
     return NextResponse.json({
       success: totalSaved > 0,
       paths: savedPaths,
-      pendingSync: pendingSync.length,
       errors: errors.length > 0 ? errors : undefined,
-      message: `Saved ${totalSaved} images locally. Use "Sync to Cloud" to upload.`
+      message: `Saved ${totalSaved} images locally`
     })
 
   } catch (error) {

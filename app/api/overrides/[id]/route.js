@@ -1,11 +1,12 @@
 import { NextResponse } from 'next/server'
 import * as overridesRepo from '@/lib/repos/overridesRepo'
 import { syncQueueRepo } from '@/lib/repos/syncQueueRepo'
+import { withAuth } from '@/lib/auth/apiAuth'
 
 /**
  * GET /api/overrides/:id
  */
-export async function GET(request, { params }) {
+async function handleGET(request, { params }) {
   try {
     const { id } = params
     const result = await overridesRepo.getById(id)
@@ -29,8 +30,12 @@ export async function GET(request, { params }) {
 /**
  * PATCH /api/overrides/:id
  * Body: { action: 'approve'|'reject', reviewerId, reviewerName, reviewNotes }
+ * 
+ * Flow when APPROVED:
+ * 1. Update override status → 'approved'
+ * 2. Add to sync_queue for cloud upload
  */
-export async function PATCH(request, { params }) {
+async function handlePATCH(request, { params }) {
   try {
     const { id } = params
     const body = await request.json()
@@ -58,20 +63,42 @@ export async function PATCH(request, { params }) {
         body.reviewNotes || ''
       )
       
-      // Add to sync queue for cloud upload
+      // Add to sync_queue for cloud upload (after approval)
       if (result.data) {
         try {
-          await syncQueueRepo.addToQueue({
-            inspectionId: null, // Override-based, not inspection
-            boardId: result.data.boardId || result.data.board_id,
-            customerName: result.data.customerName || 'Unknown',
-            sectionName: result.data.sectionName || 'Unknown',
-            lineName: result.data.lineName || 'Unknown',
-            defectType: result.data.defectType || result.data.defect_type || 'false_call',
-            localImagePath: result.data.imageUrl || result.data.image_url,
-            recordType: 'override',
-          })
-          console.log('[PATCH /api/overrides] Added to sync queue:', id)
+          // Parse local_image_paths if available
+          let imagePaths = []
+          if (result.data.localImagePaths) {
+            try {
+              const parsed = JSON.parse(result.data.localImagePaths)
+              if (parsed.top) imagePaths.push(...parsed.top.map(p => ({ ...p, side: 'TOP' })))
+              if (parsed.bottom) imagePaths.push(...parsed.bottom.map(p => ({ ...p, side: 'BOTTOM' })))
+            } catch (e) {
+              console.warn('[PATCH /api/overrides] Failed to parse localImagePaths:', e)
+            }
+          }
+          
+          // Fallback to single path
+          if (imagePaths.length === 0 && result.data.localImagePath) {
+            imagePaths.push({ path: result.data.localImagePath, side: 'TOP' })
+          }
+          
+          // Add each image to sync queue
+          for (const img of imagePaths) {
+            await syncQueueRepo.addToQueue({
+              inspectionId: null,
+              boardId: result.data.boardId,
+              customerName: result.data.customerName || 'Unknown',
+              sectionName: result.data.sectionName || 'Unknown',
+              lineName: result.data.lineName || 'Unknown',
+              defectType: result.data.overrideType || result.data.defectType || 'false_call',
+              localImagePath: img.path,
+              recordType: 'override',
+              overrideId: id,
+            })
+          }
+          
+          console.log('[PATCH /api/overrides] Added to sync queue:', id, imagePaths.length, 'images')
         } catch (syncError) {
           console.warn('[PATCH /api/overrides] Sync queue add failed:', syncError)
           // Don't fail the approval
@@ -101,3 +128,6 @@ export async function PATCH(request, { params }) {
     )
   }
 }
+
+export const GET = withAuth('overrides:read')(handleGET)
+export const PATCH = withAuth('overrides:review')(handlePATCH)
