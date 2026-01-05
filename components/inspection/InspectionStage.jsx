@@ -24,7 +24,10 @@ import {
   RotateCcw,
   Circle,
   Scan,
-  CircleDot
+  CircleDot,
+  Pause,
+  Square,
+  Play
 } from 'lucide-react'
 
 // Icon mapping from backend icon names to lucide components
@@ -61,7 +64,7 @@ const STAGE_MESSAGES = {
   'done': 'Ready for review'
 }
 
-export function InspectionStage({ stage, stageDefinitions, className }) {
+export function InspectionStage({ stage, stageDefinitions, processStatus, onResume, className }) {
   const { status, stageName, message, stageIndex } = stage
   
   // Use provided stages or fallback
@@ -72,7 +75,130 @@ export function InspectionStage({ stage, stageDefinitions, className }) {
   // Get icon component from name
   const getIcon = (iconName) => ICON_MAP[iconName] || ICON_MAP['default']
 
-  // Idle state - waiting for board
+  // Machine PAUSED state
+  if (processStatus === 'PAUSED') {
+    return (
+      <div className={cn(
+        "flex flex-col items-center justify-center h-full",
+        className
+      )}>
+        <div className="relative mb-8">
+          {/* Amber pulsing ring */}
+          <div className="absolute inset-[-8px] w-[144px] h-[144px] rounded-full border-2 border-phosphor-amber/30 animate-pulse" />
+          
+          {/* Main icon container */}
+          <div className="relative w-32 h-32 border-2 border-phosphor-amber/50 rounded-full flex items-center justify-center bg-phosphor-amber/10 backdrop-blur-sm">
+            <Pause className="w-14 h-14 text-phosphor-amber" />
+          </div>
+        </div>
+        
+        <p className="text-2xl text-phosphor-amber font-display font-bold tracking-wider mb-2">
+          MACHINE PAUSED
+        </p>
+        <p className="text-sm text-text-tertiary font-mono mb-6">
+          Inspection process is paused
+        </p>
+
+        {/* Resume Button */}
+        <button
+          onClick={onResume}
+          className={cn(
+            "flex items-center gap-3 px-8 py-4 border-2 transition-all",
+            "font-display text-sm font-bold tracking-wider",
+            "border-phosphor-green text-phosphor-green",
+            "hover:bg-phosphor-green hover:text-void"
+          )}
+        >
+          <Play className="w-5 h-5" />
+          RESUME
+        </button>
+      </div>
+    )
+  }
+
+  // Machine STOPPED state
+  if (processStatus === 'STOPPED') {
+    return (
+      <div className={cn(
+        "flex flex-col items-center justify-center h-full",
+        className
+      )}>
+        <div className="relative mb-8">
+          {/* Red ring */}
+          <div className="absolute inset-[-8px] w-[144px] h-[144px] rounded-full border-2 border-phosphor-red/30" />
+          
+          {/* Main icon container */}
+          <div className="relative w-32 h-32 border-2 border-phosphor-red/50 rounded-full flex items-center justify-center bg-phosphor-red/10 backdrop-blur-sm">
+            <Square className="w-14 h-14 text-phosphor-red" />
+          </div>
+        </div>
+        
+        <p className="text-2xl text-phosphor-red font-display font-bold tracking-wider mb-2">
+          MACHINE STOPPED
+        </p>
+        <p className="text-sm text-text-tertiary font-mono mb-6">
+          Click RUN to start inspection
+        </p>
+
+        {/* Start Button */}
+        <button
+          onClick={onResume}
+          className={cn(
+            "flex items-center gap-3 px-8 py-4 border-2 transition-all",
+            "font-display text-sm font-bold tracking-wider",
+            "border-phosphor-green text-phosphor-green",
+            "hover:bg-phosphor-green hover:text-void"
+          )}
+        >
+          <Play className="w-5 h-5" />
+          START
+        </button>
+      </div>
+    )
+  }
+
+  // Machine IDLE state - not started yet
+  if (processStatus === 'IDLE') {
+    return (
+      <div className={cn(
+        "flex flex-col items-center justify-center h-full",
+        className
+      )}>
+        <div className="relative mb-8">
+          {/* Gray ring */}
+          <div className="absolute inset-[-8px] w-[144px] h-[144px] rounded-full border-2 border-surface-border/50" />
+          
+          {/* Main icon container */}
+          <div className="relative w-32 h-32 border-2 border-surface-border rounded-full flex items-center justify-center bg-terminal/50 backdrop-blur-sm">
+            <Play className="w-14 h-14 text-text-tertiary" />
+          </div>
+        </div>
+        
+        <p className="text-2xl text-text-secondary font-display font-bold tracking-wider mb-2">
+          READY TO START
+        </p>
+        <p className="text-sm text-text-tertiary font-mono mb-6">
+          Press RUN to begin inspection
+        </p>
+
+        {/* Start Button */}
+        <button
+          onClick={onResume}
+          className={cn(
+            "flex items-center gap-3 px-8 py-4 border-2 transition-all",
+            "font-display text-sm font-bold tracking-wider",
+            "border-phosphor-green text-phosphor-green",
+            "hover:bg-phosphor-green hover:text-void"
+          )}
+        >
+          <Play className="w-5 h-5" />
+          START
+        </button>
+      </div>
+    )
+  }
+
+  // Idle state - waiting for board (RUNNING but no board yet)
   if (status === 'idle') {
     return (
       <div className={cn(

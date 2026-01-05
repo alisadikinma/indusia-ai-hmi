@@ -74,16 +74,29 @@ function ProgressBar({ current, total, className }) {
  */
 function ActionMenu({ workOrder, onStart, onComplete, onEdit, onDelete }) {
   const [open, setOpen] = useState(false);
+  const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
+  const buttonRef = useState(null);
 
   const canStart = workOrder.status === 'draft' || workOrder.status === 'ready';
   const canComplete = workOrder.status === 'active';
-  const canEdit = workOrder.status === 'draft';
+  const canEdit = ['draft', 'ready', 'active'].includes(workOrder.status);
   const canDelete = workOrder.status === 'draft';
+
+  const handleToggle = (e) => {
+    if (!open) {
+      const rect = e.currentTarget.getBoundingClientRect();
+      setMenuPosition({
+        top: rect.bottom + 4,
+        left: rect.right - 160, // 160 = menu width
+      });
+    }
+    setOpen(!open);
+  };
 
   return (
     <div className="relative">
       <button
-        onClick={() => setOpen(!open)}
+        onClick={handleToggle}
         className={cn(
           "p-2 rounded-lg transition-colors",
           "hover:bg-indusia-surface text-indusia-textMuted hover:text-indusia-text"
@@ -98,11 +111,14 @@ function ActionMenu({ workOrder, onStart, onComplete, onEdit, onDelete }) {
             className="fixed inset-0 z-40" 
             onClick={() => setOpen(false)} 
           />
-          <div className={cn(
-            "absolute right-0 top-full mt-1 z-50",
-            "min-w-[160px] bg-indusia-surface border border-indusia-border rounded-lg shadow-xl",
-            "py-1"
-          )}>
+          <div 
+            className={cn(
+              "fixed z-50",
+              "w-[160px] bg-indusia-surface border border-indusia-border rounded-lg shadow-xl",
+              "py-1"
+            )}
+            style={{ top: menuPosition.top, left: menuPosition.left }}
+          >
             {canStart && (
               <button
                 onClick={() => { onStart(workOrder); setOpen(false); }}

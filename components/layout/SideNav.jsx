@@ -20,7 +20,8 @@ import {
   PanelLeftClose,
   PanelLeft,
   Zap,
-  FileText
+  FileText,
+  LogOut
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useI18n } from '@/hooks/useI18n';
@@ -38,11 +39,13 @@ function normalizeRole(roleValue) {
 export default function SideNav() {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, logout, isOperator, activeLineId, activeLineName, hasActiveLine } = useAuth();
+  const { user, logout, activeLineId, activeLineName, hasActiveLine, hasMenuAccess } = useAuth();
   const { t } = useI18n();
   const { isCollapsed, isHidden, toggleCollapse } = useSidebar();
   const [currentTime, setCurrentTime] = useState('');
   const [systemUptime, setSystemUptime] = useState('00:00:00');
+  
+  const isOperator = user?.role === 'operator';
 
   // Real-time clock
   useEffect(() => {
@@ -92,44 +95,44 @@ export default function SideNav() {
       labelKey: 'nav.hmi',
       href: '/inspection/select-line',
       icon: ClipboardCheck,
-      roles: ['operator', 'manager', 'engineer', 'superadmin'],
+      menuId: 'menu_inspection',
       code: 'HMI',
-      isHMI: true, // Special flag for HMI item
+      isHMI: true,
     },
     {
       labelKey: 'nav.managerQueue',
       href: '/inspection/overrides',
       icon: AlertCircle,
-      roles: ['manager', 'superadmin'],
+      menuId: 'menu_overrides',
       code: 'MGR',
     },
     {
       labelKey: 'nav.masterData',
       href: '/engineering/master-data',
       icon: Database,
-      roles: ['engineer', 'superadmin'],
+      menuId: 'menu_engineering',
       code: 'ENG',
     },
     {
       labelKey: 'nav.workOrders',
       href: '/engineering/work-orders',
       icon: FileText,
-      roles: ['engineer', 'superadmin'],
+      menuId: 'menu_work_orders',
       code: 'WO',
     },
     {
       labelKey: 'nav.sync',
       href: '/settings/sync',
       icon: Cloud,
-      roles: ['manager', 'engineer', 'superadmin'],
+      menuId: 'menu_sync',
       code: 'SYN',
     },
     {
-      labelKey: 'nav.eventLog',
-      href: '/event-log',
-      icon: ScrollText,
-      roles: ['manager', 'engineer', 'superadmin'],
-      code: 'LOG',
+      labelKey: 'nav.falseCallReasons',
+      href: '/settings/false-call-reasons',
+      icon: AlertCircle,
+      menuId: 'menu_engineering',
+      code: 'FCR',
     },
   ];
 
@@ -138,18 +141,21 @@ export default function SideNav() {
       labelKey: 'nav.users',
       href: '/super-admin/users',
       icon: Users,
+      menuId: 'menu_users',
       code: 'USR',
     },
     {
       labelKey: 'nav.roles',
       href: '/super-admin/roles',
       icon: Shield,
+      menuId: 'menu_roles',
       code: 'ROL',
     },
     {
       labelKey: 'nav.permissions',
       href: '/super-admin/permissions',
       icon: Lock,
+      menuId: 'menu_permissions',
       code: 'PRM',
     },
   ];
@@ -162,8 +168,14 @@ export default function SideNav() {
   const isHMIActive = pathname.startsWith('/inspection/live') || 
                       pathname.startsWith('/inspection/select-line');
 
+  // Filter items based on database permissions
   const visibleItems = navItems.filter((item) =>
-    user && userRole && item.roles.includes(userRole)
+    user && hasMenuAccess(item.menuId)
+  );
+
+  // Filter super admin items based on database permissions
+  const visibleSuperAdminItems = superAdminItems.filter((item) =>
+    user && hasMenuAccess(item.menuId)
   );
 
   const isSuperAdmin = userRole === 'superadmin';
@@ -364,8 +376,8 @@ export default function SideNav() {
           })}
         </div>
 
-        {/* Super Admin Section */}
-        {isSuperAdmin && (
+        {/* Super Admin Section - show if user has any admin menu access */}
+        {visibleSuperAdminItems.length > 0 && (
           <>
             <div className={cn("my-4 mx-4 divider-technical", isCollapsed && "mx-2")} />
 
@@ -381,7 +393,7 @@ export default function SideNav() {
             )}
 
             <div className="space-y-0.5 px-2">
-              {superAdminItems.map((item) => {
+              {visibleSuperAdminItems.map((item) => {
                 const Icon = item.icon;
                 const active = isActive(item.href);
 
@@ -425,86 +437,22 @@ export default function SideNav() {
         )}
       </nav>
 
-      {/* Active Session Banner - show when operator has active line */}
-      {isOperator && hasActiveLine && !isCollapsed && (
-        <div className="mx-2 mb-2 p-3 bg-phosphor-green/10 border border-phosphor-green/30">
-          <div className="flex items-center gap-2 mb-1">
-            <Zap className="w-4 h-4 text-phosphor-green" />
-            <span className="font-display text-xs font-bold text-phosphor-green">
-              SESSION ACTIVE
-            </span>
-          </div>
-          <p className="font-mono text-xs text-text-secondary">
-            {activeLineName || `Line ${activeLineId}`}
-          </p>
-        </div>
-      )}
-
       {/* User Panel */}
-      {user && (
+      {!isCollapsed && (
         <div className="border-t border-surface-border bg-terminal">
-          {/* User Info */}
-          <div className={cn("px-4 py-3 border-b border-surface-border", isCollapsed && "px-2")}>
-            <div className={cn("flex items-center gap-3", isCollapsed && "justify-center")}>
-              {/* Avatar */}
-              <div className="w-8 h-8 border border-phosphor-amber/50 bg-void flex items-center justify-center flex-shrink-0">
-                <span className="font-mono text-xs text-phosphor-amber">
-                  {user.name?.charAt(0).toUpperCase() || 'U'}
-                </span>
+          {/* System Info */}
+          <div className="px-4 py-3">
+            <div className="grid grid-cols-2 gap-2">
+              <div className="bg-void border border-surface-border p-2">
+                <p className="font-mono text-xxs text-text-tertiary">VERSION</p>
+                <p className="font-mono text-xs text-phosphor-amber">v1.0.0</p>
               </div>
-
-              {/* Details - hide when collapsed */}
-              {!isCollapsed && (
-                <div className="flex-1 min-w-0">
-                  <p className="font-display text-sm text-text-primary truncate">
-                    {user.name}
-                  </p>
-                  <div className="flex items-center gap-2">
-                    <span className="badge badge-amber">
-                      {displayRole}
-                    </span>
-                  </div>
-                </div>
-              )}
+              <div className="bg-void border border-surface-border p-2">
+                <p className="font-mono text-xxs text-text-tertiary">BUILD</p>
+                <p className="font-mono text-xs text-phosphor-amber">2026.01</p>
+              </div>
             </div>
           </div>
-
-          {/* System Info - hide when collapsed */}
-          {!isCollapsed && (
-            <div className="px-4 py-3">
-              <div className="grid grid-cols-2 gap-2 mb-3">
-                <div className="bg-void border border-surface-border p-2">
-                  <p className="font-mono text-xxs text-text-tertiary">VERSION</p>
-                  <p className="font-mono text-xs text-phosphor-amber">v1.0.0</p>
-                </div>
-                <div className="bg-void border border-surface-border p-2">
-                  <p className="font-mono text-xxs text-text-tertiary">BUILD</p>
-                  <p className="font-mono text-xs text-phosphor-amber">2024.01</p>
-                </div>
-              </div>
-
-              {/* Logout */}
-              <button
-                onClick={logout}
-                className="w-full py-2 btn-ghost font-display text-xs tracking-widest hover:border-phosphor-red hover:text-phosphor-red"
-              >
-                TERMINATE SESSION
-              </button>
-            </div>
-          )}
-
-          {/* Collapsed logout button */}
-          {isCollapsed && (
-            <div className="px-2 py-3">
-              <button
-                onClick={logout}
-                className="w-full py-2 btn-ghost font-display text-xs hover:border-phosphor-red hover:text-phosphor-red"
-                title="Logout"
-              >
-                <ChevronLeft className="w-4 h-4 mx-auto" />
-              </button>
-            </div>
-          )}
         </div>
       )}
     </aside>

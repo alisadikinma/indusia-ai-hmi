@@ -10,87 +10,13 @@ import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { useSidebar } from '@/context/SidebarContext';
+import { authFetch } from '@/lib/utils/authFetch';
 import { 
   Radio, Activity, ChevronRight, Factory, 
   Users, Clock, AlertTriangle, CheckCircle2,
-  Cpu, Zap, Settings, Lock, Eye, Menu
+  Cpu, Zap, Settings, Lock, Eye, Menu, LogOut, ChevronDown
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-
-// Mock data - akan diganti dengan API call
-const mockSections = [
-  { id: 'sec-1', name: 'Section A - SMT', customerId: 'cust-1' },
-  { id: 'sec-2', name: 'Section B - THT', customerId: 'cust-1' },
-  { id: 'sec-3', name: 'Section C - Assembly', customerId: 'cust-2' },
-];
-
-const mockLines = [
-  { 
-    id: '1', 
-    name: 'SMT Line 01', 
-    sectionId: 'sec-1',
-    status: 'running',
-    currentBoard: 'PCB-2024-0847',
-    operatorId: 'user_other',
-    operatorName: 'John D.',
-    shift: 'Day Shift',
-    inspected: 1247,
-    defects: 23,
-    yield: 98.2
-  },
-  { 
-    id: '2', 
-    name: 'SMT Line 02', 
-    sectionId: 'sec-1',
-    status: 'idle',
-    currentBoard: null,
-    operatorId: null,
-    operatorName: null,
-    shift: 'Day Shift',
-    inspected: 0,
-    defects: 0,
-    yield: 0
-  },
-  { 
-    id: '3', 
-    name: 'SMT Line 03', 
-    sectionId: 'sec-1',
-    status: 'running',
-    currentBoard: 'PCB-2024-0851',
-    operatorId: null,
-    operatorName: null,
-    shift: 'Day Shift',
-    inspected: 892,
-    defects: 12,
-    yield: 98.7
-  },
-  { 
-    id: '4', 
-    name: 'THT Line 01', 
-    sectionId: 'sec-2',
-    status: 'maintenance',
-    currentBoard: null,
-    operatorId: null,
-    operatorName: null,
-    shift: null,
-    inspected: 0,
-    defects: 0,
-    yield: 0
-  },
-  { 
-    id: '5', 
-    name: 'THT Line 02', 
-    sectionId: 'sec-2',
-    status: 'running',
-    currentBoard: 'PCB-2024-0849',
-    operatorId: null,
-    operatorName: null,
-    shift: 'Day Shift',
-    inspected: 654,
-    defects: 8,
-    yield: 98.8
-  },
-];
 
 function LineCard({ line, section, isSelected, onSelect, currentUserId, isOperator }) {
   const statusConfig = {
@@ -281,12 +207,78 @@ function LineCard({ line, section, isSelected, onSelect, currentUserId, isOperat
 
 export default function SelectLinePage() {
   const router = useRouter();
-  const { user, isOperator, activeLineId, activeLineName, setActiveLine, hasActiveLine } = useAuth();
+  const { user, isOperator, activeLineId, activeLineName, setActiveLine, hasActiveLine, hasMenuAccess, logout } = useAuth();
   const { showSidebar, isHidden } = useSidebar();
   const [selectedSection, setSelectedSection] = useState('all');
   const [selectedLine, setSelectedLine] = useState(null);
   const [currentTime, setCurrentTime] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  
+  // Data from API
+  const [sections, setSections] = useState([]);
+  const [lines, setLines] = useState([]);
+  const [dataLoading, setDataLoading] = useState(true);
+
+  // Fetch sections and lines from API
+  useEffect(() => {
+    const fetchData = async () => {
+      setDataLoading(true);
+      try {
+        const [sectionsRes, linesRes] = await Promise.all([
+          authFetch('/api/master-data/sections'),
+          authFetch('/api/master-data/lines')
+        ]);
+        
+        const sectionsData = await sectionsRes.json();
+        const linesData = await linesRes.json();
+        
+        if (sectionsData.success) {
+          setSections(sectionsData.data || []);
+        }
+        
+        if (linesData.success) {
+          // Map lines to include display properties
+          const mappedLines = (linesData.data || []).map(line => ({
+            id: line.id,
+            name: line.name,
+            sectionId: line.sectionId || line.section_id,
+            customerId: line.customerId || line.customer_id,
+            status: 'idle', // Default status
+            currentBoard: null,
+            operatorId: null,
+            operatorName: null,
+            shift: null,
+            inspected: 0,
+            defects: 0,
+            yield: 0
+          }));
+          setLines(mappedLines);
+        }
+      } catch (error) {
+        console.error('Failed to fetch data:', error);
+      } finally {
+        setDataLoading(false);
+      }
+    };
+    
+    if (user) {
+      fetchData();
+    }
+  }, [user]);
+
+  // Check access via database permissions
+  if (!user || !hasMenuAccess('menu_inspection')) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <AlertTriangle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+          <h2 className="text-lg font-semibold text-text-primary mb-2">Access Denied</h2>
+          <p className="text-text-secondary">You don&apos;t have permission to access this page.</p>
+        </div>
+      </div>
+    );
+  }
 
   useEffect(() => {
     const updateTime = () => {
@@ -305,11 +297,11 @@ export default function SelectLinePage() {
   }, [isOperator, hasActiveLine, activeLineId, router]);
 
   const filteredLines = useMemo(() => {
-    if (selectedSection === 'all') return mockLines;
-    return mockLines.filter(line => line.sectionId === selectedSection);
-  }, [selectedSection]);
+    if (selectedSection === 'all') return lines;
+    return lines.filter(line => line.sectionId === selectedSection);
+  }, [selectedSection, lines]);
 
-  const getSection = (sectionId) => mockSections.find(s => s.id === sectionId);
+  const getSection = (sectionId) => sections.find(s => s.id === sectionId);
 
   const handleStartInspection = () => {
     if (!selectedLine) return;
@@ -383,16 +375,44 @@ export default function SelectLinePage() {
             <span className="font-mono text-sm text-phosphor-green">ONLINE</span>
           </div>
           <span className="font-mono text-sm text-phosphor-amber">{currentTime}</span>
-          <div className="flex items-center gap-3 px-4 py-2 bg-terminal border border-surface-border">
-            <div className="w-8 h-8 border border-phosphor-amber/50 bg-void flex items-center justify-center">
-              <span className="font-mono text-xs text-phosphor-amber">
-                {user.name?.charAt(0).toUpperCase() || 'U'}
-              </span>
-            </div>
-            <div>
-              <p className="font-display text-sm text-text-primary">{user.name}</p>
-              <p className="font-mono text-xxs text-text-tertiary uppercase">{user.role}</p>
-            </div>
+          
+          {/* User Profile Dropdown */}
+          <div className="relative">
+            <button
+              onClick={() => setShowUserMenu(!showUserMenu)}
+              className="flex items-center gap-3 px-4 py-2 bg-terminal border border-surface-border hover:border-phosphor-amber/50 transition-colors"
+            >
+              <div className="w-8 h-8 border border-phosphor-amber/50 bg-void flex items-center justify-center">
+                <span className="font-mono text-xs text-phosphor-amber">
+                  {user.name?.charAt(0).toUpperCase() || 'U'}
+                </span>
+              </div>
+              <div className="text-left">
+                <p className="font-display text-sm text-text-primary">{user.name}</p>
+                <p className="font-mono text-xxs text-text-tertiary uppercase">{user.role}</p>
+              </div>
+              <ChevronDown size={16} className={cn(
+                "text-text-tertiary transition-transform",
+                showUserMenu && "rotate-180"
+              )} />
+            </button>
+            
+            {/* Dropdown Menu */}
+            {showUserMenu && (
+              <div className="absolute right-0 top-full mt-1 w-48 bg-panel border border-surface-border shadow-lg z-50">
+                <button
+                  onClick={async () => {
+                    setShowUserMenu(false);
+                    await logout();
+                    router.push('/login');
+                  }}
+                  className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-surface-border/30 transition-colors text-phosphor-red"
+                >
+                  <LogOut size={16} />
+                  <span className="font-mono text-sm">LOGOUT</span>
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </header>
@@ -438,7 +458,7 @@ export default function SelectLinePage() {
             >
               ALL LINES
             </button>
-            {mockSections.map(section => (
+            {sections.map(section => (
               <button
                 key={section.id}
                 onClick={() => setSelectedSection(section.id)}
@@ -457,17 +477,34 @@ export default function SelectLinePage() {
 
         {/* Lines Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4 mb-8">
-          {filteredLines.map(line => (
-            <LineCard
-              key={line.id}
-              line={line}
-              section={getSection(line.sectionId)}
-              isSelected={selectedLine?.id === line.id}
-              onSelect={setSelectedLine}
-              currentUserId={user?.id}
-              isOperator={isOperator}
-            />
-          ))}
+          {dataLoading ? (
+            <div className="col-span-full flex items-center justify-center py-12">
+              <div className="text-center">
+                <div className="w-8 h-8 border-2 border-phosphor-amber border-t-transparent animate-spin mx-auto mb-4" />
+                <p className="font-mono text-sm text-text-tertiary">Loading production lines...</p>
+              </div>
+            </div>
+          ) : filteredLines.length === 0 ? (
+            <div className="col-span-full flex items-center justify-center py-12">
+              <div className="text-center">
+                <Factory className="w-12 h-12 text-text-tertiary mx-auto mb-4" />
+                <p className="font-mono text-sm text-text-tertiary">No production lines found</p>
+                <p className="font-mono text-xs text-text-tertiary mt-1">Add lines in Master Data management</p>
+              </div>
+            </div>
+          ) : (
+            filteredLines.map(line => (
+              <LineCard
+                key={line.id}
+                line={line}
+                section={getSection(line.sectionId)}
+                isSelected={selectedLine?.id === line.id}
+                onSelect={setSelectedLine}
+                currentUserId={user?.id}
+                isOperator={isOperator}
+              />
+            ))
+          )}
         </div>
 
         {/* Bottom Action Bar */}

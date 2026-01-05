@@ -110,9 +110,9 @@ function Toast({ show, type = 'success', message, onClose }) {
 }
 
 export default function WorkOrdersPage() {
-  const { user } = useAuth();
+  const { user, hasMenuAccess, isLoading: authLoading } = useAuth();
   
-  // Data hooks
+  // ALL HOOKS MUST BE CALLED BEFORE ANY CONDITIONAL RETURNS
   const { 
     workOrders, 
     loading, 
@@ -132,7 +132,7 @@ export default function WorkOrdersPage() {
     complete 
   } = useWorkOrderMutations();
 
-  // UI State
+  // UI State - must be before conditional returns
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingWO, setEditingWO] = useState(null);
   const [confirmDialog, setConfirmDialog] = useState({ open: false, type: null, workOrder: null });
@@ -145,6 +145,31 @@ export default function WorkOrdersPage() {
     setToast({ show: true, type, message });
     setTimeout(() => setToast({ show: false, type: 'success', message: '' }), 4000);
   }, []);
+
+  // Show loading while auth is loading
+  if (authLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <div className="w-8 h-8 border-2 border-indusia-primary border-t-transparent animate-spin mx-auto mb-4" />
+          <p className="text-indusia-textMuted">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Check access via database permissions
+  if (!user || !hasMenuAccess('menu_work_orders')) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <AlertTriangle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+          <h2 className="text-lg font-semibold text-indusia-text mb-2">Access Denied</h2>
+          <p className="text-indusia-textMuted">You don&apos;t have permission to access this page.</p>
+        </div>
+      </div>
+    );
+  }
 
   // Handle create work order
   const handleCreate = async (data) => {

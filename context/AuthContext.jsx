@@ -25,10 +25,28 @@ const AuthContext = createContext(null);
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [menuPermissions, setMenuPermissions] = useState([]);
   
   // Active inspection session
   const [activeLineId, setActiveLineId] = useState(null);
   const [activeLineName, setActiveLineName] = useState(null);
+
+  // Fetch menu permissions from database
+  const fetchMenuPermissions = async (roleId) => {
+    if (!roleId) return [];
+    try {
+      const res = await fetch(`/api/auth/permissions?roleId=${roleId}`);
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && json.data) {
+          return json.data; // Array of menu_ids
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to fetch menu permissions:', err);
+    }
+    return [];
+  };
 
   // Normalize user object to ensure consistent role field
   const normalizeUser = (userData) => {
@@ -78,6 +96,12 @@ export function AuthProvider({ children }) {
                 selectedBoardId: selections.selectedBoardId || null,
               });
               setUser(restoredUser);
+              
+              // Fetch menu permissions from database
+              const roleId = json.data.role_id || json.data.roleId || `role_${restoredUser.role}`;
+              const permissions = await fetchMenuPermissions(roleId);
+              setMenuPermissions(permissions);
+              
               setIsLoading(false);
               return;
             }
@@ -91,7 +115,13 @@ export function AuthProvider({ children }) {
       if (storedUser) {
         try {
           const parsed = JSON.parse(storedUser);
-          setUser(normalizeUser(parsed));
+          const normalizedUser = normalizeUser(parsed);
+          setUser(normalizedUser);
+          
+          // Fetch menu permissions
+          const roleId = parsed.role_id || parsed.roleId || `role_${normalizedUser.role}`;
+          const permissions = await fetchMenuPermissions(roleId);
+          setMenuPermissions(permissions);
         } catch (error) {
           console.error('Failed to parse stored user:', error);
           localStorage.removeItem('indusia_user');
@@ -131,6 +161,11 @@ export function AuthProvider({ children }) {
       localStorage.setItem('indusia_user_id', loggedInUser.id);
       localStorage.setItem('indusia_user', JSON.stringify(loggedInUser));
 
+      // Fetch menu permissions from database
+      const roleId = json.data.user.role_id || json.data.user.roleId || `role_${loggedInUser.role}`;
+      const permissions = await fetchMenuPermissions(roleId);
+      setMenuPermissions(permissions);
+
       return { success: true, user: loggedInUser };
     } catch (err) {
       console.warn('API login failed, trying mock auth:', err.message);
@@ -149,6 +184,12 @@ export function AuthProvider({ children }) {
         setUser(loggedInUser);
         localStorage.setItem('indusia_user_id', loggedInUser.id);
         localStorage.setItem('indusia_user', JSON.stringify(loggedInUser));
+        
+        // Fetch menu permissions from database
+        const roleId = mockUser.role_id || `role_${loggedInUser.role}`;
+        const permissions = await fetchMenuPermissions(roleId);
+        setMenuPermissions(permissions);
+        
         return { success: true, user: loggedInUser };
       }
 
@@ -220,6 +261,7 @@ export function AuthProvider({ children }) {
       console.warn('API logout failed:', err.message);
     }
     setUser(null);
+    setMenuPermissions([]);
     setActiveLineId(null);
     setActiveLineName(null);
     localStorage.removeItem('indusia_user');
@@ -253,14 +295,18 @@ export function AuthProvider({ children }) {
   }, [user]);
 
   // Check if user has permission for a menu item
-  const hasPermission = useCallback((menuId) => {
+  const hasMenuAccess = useCallback((menuId) => {
     if (!user) return false;
+    
+    // Normalize role from all possible sources
+    const normalizedRole = user.role || normalizeRole(user.role_id) || normalizeRole(user.roleId);
+    
     // Superadmin has all permissions
-    if (user.role === 'superadmin') return true;
-    // TODO: Check role_menu_permissions when implemented
-    // For now, return true for all authenticated users
-    return true;
-  }, [user]);
+    if (normalizedRole === 'superadmin') return true;
+    
+    // Check from database permissions
+    return menuPermissions.includes(menuId);
+  }, [user, menuPermissions]);
 
   // Refresh user data from API
   const refreshUser = useCallback(async () => {
@@ -297,7 +343,8 @@ export function AuthProvider({ children }) {
     updateSelections,
     updateSelectedBoard,
     changePassword,
-    hasPermission,
+    hasMenuAccess,
+    menuPermissions,
     refreshUser,
     // Active line session
     activeLineId,

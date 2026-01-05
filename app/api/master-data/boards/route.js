@@ -1,5 +1,5 @@
-import { NextResponse } from 'next/server'
-import * as masterDataRepo from '@/lib/repos/masterDataRepo'
+import { NextResponse } from 'next/server';
+import { supabase } from '@/lib/supabaseClient';
 
 /**
  * GET /api/master-data/boards
@@ -7,34 +7,106 @@ import * as masterDataRepo from '@/lib/repos/masterDataRepo'
  */
 export async function GET(request) {
   try {
-    const { searchParams } = new URL(request.url)
-    const filters = {
-      customerId: searchParams.get('customer_id')
+    const { searchParams } = new URL(request.url);
+    const customerId = searchParams.get('customer_id');
+
+    let query = supabase
+      .from('boards')
+      .select(`
+        id, 
+        name, 
+        customer_id,
+        customers:customer_id (id, name, code)
+      `)
+      .order('name');
+
+    if (customerId) {
+      query = query.eq('customer_id', customerId);
     }
 
-    // Remove null values
-    Object.keys(filters).forEach(key => {
-      if (filters[key] === null) delete filters[key]
-    })
+    const { data, error } = await query;
 
-    const result = await masterDataRepo.getBoards(filters)
+    if (error) throw error;
 
-    if (result.error) {
-      return NextResponse.json(
-        { success: false, error: result.error },
-        { status: 500 }
-      )
-    }
+    // Transform to camelCase
+    const transformed = (data || []).map(item => ({
+      id: item.id,
+      name: item.name,
+      customerId: item.customer_id,
+      customer: item.customers ? {
+        id: item.customers.id,
+        name: item.customers.name,
+        code: item.customers.code,
+      } : null,
+    }));
 
     return NextResponse.json({
       success: true,
-      data: result.data,
-      total: result.data?.length || 0
-    })
+      data: transformed,
+      total: transformed.length
+    });
   } catch (error) {
     return NextResponse.json(
       { success: false, error: error.message },
       { status: 500 }
-    )
+    );
+  }
+}
+
+/**
+ * POST /api/master-data/boards
+ * Create new board
+ */
+export async function POST(request) {
+  try {
+    const body = await request.json();
+
+    if (!body.name?.trim()) {
+      return NextResponse.json(
+        { success: false, error: 'Board name is required' },
+        { status: 400 }
+      );
+    }
+
+    // Accept both camelCase and snake_case
+    const customerId = body.customerId || body.customer_id;
+
+    if (!customerId) {
+      return NextResponse.json(
+        { success: false, error: 'Customer ID is required' },
+        { status: 400 }
+      );
+    }
+
+    // Generate ID if not provided
+    const boardId = body.id || `board_${Date.now()}`;
+
+    const { data, error } = await supabase
+      .from('boards')
+      .insert({
+        id: boardId,
+        name: body.name.trim(),
+        customer_id: customerId
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    return NextResponse.json({
+      success: true,
+      data: {
+        id: data.id,
+        name: data.name,
+        customerId: data.customer_id
+      }
+    }, { status: 201 });
+
+  } catch (error) {
+    console.error('Error creating board:', error);
+    return NextResponse.json(
+      { success: false, error: error.message },
+      { status: 500 }
+    );
   }
 }

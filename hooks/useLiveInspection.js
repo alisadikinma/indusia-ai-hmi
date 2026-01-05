@@ -17,9 +17,10 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { 
   createAiBackendService, 
   startSession, 
-  runSession,
-  pauseSession,
-  stopSession,
+  // TODO: Uncomment when AI Backend endpoints ready
+  // runSession,
+  // pauseSession,
+  // stopSession,
   getSessionStatus,
   postConfirm,
   checkHealth,
@@ -481,10 +482,24 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
     
     setIsControlling(true)
     try {
-      const result = await runSession()
+      // TODO: Uncomment when AI Backend endpoint ready
+      // const result = await runSession()
+      
+      // Stub response for now
+      const result = { success: true, data: { status: 'RUNNING' } }
+      console.log('[LiveInspection] runSession (stub) - endpoint not ready')
+      
       if (result.success) {
         setProcessStatus('RUNNING')
         setSessionStatus(result.data)
+        
+        // Reconnect SSE if disconnected
+        if (serviceRef.current && !serviceRef.current.isConnected()) {
+          console.log('[LiveInspection] 🔌 Reconnecting SSE (RUN)')
+          await serviceRef.current.connect()
+          setIsConnected(true)
+        }
+        
         // Hardware goes ONLINE when process runs
         setHardwareStatus(prev => ({
           ...prev,
@@ -495,7 +510,7 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
             ? prev.plcs.map(p => ({ ...p, status: 'ONLINE' }))
             : [{ id: 'plc-01', name: 'Conveyor PLC', status: 'ONLINE' }]
         }))
-        console.log('[LiveInspection] Process started, hardware ONLINE')
+        console.log('[LiveInspection] Process started, SSE connected, hardware ONLINE')
       } else {
         console.error('[LiveInspection] Failed to start process:', result.error)
       }
@@ -513,12 +528,25 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
     
     setIsControlling(true)
     try {
-      const result = await pauseSession()
+      // TODO: Uncomment when AI Backend endpoint ready
+      // const result = await pauseSession()
+      
+      // Stub response for now
+      const result = { success: true, data: { status: 'PAUSED' } }
+      console.log('[LiveInspection] pauseSession (stub) - endpoint not ready')
+      
       if (result.success) {
         setProcessStatus('PAUSED')
         setSessionStatus(result.data)
-        // Hardware stays ONLINE when paused
-        console.log('[LiveInspection] Process paused')
+        
+        // Disconnect SSE when paused
+        if (serviceRef.current) {
+          console.log('[LiveInspection] 🔌 Disconnecting SSE (PAUSED)')
+          serviceRef.current.disconnect()
+          setIsConnected(false)
+        }
+        
+        console.log('[LiveInspection] Process paused, SSE disconnected')
       } else {
         console.error('[LiveInspection] Failed to pause process:', result.error)
       }
@@ -536,18 +564,46 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
     
     setIsControlling(true)
     try {
-      const result = await stopSession()
+      // TODO: Uncomment when AI Backend endpoint ready
+      // const result = await stopSession()
+      
+      // Stub response for now
+      const result = { success: true, data: { status: 'STOPPED' } }
+      console.log('[LiveInspection] stopSession (stub) - endpoint not ready')
+      
       if (result.success) {
         setProcessStatus('STOPPED')
         setSessionStatus(result.data)
         sessionStartedRef.current = false
+        
+        // Disconnect SSE when stopped
+        if (serviceRef.current) {
+          console.log('[LiveInspection] 🔌 Disconnecting SSE (STOPPED)')
+          serviceRef.current.disconnect()
+          setIsConnected(false)
+        }
+        
+        // Clear current inspection
+        setCurrentInspection(null)
+        
+        // Reset stage to idle
+        setInspectionStage({
+          status: 'idle',
+          stageName: 'idle',
+          message: 'Waiting for board...',
+          stageIndex: 0,
+          totalStages: stageDefinitions.length,
+          icon: 'hourglass'
+        })
+        
         // Hardware goes OFFLINE when process stops
         setHardwareStatus(prev => ({
           ...prev,
           cameras: prev.cameras.map(c => ({ ...c, status: 'OFFLINE' })),
           plcs: prev.plcs.map(p => ({ ...p, status: 'OFFLINE' }))
         }))
-        console.log('[LiveInspection] Process stopped, hardware OFFLINE')
+        
+        console.log('[LiveInspection] Process stopped, SSE disconnected, hardware OFFLINE')
       } else {
         console.error('[LiveInspection] Failed to stop process:', result.error)
       }
@@ -558,7 +614,7 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
     } finally {
       setIsControlling(false)
     }
-  }, [isControlling])
+  }, [isControlling, stageDefinitions.length])
 
   // ============================================
   // Confirm Inspection (Operator Decision)

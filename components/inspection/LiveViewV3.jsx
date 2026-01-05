@@ -30,23 +30,26 @@ import { useRouter } from 'next/navigation'
 import { 
   Wifi, WifiOff, Clock, User, Package, Pause, Play,
   CheckCircle2, XCircle, AlertTriangle, AlertCircle,
-  Volume2, VolumeX, Square, FlaskConical, Menu,
+  Square, FlaskConical, Menu, LogOut, ChevronDown,
   Layers, RefreshCw, Settings, Camera, Cpu, RotateCcw,
-  Loader2, Activity, CircleDot
+  Loader2, Activity, CircleDot, FileText
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useSidebar } from '@/context/SidebarContext'
+import { useAuth } from '@/context/AuthContext'
 import { useActiveWorkOrder, useWorkOrderMutations } from '@/hooks/useWorkOrders'
 import { useLiveInspection } from '@/hooks/useLiveInspection'
+import { useAudioFeedback } from '@/hooks/useAudioFeedback'
 
 // Components
 import { InspectionStage } from './InspectionStage'
 import { InspectionResult } from './InspectionResult'
 import { FalseCallModal } from './FalseCallModal'
+import { VolumeControl } from './VolumeControl'
 
 // Services
 import { saveInspection } from '@/lib/services/inspectionService'
-import { getInspectionResult, uploadFalseCallImages } from '@/lib/services/imageService'
+import { getInspectionResult } from '@/lib/services/imageService'
 
 // Constants
 const NG_REVIEW_TIMEOUT_SECONDS = 15 // Timeout for NG review → auto NG
@@ -78,6 +81,7 @@ export function LiveViewV3({
 }) {
   const router = useRouter()
   const { showSidebar } = useSidebar()
+  const { logout } = useAuth()
   
   // Work Order hooks
   const { workOrder: fetchedWO, hasActiveWO: fetchedHasWO, loading: woLoading, refresh: refreshWO } = useActiveWorkOrder(lineId)
@@ -115,11 +119,22 @@ export function LiveViewV3({
     onError: (err) => console.error('[LiveView] SSE Error:', err)
   })
 
+  // Audio feedback hook
+  const { 
+    volume, 
+    isMuted, 
+    announceResult, 
+    setVolume, 
+    toggleMute, 
+    testAudio 
+  } = useAudioFeedback()
+
   // UI State
   const [isPaused, setIsPaused] = useState(false)
-  const [soundEnabled, setSoundEnabled] = useState(true)
   const [showFalseCallModal, setShowFalseCallModal] = useState(false)
   const [pendingDecision, setPendingDecision] = useState(null) // 'GOOD' or 'NG'
+  const [showUserMenu, setShowUserMenu] = useState(false)
+  const userMenuRef = useRef(null)
   
   // Timer states for NG review timeout
   const [reviewCountdown, setReviewCountdown] = useState(NG_REVIEW_TIMEOUT_SECONDS)
@@ -152,6 +167,19 @@ export function LiveViewV3({
     const interval = setInterval(updateTime, 1000)
     return () => clearInterval(interval)
   }, [])
+
+  // Close user menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target)) {
+        setShowUserMenu(false)
+      }
+    }
+    if (showUserMenu) {
+      document.addEventListener('mousedown', handleClickOutside)
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [showUserMenu])
 
   // Calculate yield from WO data
   const yieldPercent = workOrder?.completedQty > 0 
@@ -196,25 +224,63 @@ export function LiveViewV3({
       const isFalseCall = (activeInspection.decision === 'PASS' && operatorDecision === 'NG') ||
                          (activeInspection.decision === 'FAIL' && operatorDecision === 'GOOD')
 
-      // 2.5. Upload false call images to Supabase Storage
+      // 2.5. If false call: save images locally + create Override for Manager review
       if (isFalseCall && activeInspection.results) {
         try {
-          const uploadResult = await uploadFalseCallImages({
-            inspection: activeInspection,
-            workOrder,
-            customerName: workOrder?.customer?.name || workOrder?.customerName || 'UNKNOWN',
-            boardSequence: String(boardSequenceRef.current + 1).padStart(4, '0'),
-            falseCallReason: falseCallData?.reason || 'UNSPECIFIED'
+          const boardId = `${workOrder.woNumber}-${String(boardSequenceRef.current + 1).padStart(4, '0')}`
+          const overrideType = activeInspection.decision === 'PASS' ? 'MISSED_DEFECT' : 'FALSE_POSITIVE'
+          
+          // Step 1: Save images to LOCAL storage
+          const uploadResponse = await fetch('/api/inspection/upload-false-call', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              inspection: activeInspection,
+              workOrder,
+              customerName: workOrder?.customer?.name || workOrder?.customerName || 'UNKNOWN',
+              boardSequence: String(boardSequenceRef.current + 1).padStart(4, '0'),
+              falseCallReason: falseCallData?.reason || 'UNSPECIFIED'
+            })
           })
           
+          const uploadResult = await uploadResponse.json()
+          const localPaths = uploadResult.success ? uploadResult.paths : {}
+          
           if (uploadResult.success) {
-            console.log('[LiveView] False call images uploaded:', uploadResult.paths)
+            console.log('[LiveView] ✅ False call images saved locally:', localPaths)
           } else {
-            console.warn('[LiveView] False call image upload failed:', uploadResult.error)
+            console.warn('[LiveView] ⚠️ Local save failed:', uploadResult.error)
           }
-        } catch (uploadError) {
-          console.warn('[LiveView] False call image upload error:', uploadError)
-          // Continue anyway - don't block the flow
+          
+          // Step 2: Create Override record for Manager review
+          const overrideResponse = await fetch('/api/overrides', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              board_id: boardId,
+              section_id: sectionId,
+              line_id: lineId,
+              customer_id: customerId,
+              override_type: overrideType,
+              defect_type: overrideType, // Required by schema
+              reason: falseCallData?.reason || 'UNSPECIFIED',
+              operator_notes: falseCallData?.notes || '',
+              operator_id: user?.id,
+              operator_name: user?.name,
+              // Local paths for sync later
+              image_url: localPaths?.top?.[0] || '',
+            })
+          })
+          
+          const overrideResult = await overrideResponse.json()
+          
+          if (overrideResult.success) {
+            console.log('[LiveView] ✅ Override created for Manager review:', overrideResult.data?.id)
+          } else {
+            console.warn('[LiveView] ⚠️ Override creation failed:', overrideResult.error)
+          }
+        } catch (err) {
+          console.warn('[LiveView] ⚠️ False call process error:', err)
         }
       }
 
@@ -359,6 +425,18 @@ export function LiveViewV3({
   // - AI GOOD (PASS): auto proceed immediately
   // - AI NG (FAIL): 15s timeout for review → auto NG
   // ============================================
+  
+  // Audio announcement when inspection result arrives
+  useEffect(() => {
+    if (!activeInspection || !isOperator) return
+    
+    // Check if already processed this inspection
+    const inspectionId = activeInspection.inspection_id || activeInspection.inspectionId
+    if (processedInspectionRef.current === inspectionId) return
+    
+    // Announce result via voice
+    announceResult(aiResult)
+  }, [activeInspection, aiResult, isOperator, announceResult])
   
   useEffect(() => {
     // Clear timer when no inspection or paused
@@ -575,7 +653,7 @@ export function LiveViewV3({
               onClick={onExit}
               className="px-6 py-3 bg-phosphor-red text-void font-display font-bold tracking-wider hover:shadow-glow-red transition-all"
             >
-              EXIT
+              BACK
             </button>
             <button
               onClick={refreshWO}
@@ -623,44 +701,29 @@ export function LiveViewV3({
             </div>
           </div>
 
-          {/* Connection Status */}
-          <div className={cn(
-            "flex items-center gap-2 px-3 py-1.5 border",
-            isConnected 
-              ? "border-phosphor-green/50 bg-phosphor-green/10" 
-              : aiBackendAvailable === false
-                ? "border-phosphor-amber/50 bg-phosphor-amber/10"
-                : "border-phosphor-red/50 bg-phosphor-red/10"
-          )}>
-            {isConnected ? (
-              <Wifi className="w-4 h-4 text-phosphor-green" />
-            ) : isReconnecting ? (
-              <RefreshCw className="w-4 h-4 text-phosphor-amber animate-spin" />
-            ) : (
-              <WifiOff className="w-4 h-4 text-phosphor-red" />
-            )}
-            <span className={cn(
-              "font-mono text-xs font-bold",
-              isConnected ? "text-phosphor-green" : 
-              isReconnecting ? "text-phosphor-amber" : "text-phosphor-red"
-            )}>
-              {isConnected ? 'CONNECTED' : isReconnecting ? 'RECONNECTING' : 
-               aiBackendAvailable === false ? 'DEV MODE' : 'DISCONNECTED'}
-            </span>
-          </div>
-
         </div>
 
         {/* Center: Board ID only */}
         <div className="flex items-center gap-4">
-          {/* Board ID */}
+          {/* Work Order */}
+          <div className="flex items-center gap-2 px-4 py-2 bg-terminal border border-surface-border">
+            <FileText className="w-4 h-4 text-text-tertiary" />
+            <div>
+              <p className="font-mono text-xxs text-text-tertiary">WORK ORDER</p>
+              <p className="font-mono text-sm font-bold text-phosphor-cyan">
+                {workOrder?.woNumber || '---'}
+              </p>
+            </div>
+          </div>
+
+          {/* Board ID - show when WO selected (persist through pause/stop) */}
           <div className="flex items-center gap-2 px-4 py-2 bg-terminal border border-surface-border">
             <Package className="w-4 h-4 text-text-tertiary" />
             <div>
               <p className="font-mono text-xxs text-text-tertiary">BOARD</p>
               <p className="font-mono text-sm font-bold text-text-primary">
-                {activeInspection 
-                  ? `${workOrder?.woNumber}-${String(boardSequenceRef.current + 1).padStart(4, '0')}`
+                {workOrder?.woNumber
+                  ? `${workOrder.woNumber}-${String(boardSequenceRef.current + 1).padStart(4, '0')}`
                   : '---'
                 }
               </p>
@@ -697,23 +760,56 @@ export function LiveViewV3({
             </div>
           )}
 
-          <button
-            onClick={() => setSoundEnabled(!soundEnabled)}
-            className={cn(
-              "p-2 border transition-colors",
-              soundEnabled
-                ? "border-phosphor-amber text-phosphor-amber"
-                : "border-surface-border text-text-tertiary"
-            )}
-          >
-            {soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
-          </button>
+          {/* Volume Control */}
+          <VolumeControl
+            volume={volume}
+            isMuted={isMuted}
+            onVolumeChange={setVolume}
+            onMuteToggle={toggleMute}
+            onTest={testAudio}
+          />
 
           <span className="font-mono text-sm text-phosphor-amber">{currentTime}</span>
 
-          <div className="flex items-center gap-2 px-3 py-2 bg-terminal border border-surface-border">
-            <User className="w-4 h-4 text-text-tertiary" />
-            <span className="font-mono text-xs text-text-primary">{user?.name || 'Unknown'}</span>
+          {/* User Profile Dropdown */}
+          <div className="relative" ref={userMenuRef}>
+            <button
+              onClick={() => setShowUserMenu(!showUserMenu)}
+              className={cn(
+                "flex items-center gap-2 px-3 py-2 bg-terminal border transition-colors",
+                showUserMenu 
+                  ? "border-phosphor-cyan" 
+                  : "border-surface-border hover:border-text-tertiary"
+              )}
+            >
+              <User className="w-4 h-4 text-text-tertiary" />
+              <span className="font-mono text-xs text-text-primary">{user?.name || 'Unknown'}</span>
+              <ChevronDown className={cn(
+                "w-3 h-3 text-text-tertiary transition-transform",
+                showUserMenu && "rotate-180"
+              )} />
+            </button>
+
+            {/* Dropdown Menu */}
+            {showUserMenu && (
+              <div className="absolute right-0 top-full mt-1 w-48 bg-panel border border-surface-border shadow-lg z-50">
+                <div className="px-3 py-2 border-b border-surface-border">
+                  <p className="font-mono text-xs text-text-primary">{user?.name}</p>
+                  <p className="font-mono text-xxs text-text-tertiary capitalize">{user?.role || 'User'}</p>
+                </div>
+                <button
+                  onClick={() => {
+                    setShowUserMenu(false)
+                    logout()
+                    router.push('/login')
+                  }}
+                  className="w-full px-3 py-2 flex items-center gap-2 hover:bg-phosphor-red/10 transition-colors text-left"
+                >
+                  <LogOut className="w-4 h-4 text-phosphor-red" />
+                  <span className="font-mono text-xs text-phosphor-red">Logout</span>
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </header>
@@ -775,31 +871,6 @@ export function LiveViewV3({
             <Square className="w-4 h-4" />
             <span>STOP</span>
           </button>
-
-          {/* Machine Status Badge */}
-          <div className={cn(
-            "flex items-center gap-2 px-3 py-1.5 border ml-2",
-            processStatus === 'IDLE' && "border-surface-border bg-surface-border/10",
-            processStatus === 'READY' && "border-phosphor-cyan bg-phosphor-cyan/10",
-            processStatus === 'RUNNING' && "border-phosphor-green bg-phosphor-green/10",
-            processStatus === 'PAUSED' && "border-phosphor-amber bg-phosphor-amber/10",
-            processStatus === 'STOPPED' && "border-phosphor-red bg-phosphor-red/10"
-          )}>
-            {processStatus === 'RUNNING' && <Loader2 className="w-4 h-4 text-phosphor-green animate-spin" />}
-            {processStatus === 'PAUSED' && <Pause className="w-4 h-4 text-phosphor-amber" />}
-            {(processStatus === 'IDLE' || processStatus === 'STOPPED') && <CircleDot className="w-4 h-4 text-text-tertiary" />}
-            {processStatus === 'READY' && <CheckCircle2 className="w-4 h-4 text-phosphor-cyan" />}
-            <span className={cn(
-              "font-mono text-xs font-bold",
-              processStatus === 'IDLE' && "text-text-tertiary",
-              processStatus === 'READY' && "text-phosphor-cyan",
-              processStatus === 'RUNNING' && "text-phosphor-green",
-              processStatus === 'PAUSED' && "text-phosphor-amber",
-              processStatus === 'STOPPED' && "text-phosphor-red"
-            )}>
-              {processStatus}
-            </span>
-          </div>
         </div>
 
         {/* Center: Inspection Stage */}
@@ -921,6 +992,8 @@ export function LiveViewV3({
             <InspectionStage
               stage={activeStage}
               stageDefinitions={stageDefinitions}
+              processStatus={processStatus}
+              onResume={runProcess}
               className="flex-1 bg-panel rounded-lg border border-surface-border"
             />
           )}
@@ -1032,21 +1105,6 @@ export function LiveViewV3({
             <XCircle className="w-8 h-8" />
             <span>NG</span>
             <span className="font-mono text-sm opacity-60">(N)</span>
-          </button>
-        </div>
-
-        {/* Right: Exit Button Only */}
-        <div className="flex items-center gap-3">
-          <button
-            onClick={onExit}
-            className={cn(
-              "h-12 px-6 flex items-center gap-2 transition-colors",
-              "font-display text-sm font-bold tracking-wider",
-              "border border-phosphor-red text-phosphor-red hover:bg-phosphor-red hover:text-void"
-            )}
-          >
-            <Square className="w-4 h-4" />
-            <span>EXIT</span>
           </button>
         </div>
       </footer>

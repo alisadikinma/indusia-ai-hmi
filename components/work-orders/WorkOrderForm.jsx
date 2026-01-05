@@ -160,130 +160,132 @@ export function WorkOrderForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form onSubmit={handleSubmit} className="space-y-3">
       {/* Header */}
-      <div className="flex items-center justify-between pb-4 border-b border-indusia-border">
-        <h2 className="text-xl font-display font-bold text-indusia-text">
+      <div className="flex items-center justify-between pb-2 border-b border-indusia-border">
+        <h2 className="text-lg font-display font-bold text-indusia-text">
           {isEdit ? 'Edit Work Order' : 'Create Work Order'}
         </h2>
         <button
           type="button"
           onClick={onCancel}
-          className="p-2 text-indusia-textMuted hover:text-indusia-text transition-colors"
+          className="p-1 text-indusia-textMuted hover:text-indusia-text transition-colors"
         >
           <X className="w-5 h-5" />
         </button>
       </div>
 
-      {/* Customer */}
-      <div>
-        <label className="block text-sm font-medium text-indusia-text mb-2">
-          Customer <span className="text-red-400">*</span>
-        </label>
-        <select
-          name="customerId"
-          value={formData.customerId}
-          onChange={handleChange}
-          disabled={isEdit}
-          className={cn(
-            "w-full px-4 py-3 bg-indusia-surface border rounded-lg",
-            "text-indusia-text focus:outline-none focus:ring-2 focus:ring-indusia-primary",
-            errors.customerId ? "border-red-500" : "border-indusia-border",
-            isEdit && "opacity-60 cursor-not-allowed"
+      {/* Customer & Board */}
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="block text-sm font-medium text-indusia-text mb-1">
+            Customer <span className="text-red-400">*</span>
+          </label>
+          <select
+            name="customerId"
+            value={formData.customerId}
+            onChange={handleChange}
+            disabled={isEdit}
+            className={cn(
+              "w-full px-3 py-2 bg-indusia-surface border rounded-lg text-sm",
+              "text-indusia-text focus:outline-none focus:ring-2 focus:ring-indusia-primary",
+              errors.customerId ? "border-red-500" : "border-indusia-border",
+              isEdit && "opacity-60 cursor-not-allowed"
+            )}
+          >
+            <option value="">Select Customer</option>
+            {customers.map(c => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+          </select>
+          {errors.customerId && (
+            <p className="mt-0.5 text-xs text-red-400">{errors.customerId}</p>
           )}
-        >
-          <option value="">Select Customer</option>
-          {customers.map(c => (
-            <option key={c.id} value={c.id}>{c.name}</option>
-          ))}
-        </select>
-        {errors.customerId && (
-          <p className="mt-1 text-sm text-red-400">{errors.customerId}</p>
-        )}
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-indusia-text mb-1">
+            Board / PCB <span className="text-red-400">*</span>
+          </label>
+          <select
+            name="boardId"
+            value={formData.boardId}
+            onChange={handleChange}
+            disabled={!formData.customerId || isEdit}
+            className={cn(
+              "w-full px-3 py-2 bg-indusia-surface border rounded-lg text-sm",
+              "text-indusia-text focus:outline-none focus:ring-2 focus:ring-indusia-primary",
+              errors.boardId ? "border-red-500" : "border-indusia-border",
+              (!formData.customerId || isEdit) && "opacity-60 cursor-not-allowed"
+            )}
+          >
+            <option value="">Select Board</option>
+            {filteredBoards.map(b => (
+              <option key={b.id} value={b.id}>{b.name}</option>
+            ))}
+          </select>
+          {errors.boardId && (
+            <p className="mt-0.5 text-xs text-red-400">{errors.boardId}</p>
+          )}
+        </div>
       </div>
 
-      {/* Board */}
-      <div>
-        <label className="block text-sm font-medium text-indusia-text mb-2">
-          Board / PCB Type <span className="text-red-400">*</span>
-        </label>
-        <select
-          name="boardId"
-          value={formData.boardId}
-          onChange={handleChange}
-          disabled={!formData.customerId || isEdit}
-          className={cn(
-            "w-full px-4 py-3 bg-indusia-surface border rounded-lg",
-            "text-indusia-text focus:outline-none focus:ring-2 focus:ring-indusia-primary",
-            errors.boardId ? "border-red-500" : "border-indusia-border",
-            (!formData.customerId || isEdit) && "opacity-60 cursor-not-allowed"
-          )}
-        >
-          <option value="">Select Board</option>
-          {filteredBoards.map(b => (
-            <option key={b.id} value={b.id}>{b.name}</option>
-          ))}
-        </select>
-        {errors.boardId && (
-          <p className="mt-1 text-sm text-red-400">{errors.boardId}</p>
-        )}
-      </div>
+      {/* Section & Line */}
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="block text-sm font-medium text-indusia-text mb-1">
+            Section
+          </label>
+          <select
+            name="sectionId"
+            value={formData.sectionId}
+            onChange={handleChange}
+            disabled={!formData.customerId}
+            className={cn(
+              "w-full px-3 py-2 bg-indusia-surface border rounded-lg text-sm",
+              "text-indusia-text focus:outline-none focus:ring-2 focus:ring-indusia-primary",
+              "border-indusia-border",
+              !formData.customerId && "opacity-60 cursor-not-allowed"
+            )}
+          >
+            <option value="">All Sections</option>
+            {filteredSections.map(s => (
+              <option key={s.id} value={s.id}>{s.name}</option>
+            ))}
+          </select>
+        </div>
 
-      {/* Section (Optional) */}
-      <div>
-        <label className="block text-sm font-medium text-indusia-text mb-2">
-          Section
-        </label>
-        <select
-          name="sectionId"
-          value={formData.sectionId}
-          onChange={handleChange}
-          disabled={!formData.customerId}
-          className={cn(
-            "w-full px-4 py-3 bg-indusia-surface border rounded-lg",
-            "text-indusia-text focus:outline-none focus:ring-2 focus:ring-indusia-primary",
-            "border-indusia-border",
-            !formData.customerId && "opacity-60 cursor-not-allowed"
+        <div>
+          <label className="block text-sm font-medium text-indusia-text mb-1">
+            Line <span className="text-red-400">*</span>
+          </label>
+          <select
+            name="lineId"
+            value={formData.lineId}
+            onChange={handleChange}
+            disabled={!formData.customerId}
+            className={cn(
+              "w-full px-3 py-2 bg-indusia-surface border rounded-lg text-sm",
+              "text-indusia-text focus:outline-none focus:ring-2 focus:ring-indusia-primary",
+              errors.lineId ? "border-red-500" : "border-indusia-border",
+              !formData.customerId && "opacity-60 cursor-not-allowed"
+            )}
+          >
+            <option value="">Select Line</option>
+            {filteredLines.map(l => (
+              <option key={l.id} value={l.id}>{l.name}</option>
+            ))}
+          </select>
+          {errors.lineId && (
+            <p className="mt-0.5 text-xs text-red-400">{errors.lineId}</p>
           )}
-        >
-          <option value="">All Sections</option>
-          {filteredSections.map(s => (
-            <option key={s.id} value={s.id}>{s.name}</option>
-          ))}
-        </select>
-      </div>
-
-      {/* Line */}
-      <div>
-        <label className="block text-sm font-medium text-indusia-text mb-2">
-          Production Line <span className="text-red-400">*</span>
-        </label>
-        <select
-          name="lineId"
-          value={formData.lineId}
-          onChange={handleChange}
-          disabled={!formData.customerId}
-          className={cn(
-            "w-full px-4 py-3 bg-indusia-surface border rounded-lg",
-            "text-indusia-text focus:outline-none focus:ring-2 focus:ring-indusia-primary",
-            errors.lineId ? "border-red-500" : "border-indusia-border",
-            !formData.customerId && "opacity-60 cursor-not-allowed"
-          )}
-        >
-          <option value="">Select Line</option>
-          {filteredLines.map(l => (
-            <option key={l.id} value={l.id}>{l.name}</option>
-          ))}
-        </select>
-        {errors.lineId && (
-          <p className="mt-1 text-sm text-red-400">{errors.lineId}</p>
-        )}
+        </div>
       </div>
 
       {/* Lot Size & Side Count */}
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="block text-sm font-medium text-indusia-text mb-2">
+          <label className="block text-sm font-medium text-indusia-text mb-1">
             Lot Size <span className="text-red-400">*</span>
           </label>
           <input
@@ -293,18 +295,18 @@ export function WorkOrderForm({
             onChange={handleChange}
             min="1"
             className={cn(
-              "w-full px-4 py-3 bg-indusia-surface border rounded-lg",
+              "w-full px-3 py-2 bg-indusia-surface border rounded-lg text-sm",
               "text-indusia-text focus:outline-none focus:ring-2 focus:ring-indusia-primary",
               errors.lotSize ? "border-red-500" : "border-indusia-border"
             )}
           />
           {errors.lotSize && (
-            <p className="mt-1 text-sm text-red-400">{errors.lotSize}</p>
+            <p className="mt-0.5 text-xs text-red-400">{errors.lotSize}</p>
           )}
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-indusia-text mb-2">
+          <label className="block text-sm font-medium text-indusia-text mb-1">
             Side Count <span className="text-red-400">*</span>
           </label>
           <select
@@ -312,7 +314,7 @@ export function WorkOrderForm({
             value={formData.sideCount}
             onChange={handleChange}
             className={cn(
-              "w-full px-4 py-3 bg-indusia-surface border rounded-lg",
+              "w-full px-3 py-2 bg-indusia-surface border rounded-lg text-sm",
               "text-indusia-text focus:outline-none focus:ring-2 focus:ring-indusia-primary",
               errors.sideCount ? "border-red-500" : "border-indusia-border"
             )}
@@ -321,15 +323,15 @@ export function WorkOrderForm({
             <option value={2}>2 - TOP + BOTTOM</option>
           </select>
           {errors.sideCount && (
-            <p className="mt-1 text-sm text-red-400">{errors.sideCount}</p>
+            <p className="mt-0.5 text-xs text-red-400">{errors.sideCount}</p>
           )}
         </div>
       </div>
 
       {/* Due Date & Priority */}
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="block text-sm font-medium text-indusia-text mb-2">
+          <label className="block text-sm font-medium text-indusia-text mb-1">
             Due Date
           </label>
           <input
@@ -338,14 +340,14 @@ export function WorkOrderForm({
             value={formData.dueDate}
             onChange={handleChange}
             className={cn(
-              "w-full px-4 py-3 bg-indusia-surface border border-indusia-border rounded-lg",
+              "w-full px-3 py-2 bg-indusia-surface border border-indusia-border rounded-lg text-sm",
               "text-indusia-text focus:outline-none focus:ring-2 focus:ring-indusia-primary"
             )}
           />
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-indusia-text mb-2">
+          <label className="block text-sm font-medium text-indusia-text mb-1">
             Priority
           </label>
           <select
@@ -353,7 +355,7 @@ export function WorkOrderForm({
             value={formData.priority}
             onChange={handleChange}
             className={cn(
-              "w-full px-4 py-3 bg-indusia-surface border border-indusia-border rounded-lg",
+              "w-full px-3 py-2 bg-indusia-surface border border-indusia-border rounded-lg text-sm",
               "text-indusia-text focus:outline-none focus:ring-2 focus:ring-indusia-primary"
             )}
           >
@@ -366,16 +368,16 @@ export function WorkOrderForm({
 
       {/* Notes */}
       <div>
-        <label className="block text-sm font-medium text-indusia-text mb-2">
+        <label className="block text-sm font-medium text-indusia-text mb-1">
           Notes
         </label>
         <textarea
           name="notes"
           value={formData.notes}
           onChange={handleChange}
-          rows={3}
+          rows={2}
           className={cn(
-            "w-full px-4 py-3 bg-indusia-surface border border-indusia-border rounded-lg",
+            "w-full px-3 py-2 bg-indusia-surface border border-indusia-border rounded-lg text-sm",
             "text-indusia-text focus:outline-none focus:ring-2 focus:ring-indusia-primary",
             "resize-none"
           )}
@@ -384,12 +386,12 @@ export function WorkOrderForm({
       </div>
 
       {/* Actions */}
-      <div className="flex items-center justify-end gap-3 pt-4 border-t border-indusia-border">
+      <div className="flex items-center justify-end gap-3 pt-2 border-t border-indusia-border">
         <button
           type="button"
           onClick={onCancel}
           className={cn(
-            "px-6 py-3 border border-indusia-border rounded-lg",
+            "px-4 py-2 border border-indusia-border rounded-lg text-sm",
             "text-indusia-textMuted hover:text-indusia-text hover:border-indusia-textMuted",
             "transition-colors"
           )}
@@ -400,18 +402,18 @@ export function WorkOrderForm({
           type="submit"
           disabled={isLoading}
           className={cn(
-            "px-6 py-3 bg-indusia-primary text-white rounded-lg",
+            "px-4 py-2 bg-indusia-primary text-white rounded-lg text-sm",
             "hover:bg-indusia-primary/90 transition-colors",
             "flex items-center gap-2",
             isLoading && "opacity-60 cursor-not-allowed"
           )}
         >
           {isLoading ? (
-            <Loader2 className="w-5 h-5 animate-spin" />
+            <Loader2 className="w-4 h-4 animate-spin" />
           ) : (
-            <Save className="w-5 h-5" />
+            <Save className="w-4 h-4" />
           )}
-          {isEdit ? 'Update' : 'Create'} Work Order
+          {isEdit ? 'Update' : 'Create'}
         </button>
       </div>
     </form>

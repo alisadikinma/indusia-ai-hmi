@@ -14,11 +14,11 @@ import { useToast } from '@/hooks/useToast';
 
 export default function MasterDataPage() {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, hasMenuAccess, isLoading: authLoading } = useAuth();
   const { showToast } = useToast();
   const [activeTab, setActiveTab] = useState('customers');
 
-  // Use real data hooks
+  // ALL HOOKS MUST BE CALLED BEFORE ANY CONDITIONAL RETURNS
   const { 
     customers, 
     sections, 
@@ -28,7 +28,7 @@ export default function MasterDataPage() {
     error: masterError,
     refreshMasterData 
   } = useMasterData();
-  
+
   const { 
     users, 
     loading: usersLoading, 
@@ -60,36 +60,33 @@ export default function MasterDataPage() {
   const [savingUser, setSavingUser] = useState(false);
   const [userFilter, setUserFilter] = useState('all');
 
-  // Role check
+  // Show loading while auth is loading
+  if (authLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <div className="w-8 h-8 border-2 border-phosphor-amber border-t-transparent animate-spin mx-auto mb-4" />
+          <p className="text-text-secondary">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Check access via database permissions
+  if (!user || !hasMenuAccess('menu_engineering')) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <AlertCircle className="w-12 h-12 text-phosphor-red mx-auto mb-4" />
+          <h2 className="text-lg font-semibold text-text-primary mb-2">Access Denied</h2>
+          <p className="text-text-secondary">You don&apos;t have permission to access this page.</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Role check - already handled by hasMenuAccess above
   const userRole = user?.roleId || user?.role_id || user?.role;
-
-  if (!user) {
-    return (
-      <div className="min-h-[60vh] flex items-center justify-center">
-        <div className="bg-indusia-surface rounded-xl shadow-xl border border-indusia-border p-8 max-w-md text-center">
-          <h2 className="text-xl font-bold text-indusia-text mb-3">You are not logged in</h2>
-          <p className="text-sm text-indusia-textMuted mb-6">Please login to access the system.</p>
-          <button onClick={() => router.push('/login')} className="px-6 py-3 bg-indusia-primary text-white rounded-lg font-medium hover:opacity-90 transition-opacity">
-            Go to Login
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  if (!['engineer', 'superadmin'].includes(userRole)) {
-    return (
-      <div className="min-h-[60vh] flex items-center justify-center">
-        <div className="bg-indusia-surface rounded-xl shadow-xl border border-indusia-border p-8 max-w-md text-center">
-          <h2 className="text-xl font-bold text-indusia-text mb-3">Access Denied</h2>
-          <p className="text-sm text-indusia-textMuted mb-6">Only Process Engineers can access the Master Data Console.</p>
-          <button onClick={() => router.back()} className="px-6 py-3 bg-indusia-primary text-white rounded-lg font-medium hover:opacity-90 transition-opacity">
-            Go Back
-          </button>
-        </div>
-      </div>
-    );
-  }
 
   const tabs = [
     { id: 'customers', label: 'Customers' },
@@ -392,7 +389,7 @@ export default function MasterDataPage() {
       </div>
 
       {/* Loading State */}
-      {isLoading && (
+      {masterLoading && (
         <div className="flex items-center justify-center py-12">
           <Loader2 className="w-8 h-8 animate-spin text-indusia-primary" />
           <span className="ml-3 text-indusia-textMuted">Loading data...</span>
@@ -400,7 +397,7 @@ export default function MasterDataPage() {
       )}
 
       {/* Customers Tab */}
-      {!isLoading && activeTab === 'customers' && (
+      {!masterLoading && activeTab === 'customers' && (
         <div className="grid grid-cols-2 gap-6">
           <Card title="Customers" subtitle={`${customers.length} customers`}>
             {customers.length === 0 ? (
@@ -469,7 +466,7 @@ export default function MasterDataPage() {
       )}
 
       {/* Sections Tab */}
-      {!isLoading && activeTab === 'sections' && (
+      {!masterLoading && activeTab === 'sections' && (
         <div className="grid grid-cols-2 gap-6">
           <Card title="Sections" subtitle={`${sections.length} sections`}>
             {sections.length === 0 ? (
@@ -538,7 +535,7 @@ export default function MasterDataPage() {
       )}
 
       {/* Lines Tab */}
-      {!isLoading && activeTab === 'lines' && (
+      {!masterLoading && activeTab === 'lines' && (
         <div className="grid grid-cols-2 gap-6">
           <Card title="Production Lines" subtitle={`${lines.length} lines`}>
             {lines.length === 0 ? (
@@ -635,7 +632,7 @@ export default function MasterDataPage() {
       )}
 
       {/* Boards Tab */}
-      {!isLoading && activeTab === 'boards' && (
+      {!masterLoading && activeTab === 'boards' && (
         <div className="grid grid-cols-2 gap-6">
           <Card title="Boards / Models" subtitle={`${boards.length} boards`}>
             {boards.length === 0 ? (
@@ -720,7 +717,7 @@ export default function MasterDataPage() {
       )}
 
       {/* Users Tab */}
-      {!isLoading && activeTab === 'users' && (
+      {!masterLoading && activeTab === 'users' && (
         <div className="grid grid-cols-2 gap-6">
           <Card title="Registered Users" subtitle={`${filteredUsers.length} users`}>
             <div className="mb-4 flex gap-2">

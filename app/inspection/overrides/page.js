@@ -13,7 +13,7 @@ import { useToast } from '@/hooks/useToast';
 
 export default function OverrideApprovalsPage() {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, hasMenuAccess } = useAuth();
   const { showToast } = useToast();
 
   // Use the useOverrides hook - NO MOCK DATA
@@ -34,10 +34,8 @@ export default function OverrideApprovalsPage() {
   const [reviewModalOpen, setReviewModalOpen] = useState(false);
   const [selectedOverride, setSelectedOverride] = useState(null);
 
-  // Support roleId (API camelCase), role_id (raw), and role (mock)
-  const userRole = user?.roleId || user?.role_id || user?.role;
-
-  if (!user || !['manager', 'superadmin'].includes(userRole)) {
+  // Check access via database permissions
+  if (!user || !hasMenuAccess('menu_overrides')) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center">
         <div className="bg-indusia-surface rounded-xl shadow-xl border border-indusia-border p-8 max-w-md text-center">

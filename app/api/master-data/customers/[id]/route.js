@@ -2,61 +2,36 @@ import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabaseClient';
 
 /**
- * GET /api/master-data/lines/[id]
- * Get single line by ID with related data
+ * GET /api/master-data/customers/[id]
+ * Get single customer by ID
  */
 export async function GET(request, { params }) {
   try {
     const { id } = await params;
 
     const { data, error } = await supabase
-      .from('lines')
-      .select(`
-        id,
-        name,
-        section_id,
-        customer_id,
-        sections:section_id (id, name),
-        customers:customer_id (id, name, code)
-      `)
+      .from('customers')
+      .select('id, name, code')
       .eq('id', id)
       .single();
 
     if (error) {
       if (error.code === 'PGRST116') {
         return NextResponse.json(
-          { success: false, error: 'Line not found' },
+          { success: false, error: 'Customer not found' },
           { status: 404 }
         );
       }
-      console.error('Supabase error:', error);
       throw error;
     }
 
-    // Transform to camelCase
-    const transformed = {
-      id: data.id,
-      name: data.name,
-      sectionId: data.section_id,
-      customerId: data.customer_id,
-      section: data.sections ? {
-        id: data.sections.id,
-        name: data.sections.name,
-      } : null,
-      customer: data.customers ? {
-        id: data.customers.id,
-        name: data.customers.name,
-        code: data.customers.code,
-      } : null,
-    };
-
     return NextResponse.json({
       success: true,
-      data: transformed
+      data
     });
 
   } catch (error) {
-    console.error('Error fetching line:', error);
+    console.error('Error fetching customer:', error);
     return NextResponse.json(
       { success: false, error: error.message },
       { status: 500 }
@@ -65,8 +40,8 @@ export async function GET(request, { params }) {
 }
 
 /**
- * PATCH /api/master-data/lines/[id]
- * Update line
+ * PATCH /api/master-data/customers/[id]
+ * Update customer
  */
 export async function PATCH(request, { params }) {
   try {
@@ -75,13 +50,7 @@ export async function PATCH(request, { params }) {
 
     const updateData = {};
     if (body.name !== undefined) updateData.name = body.name;
-    
-    // Accept both camelCase and snake_case
-    const sectionId = body.sectionId || body.section_id;
-    const customerId = body.customerId || body.customer_id;
-    
-    if (sectionId !== undefined) updateData.section_id = sectionId;
-    if (customerId !== undefined) updateData.customer_id = customerId;
+    if (body.code !== undefined) updateData.code = body.code;
 
     if (Object.keys(updateData).length === 0) {
       return NextResponse.json(
@@ -91,7 +60,7 @@ export async function PATCH(request, { params }) {
     }
 
     const { data, error } = await supabase
-      .from('lines')
+      .from('customers')
       .update(updateData)
       .eq('id', id)
       .select()
@@ -100,7 +69,7 @@ export async function PATCH(request, { params }) {
     if (error) {
       if (error.code === 'PGRST116') {
         return NextResponse.json(
-          { success: false, error: 'Line not found' },
+          { success: false, error: 'Customer not found' },
           { status: 404 }
         );
       }
@@ -109,16 +78,11 @@ export async function PATCH(request, { params }) {
 
     return NextResponse.json({
       success: true,
-      data: {
-        id: data.id,
-        name: data.name,
-        sectionId: data.section_id,
-        customerId: data.customer_id,
-      }
+      data
     });
 
   } catch (error) {
-    console.error('Error updating line:', error);
+    console.error('Error updating customer:', error);
     return NextResponse.json(
       { success: false, error: error.message },
       { status: 500 }
@@ -127,30 +91,58 @@ export async function PATCH(request, { params }) {
 }
 
 /**
- * DELETE /api/master-data/lines/[id]
- * Delete line (checks for dependencies first)
+ * DELETE /api/master-data/customers/[id]
+ * Delete customer (checks for dependencies first)
  */
 export async function DELETE(request, { params }) {
   try {
     const { id } = await params;
 
+    // Check for dependent boards
+    const { data: boards } = await supabase
+      .from('boards')
+      .select('id')
+      .eq('customer_id', id)
+      .limit(1);
+
+    if (boards && boards.length > 0) {
+      return NextResponse.json(
+        { success: false, error: 'Cannot delete: Customer has associated boards. Delete boards first.' },
+        { status: 400 }
+      );
+    }
+
+    // Check for dependent lines
+    const { data: lines } = await supabase
+      .from('lines')
+      .select('id')
+      .eq('customer_id', id)
+      .limit(1);
+
+    if (lines && lines.length > 0) {
+      return NextResponse.json(
+        { success: false, error: 'Cannot delete: Customer has associated lines. Delete lines first.' },
+        { status: 400 }
+      );
+    }
+
     // Check for dependent work orders
     const { data: workOrders } = await supabase
       .from('work_orders')
       .select('id')
-      .eq('line_id', id)
+      .eq('customer_id', id)
       .limit(1);
 
     if (workOrders && workOrders.length > 0) {
       return NextResponse.json(
-        { success: false, error: 'Cannot delete: Line has associated work orders.' },
+        { success: false, error: 'Cannot delete: Customer has associated work orders.' },
         { status: 400 }
       );
     }
 
     // Safe to delete
     const { error } = await supabase
-      .from('lines')
+      .from('customers')
       .delete()
       .eq('id', id);
 
@@ -160,11 +152,11 @@ export async function DELETE(request, { params }) {
 
     return NextResponse.json({
       success: true,
-      message: 'Line deleted'
+      message: 'Customer deleted'
     });
 
   } catch (error) {
-    console.error('Error deleting line:', error);
+    console.error('Error deleting customer:', error);
     return NextResponse.json(
       { success: false, error: error.message },
       { status: 500 }

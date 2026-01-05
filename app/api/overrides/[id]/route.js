@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import * as overridesRepo from '@/lib/repos/overridesRepo'
+import { syncQueueRepo } from '@/lib/repos/syncQueueRepo'
 
 /**
  * GET /api/overrides/:id
@@ -56,6 +57,26 @@ export async function PATCH(request, { params }) {
         body.reviewerName,
         body.reviewNotes || ''
       )
+      
+      // Add to sync queue for cloud upload
+      if (result.data) {
+        try {
+          await syncQueueRepo.addToQueue({
+            inspectionId: null, // Override-based, not inspection
+            boardId: result.data.boardId || result.data.board_id,
+            customerName: result.data.customerName || 'Unknown',
+            sectionName: result.data.sectionName || 'Unknown',
+            lineName: result.data.lineName || 'Unknown',
+            defectType: result.data.defectType || result.data.defect_type || 'false_call',
+            localImagePath: result.data.imageUrl || result.data.image_url,
+            recordType: 'override',
+          })
+          console.log('[PATCH /api/overrides] Added to sync queue:', id)
+        } catch (syncError) {
+          console.warn('[PATCH /api/overrides] Sync queue add failed:', syncError)
+          // Don't fail the approval
+        }
+      }
     } else {
       result = await overridesRepo.reject(
         id,

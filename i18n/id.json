@@ -11,6 +11,7 @@
     "masterData": "Master Data",
     "workOrders": "Work Order",
     "sync": "Sinkron ke Cloud",
+    "falseCallReasons": "Alasan False Call",
     "superAdmin": "Panel Super Admin",
     "users": "Pengguna",
     "roles": "Peran",

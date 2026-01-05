@@ -16,7 +16,7 @@ import { customers, sections, lines, boards } from '@/data/masterData';
 export default function InspectionResultDetail({ params }) {
   const router = useRouter();
   const { showToast } = useToast();
-  const { user, updateSelections } = useAuth();
+  const { user, updateSelections, hasMenuAccess } = useAuth();
   const boardId = params.id || user?.selectedBoardId || 'current';
   const timestamp = new Date().toLocaleTimeString('en-US', { hour12: false });
 
@@ -34,12 +34,13 @@ export default function InspectionResultDetail({ params }) {
     );
   }
 
-  if (!['operator', 'manager', 'superadmin'].includes(user.role)) {
+  // Check access via database permissions
+  if (!hasMenuAccess('menu_inspection')) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center">
         <div className="bg-indusia-surface rounded-xl shadow-xl border border-indusia-border p-8 max-w-md text-center">
           <h2 className="text-xl font-bold text-indusia-text mb-3">Access Denied</h2>
-          <p className="text-sm text-indusia-textMuted mb-6">Only operators and managers can view inspection results.</p>
+          <p className="text-sm text-indusia-textMuted mb-6">You do not have permission to view inspection results.</p>
           <button onClick={() => router.back()} className="px-6 py-3 bg-indusia-primary text-white rounded-lg font-medium hover:opacity-90 transition-opacity">
             Go Back
           </button>

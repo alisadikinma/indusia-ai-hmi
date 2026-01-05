@@ -1,39 +1,71 @@
-import { NextResponse } from 'next/server'
-import * as masterDataRepo from '@/lib/repos/masterDataRepo'
+import { NextResponse } from 'next/server';
+import { supabase } from '@/lib/supabaseClient';
 
 /**
  * GET /api/master-data/sections
- * Query params: customer_id (optional - returns sections for that customer)
- * Returns all sections or sections for a specific customer
+ * Returns all sections
  */
-export async function GET(request) {
+export async function GET() {
   try {
-    const { searchParams } = new URL(request.url)
-    const customerId = searchParams.get('customer_id')
+    const { data, error } = await supabase
+      .from('sections')
+      .select('id, name')
+      .order('name');
 
-    let result
-    if (customerId) {
-      result = await masterDataRepo.getSectionsForCustomer(customerId)
-    } else {
-      result = await masterDataRepo.getSections()
-    }
-
-    if (result.error) {
-      return NextResponse.json(
-        { success: false, error: result.error },
-        { status: 500 }
-      )
-    }
+    if (error) throw error;
 
     return NextResponse.json({
       success: true,
-      data: result.data,
-      total: result.data?.length || 0
-    })
+      data: data || [],
+      total: data?.length || 0
+    });
   } catch (error) {
     return NextResponse.json(
       { success: false, error: error.message },
       { status: 500 }
-    )
+    );
+  }
+}
+
+/**
+ * POST /api/master-data/sections
+ * Create new section
+ */
+export async function POST(request) {
+  try {
+    const body = await request.json();
+
+    if (!body.name?.trim()) {
+      return NextResponse.json(
+        { success: false, error: 'Section name is required' },
+        { status: 400 }
+      );
+    }
+
+    // Generate ID if not provided
+    const sectionId = body.id || `section_${Date.now()}`;
+
+    const { data, error } = await supabase
+      .from('sections')
+      .insert({
+        id: sectionId,
+        name: body.name.trim()
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    return NextResponse.json({
+      success: true,
+      data
+    }, { status: 201 });
+
+  } catch (error) {
+    console.error('Error creating section:', error);
+    return NextResponse.json(
+      { success: false, error: error.message },
+      { status: 500 }
+    );
   }
 }

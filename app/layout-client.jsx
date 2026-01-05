@@ -9,7 +9,6 @@ import { I18nProvider } from '@/context/I18nContext';
 import { SidebarProvider, useSidebar } from '@/context/SidebarContext';
 import SideNav from '@/components/layout/SideNav';
 import TopNav from '@/components/layout/TopNav';
-import SystemHealthBar from '@/components/system/SystemHealthBar';
 import HelpOverlay from '@/components/help/HelpOverlay';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { OfflineBanner } from '@/components/OfflineBanner';
@@ -142,8 +141,7 @@ function LayoutContent({ children }) {
                   "flex-1 flex flex-col transition-all duration-300",
                   getMainMargin()
                 )}>
-                  {!isHidden && <TopNav />}
-                  {!isHidden && <SystemHealthBar />}
+                {!isHidden && <TopNav />}
 
                   <main className={cn(
                     "flex-1 overflow-y-auto",

@@ -2,21 +2,19 @@ import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabaseClient';
 
 /**
- * GET /api/master-data/lines/[id]
- * Get single line by ID with related data
+ * GET /api/master-data/boards/[id]
+ * Get single board by ID
  */
 export async function GET(request, { params }) {
   try {
     const { id } = await params;
 
     const { data, error } = await supabase
-      .from('lines')
+      .from('boards')
       .select(`
-        id,
-        name,
-        section_id,
+        id, 
+        name, 
         customer_id,
-        sections:section_id (id, name),
         customers:customer_id (id, name, code)
       `)
       .eq('id', id)
@@ -25,11 +23,10 @@ export async function GET(request, { params }) {
     if (error) {
       if (error.code === 'PGRST116') {
         return NextResponse.json(
-          { success: false, error: 'Line not found' },
+          { success: false, error: 'Board not found' },
           { status: 404 }
         );
       }
-      console.error('Supabase error:', error);
       throw error;
     }
 
@@ -37,12 +34,7 @@ export async function GET(request, { params }) {
     const transformed = {
       id: data.id,
       name: data.name,
-      sectionId: data.section_id,
       customerId: data.customer_id,
-      section: data.sections ? {
-        id: data.sections.id,
-        name: data.sections.name,
-      } : null,
       customer: data.customers ? {
         id: data.customers.id,
         name: data.customers.name,
@@ -56,7 +48,7 @@ export async function GET(request, { params }) {
     });
 
   } catch (error) {
-    console.error('Error fetching line:', error);
+    console.error('Error fetching board:', error);
     return NextResponse.json(
       { success: false, error: error.message },
       { status: 500 }
@@ -65,8 +57,8 @@ export async function GET(request, { params }) {
 }
 
 /**
- * PATCH /api/master-data/lines/[id]
- * Update line
+ * PATCH /api/master-data/boards/[id]
+ * Update board
  */
 export async function PATCH(request, { params }) {
   try {
@@ -77,10 +69,7 @@ export async function PATCH(request, { params }) {
     if (body.name !== undefined) updateData.name = body.name;
     
     // Accept both camelCase and snake_case
-    const sectionId = body.sectionId || body.section_id;
     const customerId = body.customerId || body.customer_id;
-    
-    if (sectionId !== undefined) updateData.section_id = sectionId;
     if (customerId !== undefined) updateData.customer_id = customerId;
 
     if (Object.keys(updateData).length === 0) {
@@ -91,7 +80,7 @@ export async function PATCH(request, { params }) {
     }
 
     const { data, error } = await supabase
-      .from('lines')
+      .from('boards')
       .update(updateData)
       .eq('id', id)
       .select()
@@ -100,7 +89,7 @@ export async function PATCH(request, { params }) {
     if (error) {
       if (error.code === 'PGRST116') {
         return NextResponse.json(
-          { success: false, error: 'Line not found' },
+          { success: false, error: 'Board not found' },
           { status: 404 }
         );
       }
@@ -112,13 +101,12 @@ export async function PATCH(request, { params }) {
       data: {
         id: data.id,
         name: data.name,
-        sectionId: data.section_id,
         customerId: data.customer_id,
       }
     });
 
   } catch (error) {
-    console.error('Error updating line:', error);
+    console.error('Error updating board:', error);
     return NextResponse.json(
       { success: false, error: error.message },
       { status: 500 }
@@ -127,8 +115,8 @@ export async function PATCH(request, { params }) {
 }
 
 /**
- * DELETE /api/master-data/lines/[id]
- * Delete line (checks for dependencies first)
+ * DELETE /api/master-data/boards/[id]
+ * Delete board (checks for dependencies first)
  */
 export async function DELETE(request, { params }) {
   try {
@@ -138,19 +126,19 @@ export async function DELETE(request, { params }) {
     const { data: workOrders } = await supabase
       .from('work_orders')
       .select('id')
-      .eq('line_id', id)
+      .eq('board_id', id)
       .limit(1);
 
     if (workOrders && workOrders.length > 0) {
       return NextResponse.json(
-        { success: false, error: 'Cannot delete: Line has associated work orders.' },
+        { success: false, error: 'Cannot delete: Board has associated work orders.' },
         { status: 400 }
       );
     }
 
     // Safe to delete
     const { error } = await supabase
-      .from('lines')
+      .from('boards')
       .delete()
       .eq('id', id);
 
@@ -160,11 +148,11 @@ export async function DELETE(request, { params }) {
 
     return NextResponse.json({
       success: true,
-      message: 'Line deleted'
+      message: 'Board deleted'
     });
 
   } catch (error) {
-    console.error('Error deleting line:', error);
+    console.error('Error deleting board:', error);
     return NextResponse.json(
       { success: false, error: error.message },
       { status: 500 }

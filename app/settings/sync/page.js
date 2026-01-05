@@ -13,7 +13,7 @@ import { Clock, RefreshCw, AlertCircle } from 'lucide-react';
 
 export default function SyncPage() {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, hasMenuAccess, isLoading: authLoading } = useAuth();
   const { showToast } = useToast();
 
   // Queue items from API
@@ -197,7 +197,8 @@ export default function SyncPage() {
     setProgress(0);
   };
 
-  const canSync = user && (user.role === 'operator' || user.role === 'manager' || user.role === 'engineer');
+  // canSync is determined by page access (already checked above)
+  const canSync = true;
 
   if (!user) {
     return (

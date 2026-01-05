@@ -25,7 +25,7 @@ export default function LiveInspectionPage() {
   const params = useParams()
   const router = useRouter()
   const { lineId } = params
-  const { user, isOperator, setActiveLine, clearActiveLine, activeLineId } = useAuth()
+  const { user, isOperator, setActiveLine, clearActiveLine, activeLineId, hasMenuAccess } = useAuth()
   
   // State for line details
   const [lineDetails, setLineDetails] = useState(null)
@@ -81,15 +81,14 @@ export default function LiveInspectionPage() {
     )
   }
 
-  // Role check - operators, managers, engineers can view live inspection
-  const allowedRoles = ['operator', 'manager', 'engineer', 'superadmin']
-  if (!allowedRoles.includes(user.role)) {
+  // Check access via database permissions
+  if (!hasMenuAccess('menu_inspection')) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-void">
         <div className="bg-panel border border-surface-border p-8 max-w-md text-center">
           <h2 className="text-xl font-display font-bold text-phosphor-red mb-3">ACCESS DENIED</h2>
           <p className="text-sm font-mono text-text-tertiary">
-            Insufficient permissions for live inspection
+            You don&apos;t have permission for live inspection
           </p>
         </div>
       </div>

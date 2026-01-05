@@ -102,7 +102,9 @@ async function handlePOST(request) {
     // Sanitize input
     const sanitizedBody = sanitizeRequestBody(body)
 
-    // Check if this is an annotation-based override (has images array)
+    // ============================================
+    // Annotation-based override flow (has images array)
+    // ============================================
     const hasAnnotations = Array.isArray(sanitizedBody.images) && sanitizedBody.images.length > 0
 
     if (hasAnnotations) {
