@@ -46,12 +46,26 @@ import { FalseCallModal } from './FalseCallModal'
 
 // Services
 import { saveInspection } from '@/lib/services/inspectionService'
-import { getInspectionResult } from '@/lib/services/imageService'
+import { getInspectionResult, uploadFalseCallImages } from '@/lib/services/imageService'
 
 // Constants
 const NG_REVIEW_TIMEOUT_SECONDS = 15 // Timeout for NG review → auto NG
 const PASS_DISPLAY_DELAY_MS = 2000 // Display PASS result for 2 seconds before auto-proceed
 const DEV_MODE = process.env.NODE_ENV === 'development'
+const BYPASS_WO_CHECK = true // TEMPORARY: Bypass WO check for testing
+const BYPASS_OPERATOR_CHECK = true // TEMPORARY: Bypass operator role check for testing
+
+// Mock WO for testing when Supabase not configured
+const MOCK_WORK_ORDER = {
+  id: 'mock-wo-001',
+  woNumber: 'WO-DEV-001',
+  lotSize: 100,
+  completedQty: 0,
+  goodQty: 0,
+  ngQty: 0,
+  falseCallQty: 0,
+  status: 'active',
+}
 
 export function LiveViewV3({
   lineId,
@@ -66,8 +80,12 @@ export function LiveViewV3({
   const { showSidebar } = useSidebar()
   
   // Work Order hooks
-  const { workOrder, hasActiveWO, loading: woLoading, refresh: refreshWO } = useActiveWorkOrder(lineId)
+  const { workOrder: fetchedWO, hasActiveWO: fetchedHasWO, loading: woLoading, refresh: refreshWO } = useActiveWorkOrder(lineId)
   const { updateCounters } = useWorkOrderMutations()
+
+  // Use mock WO if bypass enabled and no real WO
+  const workOrder = (BYPASS_WO_CHECK && !fetchedWO) ? MOCK_WORK_ORDER : fetchedWO
+  const hasActiveWO = BYPASS_WO_CHECK || fetchedHasWO
 
   // Live Inspection hook (SSE connection)
   const {
@@ -178,45 +196,79 @@ export function LiveViewV3({
       const isFalseCall = (activeInspection.decision === 'PASS' && operatorDecision === 'NG') ||
                          (activeInspection.decision === 'FAIL' && operatorDecision === 'GOOD')
 
-      // 3. Save to database
-      const inspectionData = {
-        boardId: `${workOrder.woNumber}-${String(boardSequenceRef.current + 1).padStart(4, '0')}`,
-        workOrderId: workOrder.id,
-        lineId,
-        sectionId,
-        customerId,
-        boardSequence: boardSequenceRef.current + 1,
-        aiResult: activeInspection.decision === 'PASS' ? 'GOOD' : 'NG',
-        aiConfidence: calculateAvgConfidence(activeInspection),
-        operatorDecision,
-        operatorId: user?.id,
-        isFalseCall,
-        falseCallReasonCode: falseCallData?.reason,
-        plcSignalSent: operatorDecision,
-        shift: getCurrentShift(),
-        defectCount: getTotalDefects(activeInspection),
-        imageTopUrl: activeInspection.results?.top?.image_url,
-        imageBottomUrl: activeInspection.results?.bottom?.image_url,
+      // 2.5. Upload false call images to Supabase Storage
+      if (isFalseCall && activeInspection.results) {
+        try {
+          const uploadResult = await uploadFalseCallImages({
+            inspection: activeInspection,
+            workOrder,
+            customerName: workOrder?.customer?.name || workOrder?.customerName || 'UNKNOWN',
+            boardSequence: String(boardSequenceRef.current + 1).padStart(4, '0'),
+            falseCallReason: falseCallData?.reason || 'UNSPECIFIED'
+          })
+          
+          if (uploadResult.success) {
+            console.log('[LiveView] False call images uploaded:', uploadResult.paths)
+          } else {
+            console.warn('[LiveView] False call image upload failed:', uploadResult.error)
+          }
+        } catch (uploadError) {
+          console.warn('[LiveView] False call image upload error:', uploadError)
+          // Continue anyway - don't block the flow
+        }
       }
 
-      await saveInspection(inspectionData)
+      // 3. Save to database (skip if mock WO)
+      if (!BYPASS_WO_CHECK || fetchedWO) {
+        const inspectionData = {
+          boardId: `${workOrder.woNumber}-${String(boardSequenceRef.current + 1).padStart(4, '0')}`,
+          workOrderId: workOrder.id,
+          lineId,
+          sectionId,
+          customerId,
+          boardSequence: boardSequenceRef.current + 1,
+          aiResult: activeInspection.decision === 'PASS' ? 'GOOD' : 'NG',
+          aiConfidence: calculateAvgConfidence(activeInspection),
+          operatorDecision,
+          operatorId: user?.id,
+          isFalseCall,
+          falseCallReasonCode: falseCallData?.reason,
+          plcSignalSent: operatorDecision,
+          shift: getCurrentShift(),
+          defectCount: getTotalDefects(activeInspection),
+          imageTopUrl: activeInspection.results?.top?.image_url,
+          imageBottomUrl: activeInspection.results?.bottom?.image_url,
+        }
 
-      // 4. Update WO counters
-      const counterUpdate = operatorDecision === 'GOOD' 
-        ? { goodQty: 1, completedQty: 1 }
-        : { ngQty: 1, completedQty: 1 }
-      
-      if (isFalseCall) {
-        counterUpdate.falseCallQty = 1
+        try {
+          await saveInspection(inspectionData)
+        } catch (dbError) {
+          console.warn('[LiveView] Save inspection failed (Supabase not configured?):', dbError)
+        }
+
+        // 4. Update WO counters
+        const counterUpdate = operatorDecision === 'GOOD' 
+          ? { goodQty: 1, completedQty: 1 }
+          : { ngQty: 1, completedQty: 1 }
+        
+        if (isFalseCall) {
+          counterUpdate.falseCallQty = 1
+        }
+        
+        try {
+          await updateCounters(workOrder.id, counterUpdate)
+        } catch (dbError) {
+          console.warn('[LiveView] Update counters failed (Supabase not configured?):', dbError)
+        }
+        
+        // 6. Refresh WO data
+        refreshWO()
+      } else {
+        console.log('[LiveView] Skipping DB operations (BYPASS_WO_CHECK enabled)')
       }
-      
-      await updateCounters(workOrder.id, counterUpdate)
       
       // 5. Update local sequence
       boardSequenceRef.current += 1
-
-      // 6. Refresh WO data
-      refreshWO()
 
       // 7. Reset dev mock if used
       if (devMockInspection) {
@@ -236,7 +288,7 @@ export function LiveViewV3({
     } catch (error) {
       console.error('[LiveView] Submit decision error:', error)
     }
-  }, [activeInspection, workOrder, currentInspection, confirmInspection, 
+  }, [activeInspection, workOrder, fetchedWO, currentInspection, confirmInspection, 
       lineId, sectionId, customerId, user, updateCounters, refreshWO, devMockInspection])
 
   /**

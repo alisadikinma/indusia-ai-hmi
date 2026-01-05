@@ -705,6 +705,119 @@
     color: var(--phosphor-amber);
   }
 
+  /* === INSPECTION STAGE WOW ANIMATIONS === */
+  
+  @keyframes stage-scanning {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+  
+  @keyframes stage-glow-pulse {
+    0%, 100% { 
+      box-shadow: 0 0 20px rgba(245, 158, 11, 0.3), 
+                  0 0 40px rgba(245, 158, 11, 0.2),
+                  0 0 60px rgba(245, 158, 11, 0.1);
+    }
+    50% { 
+      box-shadow: 0 0 30px rgba(245, 158, 11, 0.5), 
+                  0 0 60px rgba(245, 158, 11, 0.3),
+                  0 0 90px rgba(245, 158, 11, 0.2);
+    }
+  }
+  
+  @keyframes stage-glow-green {
+    0%, 100% { 
+      box-shadow: 0 0 15px rgba(16, 185, 129, 0.3), 
+                  0 0 30px rgba(16, 185, 129, 0.2);
+    }
+    50% { 
+      box-shadow: 0 0 20px rgba(16, 185, 129, 0.4), 
+                  0 0 40px rgba(16, 185, 129, 0.3);
+    }
+  }
+  
+  @keyframes stage-ring-spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+  
+  @keyframes stage-progress-sweep {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+  }
+  
+  @keyframes stage-float {
+    0%, 100% { transform: translateY(0px); }
+    50% { transform: translateY(-8px); }
+  }
+  
+  @keyframes stage-shimmer {
+    0% { background-position: -100% 0; }
+    100% { background-position: 100% 0; }
+  }
+  
+  @keyframes stage-ripple {
+    0% { transform: scale(1); opacity: 0.6; }
+    100% { transform: scale(1.8); opacity: 0; }
+  }
+  
+  @keyframes stage-dot-pulse {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.15); opacity: 0.8; }
+  }
+
+  .animate-stage-scanning {
+    animation: stage-scanning 3s linear infinite;
+  }
+  
+  .animate-stage-glow-pulse {
+    animation: stage-glow-pulse 2s ease-in-out infinite;
+  }
+  
+  .animate-stage-glow-green {
+    animation: stage-glow-green 2s ease-in-out infinite;
+  }
+  
+  .animate-stage-ring-spin {
+    animation: stage-ring-spin 8s linear infinite;
+  }
+  
+  .animate-stage-progress-sweep {
+    background: linear-gradient(
+      90deg, 
+      var(--phosphor-amber) 0%, 
+      #fbbf24 25%,
+      #fef3c7 50%,
+      #fbbf24 75%,
+      var(--phosphor-amber) 100%
+    );
+    background-size: 200% 100%;
+    animation: stage-progress-sweep 2s linear infinite;
+  }
+  
+  .animate-stage-float {
+    animation: stage-float 3s ease-in-out infinite;
+  }
+  
+  .animate-stage-shimmer {
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(255, 255, 255, 0.1) 50%,
+      transparent 100%
+    );
+    background-size: 200% 100%;
+    animation: stage-shimmer 2s linear infinite;
+  }
+  
+  .animate-stage-ripple {
+    animation: stage-ripple 1.5s ease-out infinite;
+  }
+  
+  .animate-stage-dot-pulse {
+    animation: stage-dot-pulse 1.5s ease-in-out infinite;
+  }
+
   /* === CUSTOM SCROLLBAR FOR PANELS === */
   .scrollbar-brutalist::-webkit-scrollbar {
     width: 6px;

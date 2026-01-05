@@ -86,9 +86,8 @@ export function SidePanel({ side, frames = [], className }) {
     return DEFECT_COLORS[key] || DEFECT_COLORS.default
   }
 
-  // Calculate scale factor for bounding boxes
-  const scaleX = imageSize.rendered.w / (imageSize.natural.w || 1)
-  const scaleY = imageSize.rendered.h / (imageSize.natural.h || 1)
+  // Note: BBOX overlay removed - AI Backend renders bbox on images
+  // Scale factors kept for potential future use
 
   // No frames available
   if (frameCount === 0) {
@@ -186,74 +185,7 @@ export function SidePanel({ side, frames = [], className }) {
                 className="max-w-full max-h-[300px] object-contain"
               />
 
-              {/* Bounding Boxes Overlay */}
-              {imageSize.rendered.w > 0 && objects.length > 0 && (
-                <svg
-                  className="absolute top-0 left-0 pointer-events-none"
-                  width={imageSize.rendered.w}
-                  height={imageSize.rendered.h}
-                  viewBox={`0 0 ${imageSize.rendered.w} ${imageSize.rendered.h}`}
-                  style={{ overflow: 'visible' }}
-                >
-                  {objects.map((obj, i) => {
-                    const [x1, y1, x2, y2] = obj.box || [0, 0, 0, 0]
-                    const isDefect = obj.label === 1
-                    // Green for good (label=0), Red for defect (label=1)
-                    const color = isDefect ? getDefectColor(obj.name) : '#10B981'
-                    
-                    const sx1 = x1 * scaleX
-                    const sy1 = y1 * scaleY
-                    const sx2 = x2 * scaleX
-                    const sy2 = y2 * scaleY
-                    const boxWidth = sx2 - sx1
-                    const boxHeight = sy2 - sy1
-                    
-                    const labelWidth = Math.max(60, (obj.name?.length || 5) * 6 + 35)
-                    
-                    return (
-                      <g key={i}>
-                        <rect
-                          x={sx1}
-                          y={sy1}
-                          width={boxWidth}
-                          height={boxHeight}
-                          fill="none"
-                          stroke={color}
-                          strokeWidth={2}
-                          strokeDasharray="4 2"
-                        />
-                        <line x1={sx1} y1={sy1} x2={sx1 + 10} y2={sy1} stroke={color} strokeWidth={3} />
-                        <line x1={sx1} y1={sy1} x2={sx1} y2={sy1 + 10} stroke={color} strokeWidth={3} />
-                        <line x1={sx2} y1={sy1} x2={sx2 - 10} y2={sy1} stroke={color} strokeWidth={3} />
-                        <line x1={sx2} y1={sy1} x2={sx2} y2={sy1 + 10} stroke={color} strokeWidth={3} />
-                        <line x1={sx1} y1={sy2} x2={sx1 + 10} y2={sy2} stroke={color} strokeWidth={3} />
-                        <line x1={sx1} y1={sy2} x2={sx1} y2={sy2 - 10} stroke={color} strokeWidth={3} />
-                        <line x1={sx2} y1={sy2} x2={sx2 - 10} y2={sy2} stroke={color} strokeWidth={3} />
-                        <line x1={sx2} y1={sy2} x2={sx2} y2={sy2 - 10} stroke={color} strokeWidth={3} />
-                        
-                        <rect
-                          x={sx1}
-                          y={sy1 - 20}
-                          width={labelWidth}
-                          height={18}
-                          fill={color}
-                          rx={2}
-                        />
-                        <text
-                          x={sx1 + 4}
-                          y={sy1 - 6}
-                          fill="white"
-                          fontSize={11}
-                          fontFamily="monospace"
-                          fontWeight="bold"
-                        >
-                          {obj.name} {Math.round(obj.score * 100)}%
-                        </text>
-                      </g>
-                    )
-                  })}
-                </svg>
-              )}
+              {/* BBOX overlay removed - AI Backend already renders bbox on images */}
             </div>
           </div>
         ) : (

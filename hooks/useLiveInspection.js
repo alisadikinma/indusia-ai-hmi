@@ -271,18 +271,30 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
       status = 'processing'
     }
     
-    setInspectionStage({
-      status,
-      stageName,
-      message,
-      stageIndex: stageIndex > 0 ? stageIndex : 0,
-      totalStages: currentTotalStages,
-      icon
+    // Guard: Ignore duplicate done events to prevent stuck animation
+    setInspectionStage(prev => {
+      if (stageName === 'done' && prev.status === 'ready' && prev.stageName === 'done') {
+        // Already in ready/done state, skip update to prevent re-render loop
+        return prev
+      }
+      
+      return {
+        status,
+        stageName,
+        message,
+        stageIndex: stageIndex > 0 ? stageIndex : 0,
+        totalStages: currentTotalStages,
+        icon
+      }
     })
   }, []) // No dependencies - uses ref
 
   const handleInspection = useCallback((data) => {
-    console.log('[LiveInspection] Inspection result:', data)
+    console.log('[LiveInspection] 🎯 ========================================')
+    console.log('[LiveInspection] 🎯 INSPECTION EVENT RECEIVED!')
+    console.log('[LiveInspection] 🎯 inspection_id:', data.inspection_id)
+    console.log('[LiveInspection] 🎯 decision:', data.decision)
+    console.log('[LiveInspection] 🎯 ========================================')
     
     // Get results - handle nested structure from dev.py
     const resultsData = data.results?.results || data.results
@@ -554,8 +566,15 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
 
   const confirmInspection = useCallback(async (operatorDecision, options = {}) => {
     if (!currentInspection) {
+      console.warn('[LiveInspection] ⚠️ confirmInspection called but no currentInspection!')
       return { success: false, error: 'No active inspection' }
     }
+
+    console.log('[LiveInspection] 🔄 Confirming inspection:', {
+      inspectionId: currentInspection.inspectionId,
+      operatorDecision,
+      aiDecision: currentInspection.decision
+    })
 
     setIsConfirming(true)
 
@@ -570,7 +589,11 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
         }
       )
 
+      console.log('[LiveInspection] 📬 Confirm result:', result)
+
       if (result.success) {
+        console.log('[LiveInspection] ✅ Confirm SUCCESS - resetting for next inspection')
+        
         setLastConfirmation({
           ...result.data,
           operatorDecision,
@@ -588,11 +611,13 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
           totalStages: prev.totalStages,
           icon: 'hourglass'
         }))
+      } else {
+        console.error('[LiveInspection] ❌ Confirm FAILED:', result.error)
       }
 
       return result
     } catch (error) {
-      console.error('[LiveInspection] Confirm error:', error)
+      console.error('[LiveInspection] ❌ Confirm error:', error)
       return { success: false, error: error.message }
     } finally {
       setIsConfirming(false)
@@ -625,6 +650,40 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
       disconnect()
     }
   }, [autoConnect, lineId, workOrder?.id]) // Only reconnect if WO changes
+
+  // ============================================
+  // Periodic Stream Health Check
+  // ============================================
+
+  useEffect(() => {
+    if (!serviceRef.current) return
+
+    const healthCheckInterval = setInterval(() => {
+      if (serviceRef.current) {
+        const status = serviceRef.current.getStreamStatus?.()
+        if (status) {
+          const inspectionOk = status.inspection?.isOpen
+          const runningOk = status.running_status?.isOpen
+          
+          if (!inspectionOk) {
+            console.warn('[LiveInspection] ⚠️ HEALTH CHECK: Inspection stream DOWN! Results will not arrive.')
+          }
+          if (!runningOk) {
+            console.warn('[LiveInspection] ⚠️ HEALTH CHECK: Running status stream DOWN!')
+          }
+          
+          // Log status every check
+          console.log('[LiveInspection] 📊 Stream health:', {
+            inspection: status.inspection?.status || 'MISSING',
+            running_status: status.running_status?.status || 'MISSING',
+            hardware_status: status.hardware_status?.status || 'MISSING'
+          })
+        }
+      }
+    }, 30000) // Check every 30 seconds
+
+    return () => clearInterval(healthCheckInterval)
+  }, [isConnected])
 
   // ============================================
   // Return Hook Interface
@@ -664,6 +723,7 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
     disconnect,
     reconnect,
     checkAiBackend,
+    getStreamStatus: () => serviceRef.current?.getStreamStatus?.() || {},
 
     // Process Control Methods
     runProcess,
