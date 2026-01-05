@@ -1,17 +1,20 @@
 import { NextResponse } from 'next/server'
 import * as imageRepo from '@/lib/repos/imageStorageRepo'
+import { withAuth } from '@/lib/auth/apiAuth'
+import { isValidId } from '@/lib/utils/sanitize'
 
 /**
  * GET /api/images/:overrideId
  * Get all images for an override
+ * Requires images:read permission
  */
-export async function GET(request, { params }) {
+async function handleGET(request, { params }) {
   try {
     const { overrideId } = params
 
-    if (!overrideId) {
+    if (!overrideId || !isValidId(overrideId)) {
       return NextResponse.json(
-        { success: false, error: 'overrideId is required' },
+        { success: false, error: 'Invalid overrideId' },
         { status: 400 }
       )
     }
@@ -23,9 +26,9 @@ export async function GET(request, { params }) {
       data: images
     })
   } catch (error) {
-    console.error('[GET /api/images/:overrideId] Error:', error)
+    console.error('[GET /api/images/[overrideId]] Error:', error)
     return NextResponse.json(
-      { success: false, error: error.message || 'Failed to fetch images' },
+      { success: false, error: 'Failed to fetch images' },
       { status: 500 }
     )
   }
@@ -34,14 +37,15 @@ export async function GET(request, { params }) {
 /**
  * DELETE /api/images/:overrideId
  * Delete all images for an override
+ * Requires images:delete permission
  */
-export async function DELETE(request, { params }) {
+async function handleDELETE(request, { params }) {
   try {
     const { overrideId } = params
 
-    if (!overrideId) {
+    if (!overrideId || !isValidId(overrideId)) {
       return NextResponse.json(
-        { success: false, error: 'overrideId is required' },
+        { success: false, error: 'Invalid overrideId' },
         { status: 400 }
       )
     }
@@ -60,10 +64,14 @@ export async function DELETE(request, { params }) {
       message: 'Images deleted successfully'
     })
   } catch (error) {
-    console.error('[DELETE /api/images/:overrideId] Error:', error)
+    console.error('[DELETE /api/images/[overrideId]] Error:', error)
     return NextResponse.json(
-      { success: false, error: error.message || 'Failed to delete images' },
+      { success: false, error: 'Failed to delete images' },
       { status: 500 }
     )
   }
 }
+
+// Apply authentication
+export const GET = withAuth('images:read')(handleGET)
+export const DELETE = withAuth('images:delete')(handleDELETE)

@@ -2,17 +2,34 @@
  * PLC Signal API Endpoint
  * Receives signal requests from HMI and forwards to PLC via Serial RS232
  * 
+ * SECURITY: Requires authentication and plc:control permission
+ * 
  * In development: Simulates PLC communication with logging
  * In production: Connect to actual RS232 gateway service
  * 
  * POST /api/plc/signal
- * Body: { lineId, signal, boardId, operatorId, side?, reason?, woNumber?, boardSequence?, timestamp }
+ * Body: { lineId, signal, boardId, side?, reason?, woNumber?, boardSequence?, timestamp }
  */
 
 import { NextResponse } from 'next/server';
+import { withAuth } from '@/lib/auth/apiAuth';
+import { sanitizeRequestBody } from '@/lib/utils/sanitize';
+import { z } from 'zod';
 
 // PLC Signal types
 const VALID_SIGNALS = ['GOOD', 'NG', 'FLIP_BOTTOM', 'NEXT_PCB', 'NEXT'];
+
+// Validation schema
+const plcSignalSchema = z.object({
+  lineId: z.string().min(1).max(50),
+  signal: z.enum(VALID_SIGNALS),
+  boardId: z.string().max(100).optional(),
+  side: z.enum(['TOP', 'BOTTOM']).optional(),
+  reason: z.string().max(500).optional(),
+  woNumber: z.string().max(50).optional(),
+  boardSequence: z.number().int().positive().optional(),
+  timestamp: z.string().datetime().optional()
+}).strict();
 
 // Simulated RS232 command map
 const RS232_COMMANDS = {
@@ -29,17 +46,15 @@ const RS232_COMMANDS = {
  */
 async function sendToRS232Gateway(command, lineId, metadata = {}) {
   // TODO: Replace with actual RS232 gateway communication
-  // Options:
-  // 1. Local Node.js service with serialport library
-  // 2. Python gateway service
-  // 3. Edge device with REST API
   
-  console.log(`[RS232] Line ${lineId}: Sending command: ${command.trim()}`);
-  if (metadata.side) {
-    console.log(`[RS232] Side: ${metadata.side}`);
-  }
-  if (metadata.woNumber) {
-    console.log(`[RS232] WO: ${metadata.woNumber}, Board #${metadata.boardSequence}`);
+  if (process.env.NODE_ENV === 'development') {
+    console.log(`[RS232] Line ${lineId}: Sending command: ${command.trim()}`);
+    if (metadata.side) {
+      console.log(`[RS232] Side: ${metadata.side}`);
+    }
+    if (metadata.woNumber) {
+      console.log(`[RS232] WO: ${metadata.woNumber}, Board #${metadata.boardSequence}`);
+    }
   }
   
   // Simulate transmission delay
@@ -49,51 +64,54 @@ async function sendToRS232Gateway(command, lineId, metadata = {}) {
   return { success: true, ack: true };
 }
 
-export async function POST(request) {
+/**
+ * POST /api/plc/signal
+ * Send signal to PLC
+ * Requires plc:control permission
+ */
+async function handlePOST(request) {
   try {
-    const body = await request.json();
+    const rawBody = await request.json();
+    const body = sanitizeRequestBody(rawBody);
+
+    // Validate input
+    const validation = plcSignalSchema.safeParse(body);
+    if (!validation.success) {
+      return NextResponse.json(
+        { success: false, error: 'Validation failed', details: validation.error.flatten() },
+        { status: 400 }
+      );
+    }
+
     const { 
       lineId, 
       signal, 
       boardId, 
-      operatorId, 
       side,
       reason, 
       woNumber,
       boardSequence,
       timestamp 
-    } = body;
-
-    // Validate required fields
-    if (!lineId) {
-      return NextResponse.json(
-        { success: false, error: 'lineId is required' },
-        { status: 400 }
-      );
-    }
-
-    if (!signal || !VALID_SIGNALS.includes(signal)) {
-      return NextResponse.json(
-        { success: false, error: `Invalid signal. Must be one of: ${VALID_SIGNALS.join(', ')}` },
-        { status: 400 }
-      );
-    }
+    } = validation.data;
 
     // Get RS232 command
     const command = RS232_COMMANDS[signal];
     
-    // Log the signal request
-    console.log('[PLC API] Signal request:', {
-      lineId,
-      signal,
-      boardId,
-      operatorId,
-      side: side || 'TOP',
-      reason,
-      woNumber,
-      boardSequence,
-      timestamp: timestamp || new Date().toISOString(),
-    });
+    // Log the signal request (with operator info from auth)
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[PLC API] Signal request:', {
+        lineId,
+        signal,
+        boardId,
+        operatorId: request.user?.id,
+        operatorName: request.user?.name,
+        side: side || 'TOP',
+        reason,
+        woNumber,
+        boardSequence,
+        timestamp: timestamp || new Date().toISOString(),
+      });
+    }
 
     // Send to RS232 gateway
     const result = await sendToRS232Gateway(command, lineId, {
@@ -108,9 +126,6 @@ export async function POST(request) {
         { status: 503 }
       );
     }
-
-    // Log success
-    console.log(`[PLC API] Signal ${signal} sent successfully to Line ${lineId}`);
 
     return NextResponse.json({
       success: true,
@@ -130,14 +145,18 @@ export async function POST(request) {
     console.error('[PLC API] Error:', error);
     
     return NextResponse.json(
-      { success: false, error: error.message || 'Internal server error' },
+      { success: false, error: 'Internal server error' },
       { status: 500 }
     );
   }
 }
 
-// GET endpoint to check PLC connection status
-export async function GET(request) {
+/**
+ * GET /api/plc/signal?lineId=xxx
+ * Check PLC connection status
+ * Requires plc:status permission
+ */
+async function handleGET(request) {
   const { searchParams } = new URL(request.url);
   const lineId = searchParams.get('lineId');
 
@@ -153,3 +172,7 @@ export async function GET(request) {
     },
   });
 }
+
+// Apply authentication - requires plc permissions
+export const POST = withAuth('plc:control')(handlePOST);
+export const GET = withAuth('plc:status')(handleGET);

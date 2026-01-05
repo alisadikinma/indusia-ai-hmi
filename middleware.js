@@ -111,7 +111,7 @@ function addCORSHeaders(response, request) {
   )
   response.headers.set(
     'Access-Control-Allow-Headers',
-    'Content-Type, Authorization, X-User-Id, X-Requested-With'
+    'Content-Type, Authorization, X-User-Id, X-Requested-With, X-CSRF-Token'
   )
   response.headers.set('Access-Control-Max-Age', '86400')
   response.headers.set('Access-Control-Allow-Credentials', 'true')

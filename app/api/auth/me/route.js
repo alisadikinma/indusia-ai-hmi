@@ -1,26 +1,27 @@
 import { NextResponse } from 'next/server'
 import * as usersRepo from '@/lib/repos/usersRepo'
+import { getAuthUser } from '@/lib/auth/apiAuth'
+import { normalizeRole } from '@/lib/utils/roleUtils'
 
 /**
  * GET /api/auth/me
- * Query params: userId (for dev session strategy)
- * Response: { success, data: user } or 401
+ * Returns the currently authenticated user's data
+ * SECURITY: Uses session/header auth, NOT query params
  */
 export async function GET(request) {
   try {
-    const { searchParams } = new URL(request.url)
-    const userId = searchParams.get('userId')
+    // Get authenticated user from session/header
+    const user = await getAuthUser(request)
 
-    // For dev, we use userId from query param (stored in localStorage)
-    // In production, extract from JWT or session cookie
-    if (!userId) {
+    if (!user) {
       return NextResponse.json(
         { success: false, error: 'Not authenticated' },
         { status: 401 }
       )
     }
 
-    const result = await usersRepo.getById(userId)
+    // Fetch full user data (session might have limited fields)
+    const result = await usersRepo.getById(user.id)
 
     if (result.error || !result.data) {
       return NextResponse.json(
@@ -29,10 +30,10 @@ export async function GET(request) {
       )
     }
 
-    const user = result.data
+    const userData = result.data
 
     // Check user is still active
-    if (user.status !== 'active') {
+    if (userData.status !== 'active') {
       return NextResponse.json(
         { success: false, error: 'Account is not active' },
         { status: 403 }
@@ -40,16 +41,19 @@ export async function GET(request) {
     }
 
     // Remove sensitive data
-    const { password: _, ...safeUser } = user
+    const { password: _, ...safeUser } = userData
+
+    // Add normalized role
+    safeUser.role = normalizeRole(safeUser.role_id)
 
     return NextResponse.json({
       success: true,
       data: safeUser
     })
   } catch (error) {
-    console.error('[auth/me]', error)
+    console.error('[auth/me] Error:', error)
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: 'Failed to fetch user data' },
       { status: 500 }
     )
   }

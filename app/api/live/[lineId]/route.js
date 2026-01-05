@@ -2,9 +2,12 @@
  * Live Inspection SSE Endpoint
  * Server-Sent Events for real-time inspection data streaming
  *
- * GET: Client connects to receive live detection data
- * POST: Edge device pushes detection results
+ * GET: Client connects to receive live detection data (requires auth)
+ * POST: Edge device pushes detection results (requires API key)
  */
+
+import { getAuthUser } from '@/lib/auth/apiAuth'
+import { hasPermission } from '@/lib/auth/rbac'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -15,9 +18,27 @@ const clients = new Map()
 /**
  * GET /api/live/[lineId]
  * SSE endpoint for clients to receive live detection data
+ * Requires authentication and inspection:view permission
  */
 export async function GET(request, { params }) {
   const { lineId } = params
+
+  // Authenticate user
+  const user = await getAuthUser(request)
+  if (!user) {
+    return new Response(JSON.stringify({ success: false, error: 'Unauthorized' }), {
+      status: 401,
+      headers: { 'Content-Type': 'application/json' }
+    })
+  }
+
+  // Check permission
+  if (!hasPermission(user.role_id, 'inspection:view')) {
+    return new Response(JSON.stringify({ success: false, error: 'Forbidden' }), {
+      status: 403,
+      headers: { 'Content-Type': 'application/json' }
+    })
+  }
 
   // Setup SSE stream
   const encoder = new TextEncoder()
@@ -33,11 +54,11 @@ export async function GET(request, { params }) {
         try {
           controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`))
         } catch (err) {
-          console.error('[SSE] Failed to send:', err)
+          // Silently fail on closed connections
         }
       }
 
-      const client = { id: clientId, send }
+      const client = { id: clientId, send, userId: user.id }
       clients.get(lineId).add(client)
 
       // Send initial connection message
@@ -58,10 +79,14 @@ export async function GET(request, { params }) {
             clients.delete(lineId)
           }
         }
-        console.log(`[SSE] Client ${clientId} disconnected from line ${lineId}`)
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`[SSE] Client ${clientId} disconnected from line ${lineId}`)
+        }
       })
 
-      console.log(`[SSE] Client ${clientId} connected to line ${lineId}`)
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`[SSE] Client ${clientId} (user: ${user.id}) connected to line ${lineId}`)
+      }
     }
   })
 
@@ -78,24 +103,33 @@ export async function GET(request, { params }) {
 /**
  * POST /api/live/[lineId]
  * Edge device pushes detection results
- * Requires x-api-key header for authentication
+ * Requires x-api-key header for authentication (NO default key!)
  */
 export async function POST(request, { params }) {
   const { lineId } = params
 
   try {
-    const body = await request.json()
-
     // Validate API key (edge device authentication)
     const apiKey = request.headers.get('x-api-key')
-    const expectedKey = process.env.EDGE_API_KEY || 'dev-key'
+    const expectedKey = process.env.EDGE_API_KEY
 
-    if (apiKey !== expectedKey) {
+    // SECURITY: No default key - must be explicitly configured
+    if (!expectedKey) {
+      console.error('[POST /api/live] EDGE_API_KEY not configured!')
+      return Response.json(
+        { success: false, error: 'Server misconfigured' },
+        { status: 500 }
+      )
+    }
+
+    if (!apiKey || apiKey !== expectedKey) {
       return Response.json(
         { success: false, error: 'Unauthorized' },
         { status: 401 }
       )
     }
+
+    const body = await request.json()
 
     // Broadcast to all connected clients for this line
     const lineClients = clients.get(lineId)
@@ -110,7 +144,7 @@ export async function POST(request, { params }) {
         image_url: body.image_url,
         detections: body.detections || [],
         inference_ms: body.inference_ms || 0,
-        result: body.result || 'pass' // 'pass', 'fail', 'review'
+        result: body.result || 'pass'
       }
 
       lineClients.forEach(client => {
@@ -118,13 +152,10 @@ export async function POST(request, { params }) {
           client.send(data)
           clientCount++
         } catch (err) {
-          console.error('[SSE] Failed to send to client:', err)
+          // Silently fail on closed connections
         }
       })
     }
-
-    // TODO: Optionally log to database (inspection_frames)
-    // await inspectionFramesRepo.log(lineId, body)
 
     return Response.json({
       success: true,
@@ -134,7 +165,7 @@ export async function POST(request, { params }) {
   } catch (error) {
     console.error('[POST /api/live] Error:', error)
     return Response.json(
-      { success: false, error: error.message },
+      { success: false, error: 'Internal server error' },
       { status: 500 }
     )
   }
@@ -151,7 +182,7 @@ export function broadcastToLine(lineId, data) {
       try {
         client.send(data)
       } catch (err) {
-        console.error('[SSE] Broadcast failed:', err)
+        // Silently fail
       }
     })
     return lineClients.size

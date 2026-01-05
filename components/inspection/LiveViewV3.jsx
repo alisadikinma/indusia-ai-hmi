@@ -21,6 +21,10 @@
  * False Call Auto-Detection:
  * - is_false_call = true when operator disagrees with AI
  * - (AI PASS + Operator NG) OR (AI FAIL + Operator GOOD)
+ * 
+ * Auto-NG Feature:
+ * - Toggle ON: Auto-confirm NG after 15s timeout
+ * - Toggle OFF: Operator must manually confirm
  */
 
 'use client'
@@ -32,7 +36,7 @@ import {
   CheckCircle2, XCircle, AlertTriangle, AlertCircle,
   Square, FlaskConical, Menu, LogOut, ChevronDown,
   Layers, RefreshCw, Settings, Camera, Cpu, RotateCcw,
-  Loader2, Activity, CircleDot, FileText
+  Loader2, Activity, CircleDot, FileText, ToggleLeft, ToggleRight
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useSidebar } from '@/context/SidebarContext'
@@ -57,6 +61,7 @@ const PASS_DISPLAY_DELAY_MS = 2000 // Display PASS result for 2 seconds before a
 const DEV_MODE = process.env.NODE_ENV === 'development'
 const BYPASS_WO_CHECK = true // TEMPORARY: Bypass WO check for testing
 const BYPASS_OPERATOR_CHECK = true // TEMPORARY: Bypass operator role check for testing
+const AUTO_NG_STORAGE_KEY = 'indusia_auto_ng_enabled' // localStorage key for Auto-NG toggle
 
 // Mock WO for testing when Supabase not configured
 const MOCK_WORK_ORDER = {
@@ -135,6 +140,26 @@ export function LiveViewV3({
   const [pendingDecision, setPendingDecision] = useState(null) // 'GOOD' or 'NG'
   const [showUserMenu, setShowUserMenu] = useState(false)
   const userMenuRef = useRef(null)
+  
+  // Auto-NG toggle state (persisted to localStorage)
+  const [autoNgEnabled, setAutoNgEnabled] = useState(true)
+  
+  // Load Auto-NG preference from localStorage on mount
+  useEffect(() => {
+    const stored = localStorage.getItem(AUTO_NG_STORAGE_KEY)
+    if (stored !== null) {
+      setAutoNgEnabled(stored === 'true')
+    }
+  }, [])
+  
+  // Save Auto-NG preference to localStorage when changed
+  const toggleAutoNg = useCallback(() => {
+    setAutoNgEnabled(prev => {
+      const newValue = !prev
+      localStorage.setItem(AUTO_NG_STORAGE_KEY, String(newValue))
+      return newValue
+    })
+  }, [])
   
   // Timer states for NG review timeout
   const [reviewCountdown, setReviewCountdown] = useState(NG_REVIEW_TIMEOUT_SECONDS)
@@ -460,26 +485,31 @@ export function LiveViewV3({
       
       return () => clearTimeout(timeoutId)
     } else if (aiResult === 'NG') {
-      // AI says FAIL → start review countdown
-      setReviewCountdown(NG_REVIEW_TIMEOUT_SECONDS)
-      
-      reviewTimerRef.current = setInterval(() => {
-        setReviewCountdown(prev => {
-          if (prev <= 1) {
-            // Timeout → auto confirm NG
-            processedInspectionRef.current = inspectionId
-            submitDecision('NG') // Direct call instead of handleNGClick to avoid modal
-            return NG_REVIEW_TIMEOUT_SECONDS
-          }
-          return prev - 1
-        })
-      }, 1000)
+      // AI says FAIL → start review countdown ONLY if Auto-NG is enabled
+      if (autoNgEnabled) {
+        setReviewCountdown(NG_REVIEW_TIMEOUT_SECONDS)
+        
+        reviewTimerRef.current = setInterval(() => {
+          setReviewCountdown(prev => {
+            if (prev <= 1) {
+              // Timeout → auto confirm NG
+              processedInspectionRef.current = inspectionId
+              submitDecision('NG') // Direct call instead of handleNGClick to avoid modal
+              return NG_REVIEW_TIMEOUT_SECONDS
+            }
+            return prev - 1
+          })
+        }, 1000)
+      } else {
+        // Auto-NG disabled → just reset countdown display (no timer)
+        setReviewCountdown(NG_REVIEW_TIMEOUT_SECONDS)
+      }
     }
 
     return () => {
       if (reviewTimerRef.current) clearInterval(reviewTimerRef.current)
     }
-  }, [aiResult, isPaused, isOperator, activeInspection, submitDecision])
+  }, [aiResult, isPaused, isOperator, activeInspection, submitDecision, autoNgEnabled])
 
   // ============================================
   // Dev Mode: Simulate Inspection
@@ -730,26 +760,60 @@ export function LiveViewV3({
             </div>
           </div>
 
-          {/* NG Review Countdown - only show when AI FAIL */}
-          {aiResult === 'NG' && activeInspection && (
-            <div className={cn(
-              "flex items-center gap-2 px-3 py-2 border",
-              reviewCountdown <= 5 
-                ? "bg-phosphor-red/20 border-phosphor-red animate-pulse" 
-                : "bg-phosphor-amber/10 border-phosphor-amber/50"
-            )}>
+          {/* Auto-NG Toggle + Countdown */}
+          <div className="flex items-center gap-3">
+            {/* Auto-NG Toggle */}
+            <button
+              onClick={toggleAutoNg}
+              className={cn(
+                "flex items-center gap-2 px-3 py-2 border transition-all",
+                autoNgEnabled 
+                  ? "border-phosphor-amber bg-phosphor-amber/10" 
+                  : "border-surface-border bg-terminal hover:border-text-tertiary"
+              )}
+              title={autoNgEnabled ? "Auto-NG ON: Will auto-reject after 15s" : "Auto-NG OFF: Manual confirmation required"}
+            >
+              {autoNgEnabled ? (
+                <ToggleRight className="w-5 h-5 text-phosphor-amber" />
+              ) : (
+                <ToggleLeft className="w-5 h-5 text-text-tertiary" />
+              )}
               <span className={cn(
-                "font-mono text-sm",
-                reviewCountdown <= 5 ? "text-phosphor-red" : "text-phosphor-amber"
-              )}>Auto NG in</span>
-              <span className={cn(
-                "font-mono text-2xl font-bold",
-                reviewCountdown <= 5 ? "text-phosphor-red" : "text-phosphor-amber"
+                "font-mono text-xs font-bold",
+                autoNgEnabled ? "text-phosphor-amber" : "text-text-tertiary"
               )}>
-                {reviewCountdown}s
+                AUTO-NG
               </span>
-            </div>
-          )}
+            </button>
+
+            {/* NG Review Countdown - only show when AI FAIL and Auto-NG is ON */}
+            {aiResult === 'NG' && activeInspection && autoNgEnabled && (
+              <div className={cn(
+                "flex items-center gap-2 px-3 py-2 border",
+                reviewCountdown <= 5 
+                  ? "bg-phosphor-red/20 border-phosphor-red animate-pulse" 
+                  : "bg-phosphor-amber/10 border-phosphor-amber/50"
+              )}>
+                <span className={cn(
+                  "font-mono text-sm",
+                  reviewCountdown <= 5 ? "text-phosphor-red" : "text-phosphor-amber"
+                )}>Auto NG in</span>
+                <span className={cn(
+                  "font-mono text-2xl font-bold",
+                  reviewCountdown <= 5 ? "text-phosphor-red" : "text-phosphor-amber"
+                )}>
+                  {reviewCountdown}s
+                </span>
+              </div>
+            )}
+
+            {/* Manual Mode Indicator - show when Auto-NG is OFF and NG detected */}
+            {aiResult === 'NG' && activeInspection && !autoNgEnabled && (
+              <div className="flex items-center gap-2 px-3 py-2 border border-phosphor-cyan bg-phosphor-cyan/10">
+                <span className="font-mono text-sm text-phosphor-cyan">MANUAL MODE</span>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Right: User + Time */}

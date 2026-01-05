@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 
 /**
  * Extract simple role name from various formats
@@ -22,14 +22,123 @@ const mockUsers = [
 
 const AuthContext = createContext(null);
 
+// CSRF token storage key
+const CSRF_STORAGE_KEY = 'indusia_csrf_token';
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [menuPermissions, setMenuPermissions] = useState([]);
+  const [csrfToken, setCsrfToken] = useState(null);
   
   // Active inspection session
   const [activeLineId, setActiveLineId] = useState(null);
   const [activeLineName, setActiveLineName] = useState(null);
+  
+  // Ref to track if CSRF token is being fetched
+  const csrfFetchingRef = useRef(false);
+
+  /**
+   * Fetch CSRF token from server
+   */
+  const fetchCSRFToken = useCallback(async () => {
+    // Prevent duplicate fetches
+    if (csrfFetchingRef.current) return null;
+    csrfFetchingRef.current = true;
+    
+    try {
+      const res = await fetch('/api/auth/csrf', {
+        method: 'GET',
+        credentials: 'include' // Important: include cookies
+      });
+      
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && json.data?.csrfToken) {
+          const token = json.data.csrfToken;
+          setCsrfToken(token);
+          localStorage.setItem(CSRF_STORAGE_KEY, token);
+          return token;
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to fetch CSRF token:', err.message);
+    } finally {
+      csrfFetchingRef.current = false;
+    }
+    return null;
+  }, []);
+
+  /**
+   * Get current CSRF token (from state, localStorage, or fetch new one)
+   */
+  const getCSRFToken = useCallback(async () => {
+    // Try state first
+    if (csrfToken) return csrfToken;
+    
+    // Try localStorage
+    const storedToken = localStorage.getItem(CSRF_STORAGE_KEY);
+    if (storedToken) {
+      setCsrfToken(storedToken);
+      return storedToken;
+    }
+    
+    // Fetch new token
+    return await fetchCSRFToken();
+  }, [csrfToken, fetchCSRFToken]);
+
+  /**
+   * Make authenticated API request with CSRF token
+   */
+  const apiRequest = useCallback(async (url, options = {}) => {
+    const method = (options.method || 'GET').toUpperCase();
+    
+    // Get CSRF token for state-changing requests
+    let token = null;
+    if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
+      token = await getCSRFToken();
+    }
+    
+    const headers = {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    };
+    
+    // Add CSRF token header
+    if (token) {
+      headers['X-CSRF-Token'] = token;
+    }
+    
+    // Add user ID header for authentication (dev mode)
+    if (user?.id) {
+      headers['x-user-id'] = user.id;
+    }
+    
+    const response = await fetch(url, {
+      ...options,
+      headers,
+      credentials: 'include' // Include cookies
+    });
+    
+    // If CSRF error, refresh token and retry once
+    if (response.status === 403) {
+      const json = await response.json();
+      if (json.code === 'CSRF_ERROR') {
+        console.warn('CSRF token expired, refreshing...');
+        const newToken = await fetchCSRFToken();
+        if (newToken) {
+          headers['X-CSRF-Token'] = newToken;
+          return fetch(url, {
+            ...options,
+            headers,
+            credentials: 'include'
+          });
+        }
+      }
+    }
+    
+    return response;
+  }, [user, getCSRFToken, fetchCSRFToken]);
 
   // Fetch menu permissions from database
   const fetchMenuPermissions = async (roleId) => {
@@ -39,7 +148,7 @@ export function AuthProvider({ children }) {
       if (res.ok) {
         const json = await res.json();
         if (json.success && json.data) {
-          return json.data; // Array of menu_ids
+          return json.data;
         }
       }
     } catch (err) {
@@ -51,19 +160,16 @@ export function AuthProvider({ children }) {
   // Normalize user object to ensure consistent role field
   const normalizeUser = (userData) => {
     if (!userData) return null;
-    
-    // Extract role from role_id if role is not set
     const role = userData.role || normalizeRole(userData.role_id || userData.roleId);
-    
-    return {
-      ...userData,
-      role, // Always have normalized role
-    };
+    return { ...userData, role };
   };
 
-  // Restore user session on mount
+  // Restore user session on mount + fetch CSRF token
   useEffect(() => {
     const restoreSession = async () => {
+      // Fetch CSRF token on app load
+      await fetchCSRFToken();
+      
       const storedUserId = localStorage.getItem('indusia_user_id');
       const storedUser = localStorage.getItem('indusia_user');
       const storedActiveLine = localStorage.getItem('indusia_active_line');
@@ -81,12 +187,12 @@ export function AuthProvider({ children }) {
 
       if (storedUserId) {
         try {
-          // Try to fetch fresh user data from API
-          const res = await fetch(`/api/auth/me?userId=${storedUserId}`);
+          const res = await fetch(`/api/auth/me`, {
+            headers: { 'x-user-id': storedUserId }
+          });
           if (res.ok) {
             const json = await res.json();
             if (json.success && json.data) {
-              // Merge with stored selections (selectedSectionId, etc.)
               const selections = storedUser ? JSON.parse(storedUser) : {};
               const restoredUser = normalizeUser({
                 ...json.data,
@@ -97,7 +203,6 @@ export function AuthProvider({ children }) {
               });
               setUser(restoredUser);
               
-              // Fetch menu permissions from database
               const roleId = json.data.role_id || json.data.roleId || `role_${restoredUser.role}`;
               const permissions = await fetchMenuPermissions(roleId);
               setMenuPermissions(permissions);
@@ -118,7 +223,6 @@ export function AuthProvider({ children }) {
           const normalizedUser = normalizeUser(parsed);
           setUser(normalizedUser);
           
-          // Fetch menu permissions
           const roleId = parsed.role_id || parsed.roleId || `role_${normalizedUser.role}`;
           const permissions = await fetchMenuPermissions(roleId);
           setMenuPermissions(permissions);
@@ -132,14 +236,23 @@ export function AuthProvider({ children }) {
     };
 
     restoreSession();
-  }, []);
+  }, [fetchCSRFToken]);
 
   // Login with email and password (API-based login)
   const login = useCallback(async (email, password) => {
     try {
+      // Get CSRF token for login request
+      const token = await getCSRFToken();
+      
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) {
+        headers['X-CSRF-Token'] = token;
+      }
+      
       const res = await fetch('/api/auth/login', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
+        credentials: 'include',
         body: JSON.stringify({ email, password })
       });
 
@@ -147,6 +260,12 @@ export function AuthProvider({ children }) {
 
       if (!json.success) {
         return { success: false, error: json.error || 'Login failed' };
+      }
+
+      // Update CSRF token from login response
+      if (json.data?.csrfToken) {
+        setCsrfToken(json.data.csrfToken);
+        localStorage.setItem(CSRF_STORAGE_KEY, json.data.csrfToken);
       }
 
       const loggedInUser = normalizeUser({
@@ -161,7 +280,6 @@ export function AuthProvider({ children }) {
       localStorage.setItem('indusia_user_id', loggedInUser.id);
       localStorage.setItem('indusia_user', JSON.stringify(loggedInUser));
 
-      // Fetch menu permissions from database
       const roleId = json.data.user.role_id || json.data.user.roleId || `role_${loggedInUser.role}`;
       const permissions = await fetchMenuPermissions(roleId);
       setMenuPermissions(permissions);
@@ -170,7 +288,7 @@ export function AuthProvider({ children }) {
     } catch (err) {
       console.warn('API login failed, trying mock auth:', err.message);
 
-      // Fallback to mock users
+      // Fallback to mock users (dev only)
       const mockUser = mockUsers.find(u => u.email === email && u.password === password);
       if (mockUser && mockUser.status === 'active') {
         const { password: _, ...safeUser } = mockUser;
@@ -185,7 +303,6 @@ export function AuthProvider({ children }) {
         localStorage.setItem('indusia_user_id', loggedInUser.id);
         localStorage.setItem('indusia_user', JSON.stringify(loggedInUser));
         
-        // Fetch menu permissions from database
         const roleId = mockUser.role_id || `role_${loggedInUser.role}`;
         const permissions = await fetchMenuPermissions(roleId);
         setMenuPermissions(permissions);
@@ -195,7 +312,7 @@ export function AuthProvider({ children }) {
 
       return { success: false, error: 'Invalid email or password' };
     }
-  }, []);
+  }, [getCSRFToken]);
 
   // Legacy login with profile (maintains backward compatibility)
   const loginWithProfile = useCallback((profile, options = {}) => {
@@ -226,10 +343,7 @@ export function AuthProvider({ children }) {
   // Update user selections (section, customer, line, board)
   const updateSelections = useCallback((selections) => {
     if (!user) return;
-    const updatedUser = {
-      ...user,
-      ...selections,
-    };
+    const updatedUser = { ...user, ...selections };
     setUser(updatedUser);
     localStorage.setItem('indusia_user', JSON.stringify(updatedUser));
   }, [user]);
@@ -256,18 +370,23 @@ export function AuthProvider({ children }) {
   // Logout
   const logout = useCallback(async () => {
     try {
-      await fetch('/api/auth/logout', { method: 'POST' });
+      await apiRequest('/api/auth/logout', { method: 'POST' });
     } catch (err) {
       console.warn('API logout failed:', err.message);
     }
     setUser(null);
     setMenuPermissions([]);
+    setCsrfToken(null);
     setActiveLineId(null);
     setActiveLineName(null);
     localStorage.removeItem('indusia_user');
     localStorage.removeItem('indusia_user_id');
     localStorage.removeItem('indusia_active_line');
-  }, []);
+    localStorage.removeItem(CSRF_STORAGE_KEY);
+    
+    // Fetch new CSRF token for next session
+    await fetchCSRFToken();
+  }, [apiRequest, fetchCSRFToken]);
 
   // Change password
   const changePassword = useCallback(async (currentPassword, newPassword) => {
@@ -276,14 +395,9 @@ export function AuthProvider({ children }) {
     }
 
     try {
-      const res = await fetch('/api/auth/change-password', {
+      const res = await apiRequest('/api/auth/change-password', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId: user.id,
-          currentPassword,
-          newPassword
-        })
+        body: JSON.stringify({ currentPassword, newPassword })
       });
 
       const json = await res.json();
@@ -292,19 +406,13 @@ export function AuthProvider({ children }) {
       console.warn('API change-password failed:', err.message);
       return { success: false, error: 'Failed to change password' };
     }
-  }, [user]);
+  }, [user, apiRequest]);
 
   // Check if user has permission for a menu item
   const hasMenuAccess = useCallback((menuId) => {
     if (!user) return false;
-    
-    // Normalize role from all possible sources
     const normalizedRole = user.role || normalizeRole(user.role_id) || normalizeRole(user.roleId);
-    
-    // Superadmin has all permissions
     if (normalizedRole === 'superadmin') return true;
-    
-    // Check from database permissions
     return menuPermissions.includes(menuId);
   }, [user, menuPermissions]);
 
@@ -313,7 +421,9 @@ export function AuthProvider({ children }) {
     if (!user?.id) return;
 
     try {
-      const res = await fetch(`/api/auth/me?userId=${user.id}`);
+      const res = await fetch(`/api/auth/me`, {
+        headers: { 'x-user-id': user.id }
+      });
       if (res.ok) {
         const json = await res.json();
         if (json.success && json.data) {
@@ -346,6 +456,10 @@ export function AuthProvider({ children }) {
     hasMenuAccess,
     menuPermissions,
     refreshUser,
+    // CSRF
+    csrfToken,
+    getCSRFToken,
+    apiRequest,
     // Active line session
     activeLineId,
     activeLineName,
@@ -367,7 +481,6 @@ export function useAuth() {
     throw new Error('useAuth must be used within AuthProvider');
   }
 
-  // Use normalized role for role checks
   const userRole = context.user?.role;
   
   const isSuperAdmin = userRole === 'superadmin';

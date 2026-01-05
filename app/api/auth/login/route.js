@@ -2,26 +2,64 @@ import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabaseClient'
 import { normalizeRole } from '@/lib/utils/roleUtils'
 import { validateMockCredentials } from '@/data/mockUsers'
+import { sanitizeRequestBody } from '@/lib/utils/sanitize'
+import { checkRateLimit, getClientIP, RATE_LIMITS, rateLimitResponse } from '@/lib/utils/rateLimit'
+import { withCSRF, generateCSRFToken, setCSRFCookie } from '@/lib/utils/csrf'
+import { z } from 'zod'
+
+// Validation schema for login
+const loginSchema = z.object({
+  email: z.string().email().max(255),
+  password: z.string().min(1).max(128)
+}).strict()
 
 /**
  * POST /api/auth/login
  */
-export async function POST(request) {
+async function handlePOST(request) {
+  const isDev = process.env.NODE_ENV === 'development'
+
   try {
-    const body = await request.json()
-    const { email, password } = body
+    // RATE LIMITING: Prevent brute force attacks
+    const clientIP = getClientIP(request)
+    const rateCheck = checkRateLimit(
+      `login:${clientIP}`,
+      RATE_LIMITS.login.maxRequests,
+      RATE_LIMITS.login.windowMs
+    )
 
-    console.log('[login] Attempting login for:', email)
-
-    // Basic validation
-    if (!email || !password) {
+    if (!rateCheck.allowed) {
       return NextResponse.json(
-        { success: false, error: 'Email and password are required' },
+        rateLimitResponse(rateCheck.resetIn),
+        { 
+          status: 429,
+          headers: {
+            'Retry-After': Math.ceil(rateCheck.resetIn / 1000).toString(),
+            'X-RateLimit-Remaining': '0',
+            'X-RateLimit-Reset': Math.ceil(Date.now() / 1000 + rateCheck.resetIn / 1000).toString()
+          }
+        }
+      )
+    }
+
+    const rawBody = await request.json()
+    const body = sanitizeRequestBody(rawBody)
+
+    // Validate input
+    const validation = loginSchema.safeParse(body)
+    if (!validation.success) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid email or password format' },
         { status: 400 }
       )
     }
 
+    const { email, password } = validation.data
     const normalizedEmail = email.toLowerCase().trim()
+
+    if (isDev) {
+      console.log('[login] Attempting login for:', normalizedEmail)
+    }
 
     // Try Supabase first
     try {
@@ -31,26 +69,26 @@ export async function POST(request) {
         .eq('email', normalizedEmail)
         .single()
 
-      console.log('[login] Supabase result:', { user: user?.email, error: error?.message })
-
       if (!error && user) {
-        // Check password (supports both plaintext and bcrypt)
+        // Check password - prefer bcrypt, fallback to plaintext only in dev
         let isValid = false
         
         if (user.password && user.password.startsWith('$2')) {
-          // Bcrypt hash
+          // Bcrypt hash - always supported
           try {
             const bcrypt = require('bcrypt')
             isValid = await bcrypt.compare(password, user.password)
           } catch (e) {
-            console.warn('[login] bcrypt not available')
+            console.warn('[login] bcrypt comparison failed')
           }
-        } else {
-          // Plaintext comparison
+        } else if (isDev) {
+          // SECURITY: Plaintext comparison ONLY in development
           isValid = password === user.password
+          if (isValid) {
+            console.warn('[login] WARNING: Plaintext password match - use bcrypt in production!')
+          }
         }
-
-        console.log('[login] Password valid:', isValid)
+        // In production, plaintext passwords are NOT accepted
 
         if (isValid && user.status === 'active') {
           const { password: _, ...safeUser } = user
@@ -58,10 +96,25 @@ export async function POST(request) {
           // Add normalized role field
           safeUser.role = normalizeRole(safeUser.role_id)
           
-          return NextResponse.json({
+          // Generate new CSRF token on successful login
+          const csrfToken = generateCSRFToken()
+          
+          const response = NextResponse.json({
             success: true,
-            data: { user: safeUser }
+            data: { 
+              user: safeUser,
+              csrfToken // Include in response for frontend
+            }
+          }, {
+            headers: {
+              'X-RateLimit-Remaining': rateCheck.remaining.toString()
+            }
           })
+          
+          // Set CSRF cookie
+          setCSRFCookie(response, csrfToken)
+          
+          return response
         } else if (user.status !== 'active') {
           return NextResponse.json(
             { success: false, error: 'Account is not active' },
@@ -70,32 +123,51 @@ export async function POST(request) {
         }
       }
     } catch (dbError) {
-      console.warn('[login] Supabase error:', dbError.message)
+      if (isDev) {
+        console.warn('[login] Supabase error:', dbError.message)
+      }
     }
 
-    // Fallback to mock users
-    console.log('[login] Trying mock users...')
-    const mockUser = validateMockCredentials(normalizedEmail, password)
+    // SECURITY: Mock users ONLY in development mode
+    if (isDev) {
+      const mockUser = validateMockCredentials(normalizedEmail, password)
 
-    if (mockUser) {
-      console.log('[login] Mock user found:', mockUser.email)
-      return NextResponse.json({
-        success: true,
-        data: { user: mockUser },
-        _mock: true
-      })
+      if (mockUser) {
+        console.log('[login] Dev mode - Mock user found:', mockUser.email)
+        
+        // Generate CSRF token for mock login too
+        const csrfToken = generateCSRFToken()
+        
+        const response = NextResponse.json({
+          success: true,
+          data: { 
+            user: mockUser,
+            csrfToken
+          },
+          _mock: true,
+          _warning: 'Mock users are for development only'
+        })
+        
+        setCSRFCookie(response, csrfToken)
+        
+        return response
+      }
     }
 
-    console.log('[login] No user found')
+    // Generic error message to prevent user enumeration
     return NextResponse.json(
       { success: false, error: 'Invalid email or password' },
       { status: 401 }
     )
   } catch (error) {
     console.error('[login] Error:', error)
+    // SECURITY: Don't expose internal error details
     return NextResponse.json(
-      { success: false, error: 'Login failed: ' + error.message },
+      { success: false, error: 'Login failed' },
       { status: 500 }
     )
   }
 }
+
+// Apply CSRF protection
+export const POST = withCSRF(handlePOST)

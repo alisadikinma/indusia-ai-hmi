@@ -1,34 +1,63 @@
 import { NextResponse } from 'next/server'
 import * as usersRepo from '@/lib/repos/usersRepo'
+import { withAuth } from '@/lib/auth/apiAuth'
+import { withCSRF } from '@/lib/utils/csrf'
+import { sanitizeRequestBody } from '@/lib/utils/sanitize'
+import { checkRateLimit, getClientIP, RATE_LIMITS, rateLimitResponse } from '@/lib/utils/rateLimit'
+import { z } from 'zod'
+
+// Validation schema
+const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1).max(128),
+  newPassword: z.string().min(8).max(128)
+    .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
+    .regex(/[a-z]/, 'Password must contain at least one lowercase letter')
+    .regex(/[0-9]/, 'Password must contain at least one number')
+}).strict()
 
 /**
  * POST /api/auth/change-password
- * Body: { userId, currentPassword, newPassword }
- * Response: { success: true } or error
+ * Body: { currentPassword, newPassword }
+ * SECURITY: Uses authenticated user from session, NOT from request body
  */
-export async function POST(request) {
+async function handlePOST(request) {
+  const isDev = process.env.NODE_ENV === 'development'
+
   try {
-    const body = await request.json()
-    const { userId, currentPassword, newPassword } = body
+    // Rate limiting for password changes
+    const clientIP = getClientIP(request)
+    const rateCheck = checkRateLimit(
+      `password:${request.user.id}:${clientIP}`,
+      RATE_LIMITS.passwordChange.maxRequests,
+      RATE_LIMITS.passwordChange.windowMs
+    )
 
-    // Validate required fields
-    if (!userId || !currentPassword || !newPassword) {
+    if (!rateCheck.allowed) {
       return NextResponse.json(
-        { success: false, error: 'All fields are required' },
+        rateLimitResponse(rateCheck.resetIn),
+        { status: 429 }
+      )
+    }
+
+    const rawBody = await request.json()
+    const body = sanitizeRequestBody(rawBody)
+
+    // Validate input
+    const validation = changePasswordSchema.safeParse(body)
+    if (!validation.success) {
+      return NextResponse.json(
+        { success: false, error: 'Validation failed', details: validation.error.flatten() },
         { status: 400 }
       )
     }
 
-    // Validate new password length
-    if (newPassword.length < 6) {
-      return NextResponse.json(
-        { success: false, error: 'New password must be at least 6 characters' },
-        { status: 400 }
-      )
-    }
+    const { currentPassword, newPassword } = validation.data
 
-    // Get user
-    const result = await usersRepo.getById(userId)
+    // SECURITY: Get userId from authenticated session, NOT from request body
+    const userId = request.user.id
+
+    // Get user with password
+    const result = await usersRepo.getById(userId, { includePassword: true })
 
     if (result.error || !result.data) {
       return NextResponse.json(
@@ -39,20 +68,54 @@ export async function POST(request) {
 
     const user = result.data
 
-    // Verify current password (plaintext for dev)
-    if (user.password !== currentPassword) {
+    // Verify current password
+    let isValid = false
+
+    if (user.password && user.password.startsWith('$2')) {
+      // Bcrypt hash
+      try {
+        const bcrypt = require('bcrypt')
+        isValid = await bcrypt.compare(currentPassword, user.password)
+      } catch (e) {
+        console.error('[change-password] bcrypt error:', e)
+      }
+    } else if (isDev) {
+      // DEVELOPMENT ONLY: Plaintext comparison
+      isValid = user.password === currentPassword
+    }
+    // In production, plaintext passwords are NOT accepted
+
+    if (!isValid) {
       return NextResponse.json(
         { success: false, error: 'Current password is incorrect' },
         { status: 401 }
       )
     }
 
+    // Hash new password
+    let hashedPassword = newPassword
+    try {
+      const bcrypt = require('bcrypt')
+      hashedPassword = await bcrypt.hash(newPassword, 12)
+    } catch (e) {
+      if (!isDev) {
+        // In production, we MUST hash passwords
+        console.error('[change-password] bcrypt not available in production!')
+        return NextResponse.json(
+          { success: false, error: 'Password change failed' },
+          { status: 500 }
+        )
+      }
+      // Dev mode: allow plaintext (with warning)
+      console.warn('[change-password] WARNING: Storing plaintext password (dev mode)')
+    }
+
     // Update password
-    const updateResult = await usersRepo.update(userId, { password: newPassword })
+    const updateResult = await usersRepo.update(userId, { password: hashedPassword })
 
     if (updateResult.error) {
       return NextResponse.json(
-        { success: false, error: updateResult.error },
+        { success: false, error: 'Password change failed' },
         { status: 500 }
       )
     }
@@ -62,10 +125,13 @@ export async function POST(request) {
       message: 'Password changed successfully'
     })
   } catch (error) {
-    console.error('[auth/change-password]', error)
+    console.error('[change-password] Error:', error)
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: 'Password change failed' },
       { status: 500 }
     )
   }
 }
+
+// Apply CSRF + Authentication
+export const POST = withCSRF(withAuth()(handlePOST))

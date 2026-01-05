@@ -1,21 +1,45 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabaseClient'
+import { withAuth, withOptionalAuth } from '@/lib/auth/apiAuth'
+import { sanitizeRequestBody } from '@/lib/utils/sanitize'
+import { z } from 'zod'
+
+// Validation schema for error logs
+const errorLogSchema = z.object({
+  error: z.string().max(10000).optional(),
+  message: z.string().max(10000).optional(),
+  stack: z.string().max(50000).optional(),
+  componentStack: z.string().max(50000).optional(),
+  source: z.string().max(100).optional(),
+  url: z.string().max(2000).optional(),
+  userAgent: z.string().max(500).optional(),
+  additionalInfo: z.any().optional(),
+  timestamp: z.string().datetime().optional()
+}).refine(data => data.error || data.message, {
+  message: 'Either error or message is required'
+})
 
 /**
  * POST /api/error-log
  * Log client-side errors to the database
+ * Uses optional auth - allows logging even if not authenticated
+ * (errors can occur during login, etc.)
  */
-export async function POST(request) {
+async function handlePOST(request) {
   try {
-    const errorData = await request.json()
+    const rawBody = await request.json()
+    const body = sanitizeRequestBody(rawBody, { maxStringLength: 50000 })
 
-    // Validate required fields
-    if (!errorData.error && !errorData.message) {
+    // Validate input
+    const validation = errorLogSchema.safeParse(body)
+    if (!validation.success) {
       return NextResponse.json(
-        { success: false, error: 'Error message is required' },
+        { success: false, error: 'Invalid error log format' },
         { status: 400 }
       )
     }
+
+    const errorData = validation.data
 
     // Prepare event log entry
     const eventLogEntry = {
@@ -30,7 +54,7 @@ export async function POST(request) {
         componentStack: errorData.componentStack || null,
         url: errorData.url || null,
         userAgent: errorData.userAgent || null,
-        userId: errorData.userId || null,
+        userId: request.user?.id || null, // From auth, not from body
         additionalInfo: errorData.additionalInfo || null
       }
     }
@@ -41,22 +65,14 @@ export async function POST(request) {
       .insert(eventLogEntry)
 
     if (dbError) {
-      // Log to console as fallback
       console.error('[Error Log API] Failed to insert to database:', dbError)
-      console.error('[Error Log API] Error data:', eventLogEntry)
 
-      // Still return success to client - we don't want error logging to fail
       return NextResponse.json({
         success: true,
         logged: false,
         fallback: 'console'
       })
     }
-
-    // In production, you might also want to:
-    // 1. Send to external error tracking service (Sentry, Bugsnag, etc.)
-    // 2. Send alerts for critical errors
-    // 3. Aggregate similar errors
 
     return NextResponse.json({
       success: true,
@@ -65,7 +81,6 @@ export async function POST(request) {
     })
 
   } catch (error) {
-    // Even if parsing fails, log what we can
     console.error('[Error Log API] Exception:', error)
 
     return NextResponse.json(
@@ -85,7 +100,6 @@ export async function POST(request) {
 function determineSeverity(errorData) {
   const errorMessage = (errorData.error || errorData.message || '').toLowerCase()
 
-  // Critical errors
   if (
     errorMessage.includes('uncaught') ||
     errorMessage.includes('fatal') ||
@@ -95,7 +109,6 @@ function determineSeverity(errorData) {
     return 'CRITICAL'
   }
 
-  // High severity
   if (
     errorMessage.includes('network') ||
     errorMessage.includes('timeout') ||
@@ -104,18 +117,18 @@ function determineSeverity(errorData) {
     return 'ERROR'
   }
 
-  // Default to warning
   return 'WARNING'
 }
 
 /**
  * GET /api/error-log
- * Retrieve error logs (for admin/debugging purposes)
+ * Retrieve error logs (admin only)
+ * Requires logs:read permission
  */
-export async function GET(request) {
+async function handleGET(request) {
   try {
     const { searchParams } = new URL(request.url)
-    const limit = parseInt(searchParams.get('limit') || '50', 10)
+    const limit = Math.min(parseInt(searchParams.get('limit') || '50', 10), 100)
     const offset = parseInt(searchParams.get('offset') || '0', 10)
     const type = searchParams.get('type')
     const severity = searchParams.get('severity')
@@ -168,3 +181,8 @@ export async function GET(request) {
     )
   }
 }
+
+// POST: Optional auth (errors can occur before login)
+export const POST = withOptionalAuth(handlePOST)
+// GET: Requires logs:read permission (admin only)
+export const GET = withAuth('logs:read')(handleGET)
