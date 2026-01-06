@@ -49,7 +49,8 @@
       "Bash(wc:*)",
       "Bash(if exist \"C:\\\\xampp\\\\htdocs\\\\indusia-ai-hmi\\\\nul\" del \"C:\\\\xampp\\\\htdocs\\\\indusia-ai-hmi\\\\nul\")",
       "Bash(git checkout:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(if not exist \"C:\\\\Users\\\\JB\\\\.claude-worktrees\\\\indusia-ai-hmi\\\\keen-tesla\\\\docs\\\\migrations\" mkdir \"C:\\\\Users\\\\JB\\\\.claude-worktrees\\\\indusia-ai-hmi\\\\keen-tesla\\\\docs\\\\migrations\")"
     ],
     "deny": [],
     "ask": []
