@@ -22,8 +22,11 @@ let activeSyncPromise = null
 
 export async function POST(request) {
   try {
+    console.log('[API sync/trigger] Starting...')
+    
     // Check configuration
     if (!isCloudSyncConfigured()) {
+      console.log('[API sync/trigger] Not configured')
       return NextResponse.json({
         success: false,
         error: 'Cloud sync not configured'
@@ -42,6 +45,7 @@ export async function POST(request) {
 
     // Check online
     const { online, error: onlineError } = await checkOnlineStatus()
+    console.log('[API sync/trigger] Online check:', online, onlineError)
     if (!online) {
       return NextResponse.json({
         success: false,
@@ -51,6 +55,7 @@ export async function POST(request) {
 
     // Check lock
     const lock = await getLockStatus()
+    console.log('[API sync/trigger] Lock status:', lock)
     if (lock.locked) {
       return NextResponse.json({
         success: false,
@@ -63,6 +68,8 @@ export async function POST(request) {
       }, { status: 409 })
     }
 
+    console.log('[API sync/trigger] Starting syncToCloud...')
+    
     // Start sync in background (don't await)
     activeSyncPromise = syncToCloud({ triggeredBy })
       .then(result => {

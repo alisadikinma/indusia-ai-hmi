@@ -6,13 +6,39 @@
  * 
  * GET: Fetch current state
  * PUT: Update state (operator only)
+ * 
+ * Uses file-based storage to persist across Next.js workers in dev mode.
  */
 
 import { NextResponse } from 'next/server'
+import fs from 'fs'
+import path from 'path'
 
-// In-memory store for line state
-// In production, this should be Redis or database for persistence across restarts
-const lineStateStore = new Map()
+// File-based store for line state (persists across Next.js workers)
+const STATE_FILE = path.join(process.cwd(), '.line-state.json')
+
+// Read state from file
+function readStateStore() {
+  try {
+    if (fs.existsSync(STATE_FILE)) {
+      const data = fs.readFileSync(STATE_FILE, 'utf-8')
+      return new Map(JSON.parse(data))
+    }
+  } catch (err) {
+    console.warn('[LineState] Failed to read state file:', err.message)
+  }
+  return new Map()
+}
+
+// Write state to file
+function writeStateStore(store) {
+  try {
+    const data = JSON.stringify([...store.entries()])
+    fs.writeFileSync(STATE_FILE, data, 'utf-8')
+  } catch (err) {
+    console.warn('[LineState] Failed to write state file:', err.message)
+  }
+}
 
 // Default state for a line
 const getDefaultState = () => ({
@@ -55,15 +81,20 @@ export async function GET(request, { params }) {
       )
     }
 
+    // Read from file
+    const lineStateStore = readStateStore()
+
     // Get or create default state
     if (!lineStateStore.has(lineId)) {
-      lineStateStore.set(lineId, getDefaultState())
+      const defaultState = getDefaultState()
+      lineStateStore.set(lineId, defaultState)
+      writeStateStore(lineStateStore)
     }
 
     const state = lineStateStore.get(lineId)
     
-    // DEBUG: Log what we're returning
-    console.log(`[LineState API] GET line ${lineId} autoNgEnabled:`, state.autoNgEnabled)
+    // DEBUG log disabled - uncomment for troubleshooting
+    // console.log(`[LineState API] GET line ${lineId} autoNgEnabled:`, state.autoNgEnabled)
 
     return NextResponse.json({
       success: true,
@@ -84,13 +115,13 @@ export async function PUT(request, { params }) {
     const { lineId } = await params
     const body = await request.json()
     
-    // DEBUG: Log incoming request
-    console.log(`[LineState API] PUT line ${lineId}:`, {
-      autoNgEnabled: body.autoNgEnabled,
-      hasProcessStatus: body.processStatus !== undefined,
-      hasStage: body.stage !== undefined,
-      updatedBy: body.updatedBy
-    })
+    // DEBUG log disabled - uncomment for troubleshooting
+    // console.log(`[LineState API] PUT line ${lineId}:`, {
+    //   autoNgEnabled: body.autoNgEnabled,
+    //   hasProcessStatus: body.processStatus !== undefined,
+    //   hasStage: body.stage !== undefined,
+    //   updatedBy: body.updatedBy
+    // })
     
     if (!lineId) {
       return NextResponse.json(
@@ -98,6 +129,9 @@ export async function PUT(request, { params }) {
         { status: 400 }
       )
     }
+
+    // Read current store from file
+    const lineStateStore = readStateStore()
 
     // Get current state or default
     const currentState = lineStateStore.get(lineId) || getDefaultState()
@@ -114,10 +148,12 @@ export async function PUT(request, { params }) {
       updatedBy: body.updatedBy || null
     }
 
+    // Save to store and persist to file
     lineStateStore.set(lineId, updatedState)
+    writeStateStore(lineStateStore)
 
-    // DEBUG: Log saved state
-    console.log(`[LineState API] Saved line ${lineId} autoNgEnabled:`, updatedState.autoNgEnabled)
+    // DEBUG log disabled - uncomment for troubleshooting
+    // console.log(`[LineState API] Saved line ${lineId} autoNgEnabled:`, updatedState.autoNgEnabled)
 
     return NextResponse.json({
       success: true,

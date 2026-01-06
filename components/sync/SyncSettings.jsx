@@ -41,7 +41,7 @@ export function SyncSettings({ onClose }) {
   const [loadingHistory, setLoadingHistory] = useState(false)
   const [actionResult, setActionResult] = useState(null)
 
-  // Fetch sync history
+  // Fetch sync history + refresh status on mount
   useEffect(() => {
     const fetchHistory = async () => {
       setLoadingHistory(true)
@@ -58,7 +58,13 @@ export function SyncSettings({ onClose }) {
       }
     }
     fetchHistory()
-  }, [])
+    refreshStatus() // Refresh status when popup opens
+  }, [refreshStatus])
+
+  // Debug: log lock status
+  useEffect(() => {
+    console.log('[SyncSettings] lock:', lock, 'isSyncing:', isSyncing, 'pending:', pending, 'totalPending:', totalPending)
+  }, [lock, isSyncing, pending, totalPending])
 
   // Handle sync trigger
   const handleSync = async () => {
@@ -91,16 +97,27 @@ export function SyncSettings({ onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="bg-indusia-surface rounded-lg shadow-xl w-full max-w-md mx-4 max-h-[90vh] overflow-hidden">
+    <div 
+      className="fixed inset-0 z-50 flex items-start justify-center pt-20 bg-black/50"
+      onClick={onClose}  // Close on backdrop click
+    >
+      <div 
+        className="bg-indusia-surface rounded-lg shadow-xl w-full max-w-md mx-4 max-h-[70vh] overflow-hidden"
+        onClick={(e) => e.stopPropagation()}  // Prevent close when clicking inside
+      >
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-indusia-border">
           <h2 className="text-lg font-semibold text-indusia-text">
             Cloud Sync
           </h2>
           <button
-            onClick={onClose}
-            className="p-1 rounded hover:bg-indusia-bg transition-colors"
+            type="button"
+            onClick={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              onClose()
+            }}
+            className="p-2 rounded hover:bg-indusia-bg transition-colors"
           >
             <X className="w-5 h-5 text-indusia-textMuted" />
           </button>
@@ -137,12 +154,25 @@ export function SyncSettings({ onClose }) {
                 </span>
               </div>
               <div className="space-y-1 text-sm text-indusia-textMuted">
-                {pending.map(p => (
-                  <div key={p.table} className="flex justify-between">
-                    <span>{p.table}</span>
-                    <span>{p.count}</span>
-                  </div>
-                ))}
+                {pending
+                  .filter(p => p.count > 0)
+                  .map(p => {
+                    // Friendly table names
+                    const tableNames = {
+                      'inspection_results': 'Inspections',
+                      'inspection_defects': 'Defects',
+                      'overrides': 'Overrides',
+                      'event_log': 'Event Logs',
+                      'inspection_stats': 'Statistics',
+                      'work_orders': 'Work Orders'
+                    }
+                    return (
+                      <div key={p.table} className="flex justify-between">
+                        <span>{tableNames[p.table] || p.table}</span>
+                        <span className="text-yellow-400">{p.count}</span>
+                      </div>
+                    )
+                  })}
               </div>
             </div>
           )}
@@ -168,14 +198,14 @@ export function SyncSettings({ onClose }) {
             </div>
           )}
 
-          {/* Lock Info (if locked by another PC) */}
-          {lock && !isSyncing && (
+          {/* Lock Info (if locked - show even if not syncing locally) */}
+          {lock && (
             <div className="p-3 bg-orange-500/10 border border-orange-500/30 rounded-lg">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <RefreshCw className="w-4 h-4 text-orange-500 animate-spin" />
                   <span className="text-orange-500">
-                    Sync by {lock.lockedBy}
+                    Locked by {lock.lockedBy}
                   </span>
                 </div>
                 <button
@@ -186,6 +216,11 @@ export function SyncSettings({ onClose }) {
                   Force Release
                 </button>
               </div>
+              {lock.expiresAt && (
+                <div className="text-xs text-indusia-textMuted mt-1">
+                  Expires: {formatDate(lock.expiresAt)}
+                </div>
+              )}
             </div>
           )}
 
@@ -232,11 +267,13 @@ export function SyncSettings({ onClose }) {
             </div>
             {loadingHistory ? (
               <div className="text-sm text-indusia-textMuted">Loading...</div>
-            ) : history.length === 0 ? (
+            ) : history.filter(h => h.records_processed > 0).length === 0 ? (
               <div className="text-sm text-indusia-textMuted">No sync history</div>
             ) : (
               <div className="space-y-2">
-                {history.map(h => (
+                {history
+                  .filter(h => h.records_processed > 0)  // Hide 0/0 records
+                  .map(h => (
                   <div
                     key={h.id}
                     className="flex items-center justify-between p-2 bg-indusia-bg rounded text-sm"

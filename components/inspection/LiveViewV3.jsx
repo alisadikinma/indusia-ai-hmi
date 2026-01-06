@@ -168,19 +168,24 @@ export function LiveViewV3({
       const response = await authFetch(`/api/inspection/line-state/${lineId}`)
       const result = await response.json()
       
-      // DEBUG: Log fetched state
-      if (!isOperator) {
-        console.log('[Manager] Fetched autoNgEnabled:', result.data?.autoNgEnabled)
-      }
+      // DEBUG log disabled - uncomment for troubleshooting
+      // console.log(`[${isOperator ? 'Operator' : 'Manager'}] Fetched state:`, {
+      //   autoNgEnabled: result.data?.autoNgEnabled,
+      //   processStatus: result.data?.processStatus
+      // })
       
       if (result.success && result.data) {
+        // Calculate new autoNgEnabled value
+        const newAutoNgEnabled = result.data.autoNgEnabled ?? true
+        
         // Only update local autoNgEnabled for Operator
         // Manager uses syncedState.autoNgEnabled exclusively
         if (isOperator) {
-          setAutoNgEnabled(result.data.autoNgEnabled ?? true)
+          setAutoNgEnabled(newAutoNgEnabled)
         }
         
-        setSyncedState({
+        // Create new synced state object
+        const newSyncedState = {
           processStatus: result.data.processStatus || 'IDLE',
           stage: result.data.stage || {
             status: 'idle',
@@ -191,8 +196,15 @@ export function LiveViewV3({
           },
           hardware: result.data.hardware || { cameras: [], plcs: [] },
           currentInspection: result.data.currentInspection,
-          autoNgEnabled: result.data.autoNgEnabled ?? true  // Default true if undefined
-        })
+          autoNgEnabled: newAutoNgEnabled
+        }
+        
+        // DEBUG log disabled - uncomment for troubleshooting
+        // if (!isOperator) {
+        //   console.log('[Manager] Setting syncedState.autoNgEnabled:', newSyncedState.autoNgEnabled)
+        // }
+        
+        setSyncedState(newSyncedState)
         setSyncLoaded(true)
       }
     } catch (error) {
@@ -381,15 +393,17 @@ export function LiveViewV3({
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [showUserMenu])
 
-  // DEBUG: Log render values for AUTO-NG
-  useEffect(() => {
-    console.log('[DEBUG] Render values:', {
-      isOperator,
-      autoNgEnabled,
-      'syncedState.autoNgEnabled': syncedState.autoNgEnabled,
-      effectiveAutoNgEnabled: isOperator ? autoNgEnabled : syncedState.autoNgEnabled
-    })
-  }, [isOperator, autoNgEnabled, syncedState.autoNgEnabled])
+  // DEBUG log disabled - uncomment for troubleshooting
+  // useEffect(() => {
+  //   const effective = isOperator ? autoNgEnabled : syncedState.autoNgEnabled
+  //   console.log(`[DEBUG ${isOperator ? 'Operator' : 'Manager'}] AUTO-NG state:`, {
+  //     isOperator,
+  //     localAutoNg: autoNgEnabled,
+  //     syncedAutoNg: syncedState.autoNgEnabled,
+  //     effectiveAutoNg: effective,
+  //     willShowON: effective === true
+  //   })
+  // }, [isOperator, autoNgEnabled, syncedState.autoNgEnabled])
 
   // Calculate yield from WO data
   const yieldPercent = workOrder?.completedQty > 0 
