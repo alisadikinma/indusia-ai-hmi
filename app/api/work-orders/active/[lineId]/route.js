@@ -1,10 +1,12 @@
 /**
  * Active Work Order by Line API Route
  * GET /api/work-orders/active/[lineId] - Get active work order for a line
+ * 
+ * Note: This endpoint is public (no auth required) as it's used for display
+ * in LiveView by all roles including view-only users.
  */
 
 import { NextResponse } from 'next/server';
-import { withAuth } from '@/lib/auth/apiAuth';
 import { workOrderRepo } from '@/lib/repos/workOrderRepo';
 
 /**
@@ -12,7 +14,7 @@ import { workOrderRepo } from '@/lib/repos/workOrderRepo';
  * Get the active work order for a specific line
  * Returns null if no active WO found
  */
-async function handleGET(request, { params }) {
+export async function GET(request, { params }) {
   try {
     const { lineId } = await params;
 
@@ -46,6 +48,3 @@ async function handleGET(request, { params }) {
     );
   }
 }
-
-// Export with auth middleware
-export const GET = withAuth('work-orders:read')(handleGET);

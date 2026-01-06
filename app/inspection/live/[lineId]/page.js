@@ -33,8 +33,9 @@ export default function LiveInspectionPage() {
 
   // Get line details from user context or master data
   const lineName = lineDetails?.name || `Line ${lineId}`
-  const sectionId = lineDetails?.sectionId || user?.selectedSection || null
-  const customerId = lineDetails?.customerId || user?.selectedCustomer || null
+  const sectionId = lineDetails?.sectionId || lineDetails?.section_id || user?.selectedSection || null
+  const customerId = lineDetails?.customerId || lineDetails?.customer_id || user?.selectedCustomer || null
+  const customerName = lineDetails?.customer?.name || lineDetails?.customerName || null
 
   // Fetch line details
   useEffect(() => {
@@ -109,6 +110,7 @@ export default function LiveInspectionPage() {
       lineName={lineName}
       sectionId={sectionId}
       customerId={customerId}
+      customerName={customerName}
       user={user}
       onExit={handleExit}
       isOperator={isOperator}

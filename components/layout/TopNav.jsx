@@ -10,6 +10,7 @@ import { customers, lines } from '@/data/masterData';
 import StatusBadge from '../common/StatusBadge';
 import NotificationBell from '../notifications/NotificationBell';
 import LanguageSwitcher from '../common/LanguageSwitcher';
+import { SyncIndicator } from '../sync';
 
 export default function TopNav() {
   const router = useRouter();
@@ -81,6 +82,8 @@ export default function TopNav() {
           )}
 
           <StatusBadge status="pass" label={t('auth.online')} />
+
+          <SyncIndicator />
 
           <NotificationBell />
 

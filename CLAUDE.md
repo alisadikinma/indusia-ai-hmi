@@ -173,6 +173,35 @@ const { t, language, setLanguage } = useI18n();
 
 Translation files are in `i18n/en.json` and `i18n/id.json`. Always add keys to both files when adding new translatable strings.
 
+### Cloud Sync System
+
+The cloud sync system enables uploading inspection data from edge PostgreSQL to Supabase Cloud. Key components:
+
+**Sync Module** (`lib/sync/`):
+- `supabaseAdmin.js` - Admin client for cloud operations
+- `syncLock.js` - Lock management to prevent concurrent syncs
+- `onlineCheck.js` - Cloud connectivity checks
+- `syncToCloud.js` - Main sync logic with batch processing
+- `index.js` - Module exports
+
+**Sync Repository** (`lib/repos/syncRepo.js`):
+- Fetches pending records (sync_status: pending/failed)
+- Marks records as synced/failed
+- Tracks sync state per table
+- Logs sync sessions
+
+**Sync API Endpoints** (`app/api/sync/`):
+- `GET /api/sync/status` - Full sync status
+- `GET /api/sync/check-online` - Quick connectivity check
+- `POST /api/sync/trigger` - Start sync (background)
+- `GET /api/sync/progress` - Real-time progress
+- `POST /api/sync/force-release` - Admin: release stuck lock
+- `GET /api/sync/history` - Recent sync sessions
+
+**Synced Tables**: inspection_results, inspection_defects, overrides, event_log, inspection_stats, work_orders (qty updates only)
+
+**Configuration**: Set `NEXT_PUBLIC_SUPABASE_CLOUD_URL` and `NEXT_PUBLIC_SUPABASE_CLOUD_SERVICE_ROLE_KEY` for cloud sync. Lock expires after 10 minutes, processes 100 records per batch by default.
+
 ### Import Aliases
 
 The project uses `@/` as a path alias mapping to the project root:
@@ -318,6 +347,10 @@ Detailed implementation prompts are stored in `.claude/prompts/` directory:
 | 12 | `phase-12-sse-consumer.md` | SSE consumer & AI Backend client |
 | 13 | `phase-13-wo-hardening.md` | Work Order flow hardening |
 | 14 | `phase-14-validation-db.md` | Zod validation schemas & DB migrations |
+| 16a | `phase-16a-sync-foundation.md` | Sync foundation (lock, online check, admin client) |
+| 16b | `phase-16b-sync-logic.md` | Sync logic - upload to cloud |
+| 16c | `phase-16c-sync-api.md` | Sync API endpoints |
+| 16d | `phase-16d-sync-ui.md` | Sync UI components |
 
 ### Post-Phase Checklist
 
@@ -361,6 +394,10 @@ Detailed implementation prompts are stored in `.claude/prompts/` directory:
 | 13 | ✅ Done | 2026-01-04 | Work Order flow hardening |
 | 14 | ✅ Done | 2026-01-04 | Zod validation schemas & DB migrations |
 | 15 | ✅ Done | 2026-01-04 | HMI LiveView rework (dual view) |
+| 16a | ✅ Done | 2026-01-06 | Sync foundation (lock, online check, admin) |
+| 16b | ✅ Done | 2026-01-06 | Sync logic - upload to cloud |
+| 16c | ✅ Done | 2026-01-06 | Sync API endpoints |
+| 16d | ✅ Done | 2026-01-06 | Sync UI components |
 
 ### Codebase Cleanup (2026-01-04)
 

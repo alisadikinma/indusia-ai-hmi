@@ -61,6 +61,9 @@ export async function GET(request, { params }) {
     }
 
     const state = lineStateStore.get(lineId)
+    
+    // DEBUG: Log what we're returning
+    console.log(`[LineState API] GET line ${lineId} autoNgEnabled:`, state.autoNgEnabled)
 
     return NextResponse.json({
       success: true,
@@ -80,6 +83,14 @@ export async function PUT(request, { params }) {
   try {
     const { lineId } = await params
     const body = await request.json()
+    
+    // DEBUG: Log incoming request
+    console.log(`[LineState API] PUT line ${lineId}:`, {
+      autoNgEnabled: body.autoNgEnabled,
+      hasProcessStatus: body.processStatus !== undefined,
+      hasStage: body.stage !== undefined,
+      updatedBy: body.updatedBy
+    })
     
     if (!lineId) {
       return NextResponse.json(
@@ -105,15 +116,8 @@ export async function PUT(request, { params }) {
 
     lineStateStore.set(lineId, updatedState)
 
-    // Log significant changes
-    if (body.processStatus || body.stage || body.currentInspection !== undefined || body.autoNgEnabled !== undefined) {
-      console.log(`[LineState API] Updated line ${lineId}:`, {
-        processStatus: updatedState.processStatus,
-        stageName: updatedState.stage?.stageName,
-        hasInspection: !!updatedState.currentInspection,
-        autoNgEnabled: updatedState.autoNgEnabled
-      })
-    }
+    // DEBUG: Log saved state
+    console.log(`[LineState API] Saved line ${lineId} autoNgEnabled:`, updatedState.autoNgEnabled)
 
     return NextResponse.json({
       success: true,

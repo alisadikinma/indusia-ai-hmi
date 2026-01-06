@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:all": "concurrently -n postgrest,next -c blue,green \"D:/Projects/Tools/postgrest/postgrest.exe D:/Projects/Tools/postgrest/postgrest.conf\" \"next dev\"",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
@@ -80,6 +81,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.57.0",
+    "concurrently": "^8.2.2",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.0",
     "jest": "^30.2.0",

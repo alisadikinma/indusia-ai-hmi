@@ -98,7 +98,7 @@ export function LiveViewV3({
   const workOrder = (BYPASS_WO_CHECK && !fetchedWO) ? MOCK_WORK_ORDER : fetchedWO
   const hasActiveWO = BYPASS_WO_CHECK || fetchedHasWO
 
-  // Live Inspection hook (SSE connection)
+  // Live Inspection hook (SSE connection) - ONLY for Operator
   const {
     isConnected,
     isReconnecting,
@@ -122,7 +122,7 @@ export function LiveViewV3({
     pauseProcess,
     stopProcess
   } = useLiveInspection(lineId, workOrder, {
-    autoConnect: true,
+    autoConnect: isOperator, // Only Operator connects to SSE
     onError: (err) => console.error('[LiveView] SSE Error:', err)
   })
 
@@ -167,8 +167,19 @@ export function LiveViewV3({
     try {
       const response = await authFetch(`/api/inspection/line-state/${lineId}`)
       const result = await response.json()
+      
+      // DEBUG: Log fetched state
+      if (!isOperator) {
+        console.log('[Manager] Fetched autoNgEnabled:', result.data?.autoNgEnabled)
+      }
+      
       if (result.success && result.data) {
-        setAutoNgEnabled(result.data.autoNgEnabled)
+        // Only update local autoNgEnabled for Operator
+        // Manager uses syncedState.autoNgEnabled exclusively
+        if (isOperator) {
+          setAutoNgEnabled(result.data.autoNgEnabled ?? true)
+        }
+        
         setSyncedState({
           processStatus: result.data.processStatus || 'IDLE',
           stage: result.data.stage || {
@@ -180,14 +191,14 @@ export function LiveViewV3({
           },
           hardware: result.data.hardware || { cameras: [], plcs: [] },
           currentInspection: result.data.currentInspection,
-          autoNgEnabled: result.data.autoNgEnabled  // Sync autoNgEnabled too
+          autoNgEnabled: result.data.autoNgEnabled ?? true  // Default true if undefined
         })
         setSyncLoaded(true)
       }
     } catch (error) {
       console.warn('[LiveView] Failed to fetch line state:', error)
     }
-  }, [lineId])
+  }, [lineId, isOperator])
   
   // Save line state to API (full state sync)
   const saveLineState = useCallback(async (updates) => {
@@ -222,13 +233,13 @@ export function LiveViewV3({
   useEffect(() => {
     if (!isOperator || !lineId) return
     
-    // Create state snapshot (autoNgEnabled handled separately by toggleAutoNg)
+    // Create state snapshot - INCLUDE autoNgEnabled for consistent sync
     const stateToSync = {
       processStatus,
       stage: inspectionStage,
       hardware: hardwareStatus,
-      currentInspection: currentInspection
-      // Note: autoNgEnabled NOT included here - handled by toggleAutoNg directly
+      currentInspection: currentInspection,
+      autoNgEnabled: autoNgEnabled  // Always include for sync consistency
     }
     
     // Compare with last synced to avoid unnecessary API calls
@@ -237,7 +248,8 @@ export function LiveViewV3({
       stageName: inspectionStage?.stageName,
       stageIndex: inspectionStage?.stageIndex,
       hasInspection: !!currentInspection,
-      inspectionId: currentInspection?.inspection_id || currentInspection?.inspectionId
+      inspectionId: currentInspection?.inspection_id || currentInspection?.inspectionId,
+      autoNgEnabled: autoNgEnabled  // Include in comparison key
     })
     
     if (lastSyncedRef.current === stateKey) {
@@ -255,15 +267,28 @@ export function LiveViewV3({
       })
     }).catch(err => console.warn('[LiveView] Sync failed:', err))
     
-  }, [isOperator, lineId, processStatus, inspectionStage, hardwareStatus, currentInspection, user])
+  }, [isOperator, lineId, processStatus, inspectionStage, hardwareStatus, currentInspection, autoNgEnabled, user])
   
   // Toggle Auto-NG and save to API (operator only)
   const toggleAutoNg = useCallback(() => {
     if (!isOperator) return
     const newValue = !autoNgEnabled
+    console.log('[Operator] Toggle autoNgEnabled:', autoNgEnabled, '→', newValue)
     setAutoNgEnabled(newValue)
-    saveLineState({ autoNgEnabled: newValue })
-  }, [isOperator, autoNgEnabled, saveLineState])
+    
+    // Directly call API to ensure immediate sync
+    authFetch(`/api/inspection/line-state/${lineId}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        autoNgEnabled: newValue,
+        updatedBy: user?.name || 'Unknown'
+      })
+    }).then(res => res.json())
+      .then(result => {
+        console.log('[Operator] API response autoNgEnabled:', result.data?.autoNgEnabled)
+      })
+      .catch(err => console.warn('[Operator] Toggle save failed:', err))
+  }, [isOperator, autoNgEnabled, lineId, user])
   
   // Process control wrappers that save state to API
   const handleRunProcess = useCallback(async () => {
@@ -334,7 +359,7 @@ export function LiveViewV3({
       const refreshInterval = setInterval(() => {
         refreshWO()
         fetchLineState()
-      }, 1000) // Refresh every 1 second for real-time sync
+      }, 500) // Refresh every 500ms for faster real-time sync
       
       return () => clearInterval(refreshInterval)
     }
@@ -355,6 +380,16 @@ export function LiveViewV3({
     }
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [showUserMenu])
+
+  // DEBUG: Log render values for AUTO-NG
+  useEffect(() => {
+    console.log('[DEBUG] Render values:', {
+      isOperator,
+      autoNgEnabled,
+      'syncedState.autoNgEnabled': syncedState.autoNgEnabled,
+      effectiveAutoNgEnabled: isOperator ? autoNgEnabled : syncedState.autoNgEnabled
+    })
+  }, [isOperator, autoNgEnabled, syncedState.autoNgEnabled])
 
   // Calculate yield from WO data
   const yieldPercent = workOrder?.completedQty > 0 
@@ -1191,22 +1226,22 @@ export function LiveViewV3({
             disabled={!isOperator}
             className={cn(
               "flex items-center gap-2 px-3 py-1.5 border transition-all",
-              !isOperator 
-                ? "border-surface-border bg-surface-border/10 cursor-not-allowed"
-                : effectiveAutoNgEnabled 
-                  ? "border-phosphor-amber bg-phosphor-amber/10" 
-                  : "border-surface-border bg-surface-border/10 hover:border-text-tertiary"
+              !isOperator && "cursor-not-allowed",
+              effectiveAutoNgEnabled 
+                ? "border-phosphor-amber bg-phosphor-amber/10" 
+                : "border-surface-border bg-surface-border/10",
+              isOperator && !effectiveAutoNgEnabled && "hover:border-text-tertiary"
             )}
             title={effectiveAutoNgEnabled ? "Auto-NG ON: Will auto-reject after 15s" : "Auto-NG OFF: Manual confirmation required"}
           >
             {effectiveAutoNgEnabled ? (
-              <ToggleRight className={cn("w-4 h-4", isOperator ? "text-phosphor-amber" : "text-text-tertiary")} />
+              <ToggleRight className="w-4 h-4 text-phosphor-amber" />
             ) : (
               <ToggleLeft className="w-4 h-4 text-text-tertiary" />
             )}
             <span className={cn(
               "font-mono text-xs font-bold",
-              !isOperator ? "text-text-tertiary" : effectiveAutoNgEnabled ? "text-phosphor-amber" : "text-text-tertiary"
+              effectiveAutoNgEnabled ? "text-phosphor-amber" : "text-text-tertiary"
             )}>
               AUTO-NG
             </span>
@@ -1276,8 +1311,8 @@ export function LiveViewV3({
 
         {/* Center: Action Buttons */}
         <div className="flex items-center gap-4">
-          {/* Dev Mode Simulate Buttons */}
-          {DEV_MODE && !activeInspection && !aiBackendAvailable && (
+          {/* Dev Mode Simulate Buttons - ONLY for Operator */}
+          {DEV_MODE && isOperator && !activeInspection && !aiBackendAvailable && (
             <>
               <button
                 onClick={() => simulateInspection('GOOD')}
