@@ -237,9 +237,14 @@ async function handlePOST(request) {
       )
     }
 
+    // Log if duplicate was detected
+    if (result.duplicate) {
+      console.log(`[POST /api/overrides] Duplicate detected for board_id: ${data.board_id}, returning existing record`)
+    }
+
     return NextResponse.json(
-      { success: true, data: result.data },
-      { status: 201 }
+      { success: true, data: result.data, duplicate: result.duplicate },
+      { status: result.duplicate ? 200 : 201 }
     )
   } catch (error) {
     console.error('[POST /api/overrides] Error:', error)

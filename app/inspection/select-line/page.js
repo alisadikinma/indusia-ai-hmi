@@ -4,9 +4,14 @@
  * Line Selection Page
  * Operator selects production line before entering Live Inspection
  * Flow: Login → Select Line → Live Inspection
+ * 
+ * Features:
+ * - Real-time stats from /api/inspection/stats/[lineId]
+ * - Active work order info with customer name
+ * - Line status based on work order status
  */
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { useSidebar } from '@/context/SidebarContext';
@@ -14,7 +19,8 @@ import { authFetch } from '@/lib/utils/authFetch';
 import { 
   Radio, Activity, ChevronRight, Factory, 
   Users, Clock, AlertTriangle, CheckCircle2,
-  Cpu, Zap, Settings, Lock, Eye, Menu, LogOut, ChevronDown
+  Cpu, Zap, Settings, Lock, Eye, Menu, LogOut, ChevronDown,
+  Package, TrendingUp, XCircle, Building2, RefreshCw
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -50,7 +56,7 @@ function LineCard({ line, section, isSelected, onSelect, currentUserId, isOperat
     },
   };
 
-  const status = statusConfig[line.status] || statusConfig.offline;
+  const status = statusConfig[line.status] || statusConfig.idle;
   const StatusIcon = status.icon;
   
   const isInUseByOther = line.operatorId && line.operatorId !== currentUserId;
@@ -59,6 +65,8 @@ function LineCard({ line, section, isSelected, onSelect, currentUserId, isOperat
   const isMaintenanceOrOffline = line.status === 'maintenance' || line.status === 'offline';
   const isDisabledForOperator = isOperator && (isMaintenanceOrOffline || isInUseByOther);
   const isDisabled = isOperator ? isDisabledForOperator : isMaintenanceOrOffline;
+
+  const hasStats = line.inspected > 0 || line.status === 'running';
 
   return (
     <button
@@ -91,6 +99,11 @@ function LineCard({ line, section, isSelected, onSelect, currentUserId, isOperat
               isSelected ? "text-phosphor-amber" : "text-text-primary"
             )}>
               {line.name}
+              {line.customerName && (
+                <span className="text-phosphor-cyan font-normal text-sm ml-2">
+                  - {line.customerName}{line.customerCode && ` (${line.customerCode})`}
+                </span>
+              )}
             </h3>
             <p className="font-mono text-xs text-text-tertiary">{section?.name}</p>
           </div>
@@ -128,39 +141,45 @@ function LineCard({ line, section, isSelected, onSelect, currentUserId, isOperat
         </div>
       </div>
 
-      {/* Stats Grid */}
-      {line.status === 'running' && (
-        <div className="grid grid-cols-3 gap-3 mb-3">
-          <div className="bg-terminal border border-surface-border p-2">
+      {/* Work Order Number - shown when active WO exists */}
+      {line.woNumber && (
+        <div className="flex items-center gap-2 mb-3 px-3 py-2 bg-terminal border border-surface-border">
+          <Package size={14} className="text-phosphor-amber" />
+          <span className="font-mono text-xs text-phosphor-amber font-medium">WO: {line.woNumber}</span>
+        </div>
+      )}
+
+      {/* Stats Grid - Show when has active WO or running */}
+      {hasStats && (
+        <div className="grid grid-cols-4 gap-2 mb-3">
+          <div className="bg-terminal border border-surface-border p-2 text-center">
             <p className="font-mono text-xxs text-text-tertiary">INSPECTED</p>
-            <p className="font-mono text-lg font-bold text-phosphor-amber">{line.inspected.toLocaleString()}</p>
+            <p className="font-mono text-lg font-bold text-phosphor-amber">{line.inspected?.toLocaleString() || 0}</p>
           </div>
-          <div className="bg-terminal border border-surface-border p-2">
-            <p className="font-mono text-xxs text-text-tertiary">DEFECTS</p>
-            <p className="font-mono text-lg font-bold text-phosphor-red">{line.defects}</p>
+          <div className="bg-terminal border border-surface-border p-2 text-center">
+            <p className="font-mono text-xxs text-text-tertiary">PASS</p>
+            <p className="font-mono text-lg font-bold text-phosphor-green">{line.goodQty?.toLocaleString() || 0}</p>
           </div>
-          <div className="bg-terminal border border-surface-border p-2">
+          <div className="bg-terminal border border-surface-border p-2 text-center">
+            <p className="font-mono text-xxs text-text-tertiary">FAIL</p>
+            <p className="font-mono text-lg font-bold text-phosphor-red">{line.ngQty || 0}</p>
+          </div>
+          <div className="bg-terminal border border-surface-border p-2 text-center">
             <p className="font-mono text-xxs text-text-tertiary">YIELD</p>
             <p className={cn(
               "font-mono text-lg font-bold",
               line.yield >= 98 ? "text-phosphor-green" : 
               line.yield >= 95 ? "text-phosphor-amber" : "text-phosphor-red"
             )}>
-              {line.yield}%
+              {line.yield?.toFixed(1) || 0}%
             </p>
           </div>
         </div>
       )}
 
-      {/* Current Info */}
+      {/* Bottom Info */}
       <div className="flex items-center justify-between pt-3 border-t border-surface-border">
         <div className="flex items-center gap-4">
-          {line.currentBoard && (
-            <div className="flex items-center gap-2">
-              <Cpu size={14} className="text-text-tertiary" />
-              <span className="font-mono text-xs text-text-secondary">{line.currentBoard}</span>
-            </div>
-          )}
           {line.operatorName && (
             <div className="flex items-center gap-2">
               <Users size={14} className={isInUseByOther ? "text-phosphor-cyan" : "text-text-tertiary"} />
@@ -172,9 +191,9 @@ function LineCard({ line, section, isSelected, onSelect, currentUserId, isOperat
               </span>
             </div>
           )}
-          {!line.currentBoard && !line.operatorName && (
+          {!line.customerName && !line.operatorName && !line.woNumber && line.inspected === 0 && (
             <span className="font-mono text-xs text-text-tertiary italic">
-              {line.status === 'idle' ? 'Waiting for operation' : 'Line unavailable'}
+              {line.status === 'idle' ? 'No active work order' : 'Line unavailable'}
             </span>
           )}
         </div>
@@ -214,58 +233,135 @@ export default function SelectLinePage() {
   const [currentTime, setCurrentTime] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   
   // Data from API
   const [sections, setSections] = useState([]);
   const [lines, setLines] = useState([]);
   const [dataLoading, setDataLoading] = useState(true);
 
-  // Fetch sections and lines from API
-  useEffect(() => {
-    const fetchData = async () => {
-      setDataLoading(true);
-      try {
-        const [sectionsRes, linesRes] = await Promise.all([
-          authFetch('/api/master-data/sections'),
-          authFetch('/api/master-data/lines')
-        ]);
-        
-        const sectionsData = await sectionsRes.json();
-        const linesData = await linesRes.json();
-        
-        if (sectionsData.success) {
-          setSections(sectionsData.data || []);
-        }
-        
-        if (linesData.success) {
-          // Map lines to include display properties
-          const mappedLines = (linesData.data || []).map(line => ({
-            id: line.id,
-            name: line.name,
-            sectionId: line.sectionId || line.section_id,
-            customerId: line.customerId || line.customer_id,
-            status: 'idle', // Default status
-            currentBoard: null,
-            operatorId: null,
-            operatorName: null,
-            shift: null,
-            inspected: 0,
-            defects: 0,
-            yield: 0
-          }));
-          setLines(mappedLines);
-        }
-      } catch (error) {
-        console.error('Failed to fetch data:', error);
-      } finally {
-        setDataLoading(false);
+  // Fetch sections, lines, and active WO data
+  const fetchData = useCallback(async () => {
+    setDataLoading(true);
+    try {
+      // Fetch sections and lines
+      const [sectionsRes, linesRes] = await Promise.all([
+        authFetch('/api/master-data/sections'),
+        authFetch('/api/master-data/lines')
+      ]);
+      
+      const sectionsData = await sectionsRes.json();
+      const linesData = await linesRes.json();
+      
+      if (sectionsData.success) {
+        setSections(sectionsData.data || []);
       }
-    };
-    
+      
+      if (linesData.success) {
+        const linesList = linesData.data || [];
+        
+        // Fetch stats and active WO for each line
+        const linesWithStats = await Promise.all(
+          linesList.map(async (line) => {
+            const lineData = {
+              id: line.id,
+              name: line.name,
+              sectionId: line.sectionId || line.section_id,
+              customerId: line.customerId || line.customer_id,
+              status: 'idle',
+              customerName: line.customer?.name || null, // Default from master data
+              customerCode: line.customer?.code || null,
+              woNumber: null,
+              operatorId: null,
+              operatorName: null,
+              inspected: 0,
+              goodQty: 0,
+              ngQty: 0,
+              yield: 0
+            };
+
+            try {
+              // Fetch active work order for this line
+              const woRes = await authFetch(`/api/work-orders/active/${line.id}`);
+              const woData = await woRes.json();
+              
+              if (woData.success && woData.data) {
+                const wo = woData.data;
+                lineData.status = 'running';
+                lineData.customerName = wo.customer?.name || lineData.customerName;
+                lineData.customerCode = wo.customer?.code || lineData.customerCode;
+                lineData.woNumber = wo.woNumber;
+                lineData.inspected = wo.completedQty || 0;
+                lineData.goodQty = wo.goodQty || 0;
+                lineData.ngQty = wo.ngQty || 0;
+                lineData.yield = lineData.inspected > 0 
+                  ? ((lineData.goodQty / lineData.inspected) * 100) 
+                  : 0;
+              }
+
+              // Optionally fetch today's stats (shift-based)
+              const statsRes = await authFetch(`/api/inspection/stats/${line.id}`);
+              const statsData = await statsRes.json();
+              
+              if (statsData.success && statsData.data) {
+                const data = statsData.data;
+                const stats = data.stats || {};
+                const total = stats.total || 0;
+                
+                // Use stats if available
+                if (total > 0) {
+                  lineData.status = 'running'; // Has inspection activity
+                  lineData.inspected = total;
+                  lineData.goodQty = stats.passed || 0;
+                  lineData.ngQty = stats.failed || 0;
+                  lineData.yield = parseFloat(stats.yield) || 0;
+                  
+                  // Get WO number from stats if available
+                  if (data.workOrder?.woNumber) {
+                    lineData.woNumber = data.workOrder.woNumber;
+                  }
+                }
+              }
+            } catch (err) {
+              console.warn(`Failed to fetch data for line ${line.id}:`, err);
+            }
+
+            return lineData;
+          })
+        );
+        
+        setLines(linesWithStats);
+      }
+    } catch (error) {
+      console.error('Failed to fetch data:', error);
+    } finally {
+      setDataLoading(false);
+      setIsRefreshing(false);
+    }
+  }, []);
+
+  // Initial load
+  useEffect(() => {
     if (user) {
       fetchData();
     }
-  }, [user]);
+  }, [user, fetchData]);
+
+  // Auto-refresh every 30 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (user && !dataLoading) {
+        fetchData();
+      }
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [user, dataLoading, fetchData]);
+
+  // Manual refresh
+  const handleRefresh = () => {
+    setIsRefreshing(true);
+    fetchData();
+  };
 
   // Check access via database permissions
   if (!user || !hasMenuAccess('menu_inspection')) {
@@ -421,11 +517,24 @@ export default function SelectLinePage() {
       <main className="p-6">
         {/* Page Title */}
         <div className="mb-6">
-          <div className="flex items-center gap-3 mb-2">
-            <Radio className="w-5 h-5 text-phosphor-amber" />
-            <h2 className="font-display text-2xl font-bold text-text-primary tracking-wide">
-              SELECT PRODUCTION LINE
-            </h2>
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-3">
+              <Radio className="w-5 h-5 text-phosphor-amber" />
+              <h2 className="font-display text-2xl font-bold text-text-primary tracking-wide">
+                SELECT PRODUCTION LINE
+              </h2>
+            </div>
+            <button
+              onClick={handleRefresh}
+              disabled={isRefreshing || dataLoading}
+              className="flex items-center gap-2 px-4 py-2 bg-terminal border border-surface-border hover:border-phosphor-amber/50 transition-colors disabled:opacity-50"
+            >
+              <RefreshCw size={16} className={cn(
+                "text-phosphor-amber",
+                isRefreshing && "animate-spin"
+              )} />
+              <span className="font-mono text-xs text-text-secondary">REFRESH</span>
+            </button>
           </div>
           <p className="font-mono text-sm text-text-tertiary">
             {isOperator 
@@ -519,6 +628,7 @@ export default function SelectLinePage() {
                   </p>
                   <p className="font-mono text-xs text-text-tertiary">
                     {getSection(selectedLine.sectionId)?.name}
+                    {selectedLine.customerName && ` • ${selectedLine.customerName}${selectedLine.customerCode ? ` (${selectedLine.customerCode})` : ''}`}
                     {!isOperator && ' • View-only mode'}
                   </p>
                 </div>

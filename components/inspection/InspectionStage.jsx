@@ -64,7 +64,7 @@ const STAGE_MESSAGES = {
   'done': 'Ready for review'
 }
 
-export function InspectionStage({ stage, stageDefinitions, processStatus, onResume, className }) {
+export function InspectionStage({ stage, stageDefinitions, processStatus, onResume, isOperator = true, className }) {
   const { status, stageName, message, stageIndex } = stage
   
   // Use provided stages or fallback
@@ -99,19 +99,25 @@ export function InspectionStage({ stage, stageDefinitions, processStatus, onResu
           Inspection process is paused
         </p>
 
-        {/* Resume Button */}
-        <button
-          onClick={onResume}
-          className={cn(
-            "flex items-center gap-3 px-8 py-4 border-2 transition-all",
-            "font-display text-sm font-bold tracking-wider",
-            "border-phosphor-green text-phosphor-green",
-            "hover:bg-phosphor-green hover:text-void"
-          )}
-        >
-          <Play className="w-5 h-5" />
-          RESUME
-        </button>
+        {/* Resume Button - Only for Operator */}
+        {isOperator ? (
+          <button
+            onClick={onResume}
+            className={cn(
+              "flex items-center gap-3 px-8 py-4 border-2 transition-all",
+              "font-display text-sm font-bold tracking-wider",
+              "border-phosphor-green text-phosphor-green",
+              "hover:bg-phosphor-green hover:text-void"
+            )}
+          >
+            <Play className="w-5 h-5" />
+            RESUME
+          </button>
+        ) : (
+          <div className="flex items-center gap-2 px-4 py-2 border border-surface-border bg-surface-border/10">
+            <span className="font-mono text-xs text-text-tertiary">VIEW ONLY - Cannot control machine</span>
+          </div>
+        )}
       </div>
     )
   }
@@ -137,22 +143,28 @@ export function InspectionStage({ stage, stageDefinitions, processStatus, onResu
           MACHINE STOPPED
         </p>
         <p className="text-sm text-text-tertiary font-mono mb-6">
-          Click RUN to start inspection
+          {isOperator ? 'Click RUN to start inspection' : 'Waiting for operator to start'}
         </p>
 
-        {/* Start Button */}
-        <button
-          onClick={onResume}
-          className={cn(
-            "flex items-center gap-3 px-8 py-4 border-2 transition-all",
-            "font-display text-sm font-bold tracking-wider",
-            "border-phosphor-green text-phosphor-green",
-            "hover:bg-phosphor-green hover:text-void"
-          )}
-        >
-          <Play className="w-5 h-5" />
-          START
-        </button>
+        {/* Start Button - Only for Operator */}
+        {isOperator ? (
+          <button
+            onClick={onResume}
+            className={cn(
+              "flex items-center gap-3 px-8 py-4 border-2 transition-all",
+              "font-display text-sm font-bold tracking-wider",
+              "border-phosphor-green text-phosphor-green",
+              "hover:bg-phosphor-green hover:text-void"
+            )}
+          >
+            <Play className="w-5 h-5" />
+            START
+          </button>
+        ) : (
+          <div className="flex items-center gap-2 px-4 py-2 border border-surface-border bg-surface-border/10">
+            <span className="font-mono text-xs text-text-tertiary">VIEW ONLY - Cannot control machine</span>
+          </div>
+        )}
       </div>
     )
   }
@@ -178,22 +190,28 @@ export function InspectionStage({ stage, stageDefinitions, processStatus, onResu
           READY TO START
         </p>
         <p className="text-sm text-text-tertiary font-mono mb-6">
-          Press RUN to begin inspection
+          {isOperator ? 'Press RUN to begin inspection' : 'Waiting for operator to start'}
         </p>
 
-        {/* Start Button */}
-        <button
-          onClick={onResume}
-          className={cn(
-            "flex items-center gap-3 px-8 py-4 border-2 transition-all",
-            "font-display text-sm font-bold tracking-wider",
-            "border-phosphor-green text-phosphor-green",
-            "hover:bg-phosphor-green hover:text-void"
-          )}
-        >
-          <Play className="w-5 h-5" />
-          START
-        </button>
+        {/* Start Button - Only for Operator */}
+        {isOperator ? (
+          <button
+            onClick={onResume}
+            className={cn(
+              "flex items-center gap-3 px-8 py-4 border-2 transition-all",
+              "font-display text-sm font-bold tracking-wider",
+              "border-phosphor-green text-phosphor-green",
+              "hover:bg-phosphor-green hover:text-void"
+            )}
+          >
+            <Play className="w-5 h-5" />
+            START
+          </button>
+        ) : (
+          <div className="flex items-center gap-2 px-4 py-2 border border-surface-border bg-surface-border/10">
+            <span className="font-mono text-xs text-text-tertiary">VIEW ONLY - Cannot control machine</span>
+          </div>
+        )}
       </div>
     )
   }

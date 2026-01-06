@@ -742,6 +742,23 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
   }, [isConnected])
 
   // ============================================
+  // Clear Inspection (for VIEW ONLY mode sync)
+  // ============================================
+
+  const clearInspection = useCallback(() => {
+    console.log('[LiveInspection] Clearing inspection (VIEW ONLY sync)')
+    setCurrentInspection(null)
+    setInspectionStage(prev => ({
+      status: 'idle',
+      stageName: 'idle',
+      message: 'Waiting for board...',
+      stageIndex: 0,
+      totalStages: prev.totalStages,
+      icon: 'hourglass'
+    }))
+  }, [])
+
+  // ============================================
   // Return Hook Interface
   // ============================================
 
@@ -780,6 +797,9 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
     reconnect,
     checkAiBackend,
     getStreamStatus: () => serviceRef.current?.getStreamStatus?.() || {},
+
+    // Inspection control
+    clearInspection,
 
     // Process Control Methods
     runProcess,

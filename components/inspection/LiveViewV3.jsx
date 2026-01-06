@@ -62,7 +62,6 @@ const PASS_DISPLAY_DELAY_MS = 2000 // Display PASS result for 2 seconds before a
 const DEV_MODE = process.env.NODE_ENV === 'development'
 const BYPASS_WO_CHECK = true // TEMPORARY: Bypass WO check for testing
 const BYPASS_OPERATOR_CHECK = true // TEMPORARY: Bypass operator role check for testing
-const AUTO_NG_STORAGE_KEY = 'indusia_auto_ng_enabled' // localStorage key for Auto-NG toggle
 
 // Mock WO for testing when Supabase not configured
 const MOCK_WORK_ORDER = {
@@ -81,6 +80,8 @@ export function LiveViewV3({
   lineName,
   sectionId,
   customerId,
+  customerName,
+  customerCode,
   user,
   onExit,
   isOperator = false,
@@ -142,25 +143,143 @@ export function LiveViewV3({
   const [showUserMenu, setShowUserMenu] = useState(false)
   const userMenuRef = useRef(null)
   
-  // Auto-NG toggle state (persisted to localStorage)
+  // Auto-NG toggle state (synced via API for all clients)
   const [autoNgEnabled, setAutoNgEnabled] = useState(true)
   
-  // Load Auto-NG preference from localStorage on mount
-  useEffect(() => {
-    const stored = localStorage.getItem(AUTO_NG_STORAGE_KEY)
-    if (stored !== null) {
-      setAutoNgEnabled(stored === 'true')
-    }
-  }, [])
+  // Synced state from API (for VIEW ONLY mode)
+  const [syncedState, setSyncedState] = useState({
+    processStatus: 'IDLE',
+    stage: {
+      status: 'idle',
+      stageName: 'idle', 
+      message: 'Waiting for sync...',
+      stageIndex: 0,
+      totalStages: 7
+    },
+    hardware: { cameras: [], plcs: [] },
+    currentInspection: null,
+    autoNgEnabled: true  // Add autoNgEnabled to synced state
+  })
+  const [syncLoaded, setSyncLoaded] = useState(false)
   
-  // Save Auto-NG preference to localStorage when changed
-  const toggleAutoNg = useCallback(() => {
-    setAutoNgEnabled(prev => {
-      const newValue = !prev
-      localStorage.setItem(AUTO_NG_STORAGE_KEY, String(newValue))
-      return newValue
+  // Fetch line state from API
+  const fetchLineState = useCallback(async () => {
+    try {
+      const response = await authFetch(`/api/inspection/line-state/${lineId}`)
+      const result = await response.json()
+      if (result.success && result.data) {
+        setAutoNgEnabled(result.data.autoNgEnabled)
+        setSyncedState({
+          processStatus: result.data.processStatus || 'IDLE',
+          stage: result.data.stage || {
+            status: 'idle',
+            stageName: 'idle',
+            message: 'Waiting for board...',
+            stageIndex: 0,
+            totalStages: 7
+          },
+          hardware: result.data.hardware || { cameras: [], plcs: [] },
+          currentInspection: result.data.currentInspection,
+          autoNgEnabled: result.data.autoNgEnabled  // Sync autoNgEnabled too
+        })
+        setSyncLoaded(true)
+      }
+    } catch (error) {
+      console.warn('[LiveView] Failed to fetch line state:', error)
+    }
+  }, [lineId])
+  
+  // Save line state to API (full state sync)
+  const saveLineState = useCallback(async (updates) => {
+    try {
+      const response = await authFetch(`/api/inspection/line-state/${lineId}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          ...updates,
+          updatedBy: user?.name || 'Unknown'
+        })
+      })
+      const result = await response.json()
+      if (result.success && result.data) {
+        setAutoNgEnabled(result.data.autoNgEnabled)
+      }
+    } catch (error) {
+      console.warn('[LiveView] Failed to save line state:', error)
+    }
+  }, [lineId, user])
+  
+  // Load initial state from API on mount
+  useEffect(() => {
+    if (lineId) {
+      fetchLineState()
+    }
+  }, [lineId, fetchLineState])
+  
+  // OPERATOR: Push SSE state to API whenever it changes
+  // Using ref to track last synced state and prevent unnecessary API calls
+  const lastSyncedRef = useRef(null)
+  
+  useEffect(() => {
+    if (!isOperator || !lineId) return
+    
+    // Create state snapshot (autoNgEnabled handled separately by toggleAutoNg)
+    const stateToSync = {
+      processStatus,
+      stage: inspectionStage,
+      hardware: hardwareStatus,
+      currentInspection: currentInspection
+      // Note: autoNgEnabled NOT included here - handled by toggleAutoNg directly
+    }
+    
+    // Compare with last synced to avoid unnecessary API calls
+    const stateKey = JSON.stringify({
+      processStatus,
+      stageName: inspectionStage?.stageName,
+      stageIndex: inspectionStage?.stageIndex,
+      hasInspection: !!currentInspection,
+      inspectionId: currentInspection?.inspection_id || currentInspection?.inspectionId
     })
-  }, [])
+    
+    if (lastSyncedRef.current === stateKey) {
+      return // No change, skip sync
+    }
+    
+    lastSyncedRef.current = stateKey
+    
+    // Push to API
+    authFetch(`/api/inspection/line-state/${lineId}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        ...stateToSync,
+        updatedBy: user?.name || 'Unknown'
+      })
+    }).catch(err => console.warn('[LiveView] Sync failed:', err))
+    
+  }, [isOperator, lineId, processStatus, inspectionStage, hardwareStatus, currentInspection, user])
+  
+  // Toggle Auto-NG and save to API (operator only)
+  const toggleAutoNg = useCallback(() => {
+    if (!isOperator) return
+    const newValue = !autoNgEnabled
+    setAutoNgEnabled(newValue)
+    saveLineState({ autoNgEnabled: newValue })
+  }, [isOperator, autoNgEnabled, saveLineState])
+  
+  // Process control wrappers that save state to API
+  const handleRunProcess = useCallback(async () => {
+    await runProcess()
+    saveLineState({ processStatus: 'RUNNING' })
+  }, [runProcess, saveLineState])
+  
+  const handlePauseProcess = useCallback(async () => {
+    await pauseProcess()
+    saveLineState({ processStatus: 'PAUSED' })
+  }, [pauseProcess, saveLineState])
+  
+  const handleStopProcess = useCallback(async () => {
+    await stopProcess()
+    saveLineState({ processStatus: 'STOPPED' })
+  }, [stopProcess, saveLineState])
   
   // Timer states for NG review timeout
   const [reviewCountdown, setReviewCountdown] = useState(NG_REVIEW_TIMEOUT_SECONDS)
@@ -171,6 +290,17 @@ export function LiveViewV3({
 
   // Board sequence (for local tracking)
   const boardSequenceRef = useRef(workOrder?.completedQty || 0)
+  
+  // Sync boardSequenceRef when workOrder changes (important for page refresh/reconnect)
+  useEffect(() => {
+    if (workOrder?.completedQty !== undefined) {
+      // Only update if DB value is higher (avoid going backwards)
+      if (workOrder.completedQty > boardSequenceRef.current) {
+        console.log(`[LiveView] Syncing boardSequence: ${boardSequenceRef.current} → ${workOrder.completedQty}`)
+        boardSequenceRef.current = workOrder.completedQty
+      }
+    }
+  }, [workOrder?.completedQty])
 
   // Dev mode: Mock inspection state
   const [devMockInspection, setDevMockInspection] = useState(null)
@@ -194,6 +324,25 @@ export function LiveViewV3({
     return () => clearInterval(interval)
   }, [])
 
+  // VIEW ONLY mode: Periodic sync for WO data + line state
+  // This ensures Manager sees updated stats and ALL state from Operator
+  useEffect(() => {
+    if (!isOperator && workOrder && lineId) {
+      // Initial fetch immediately
+      fetchLineState()
+      
+      const refreshInterval = setInterval(() => {
+        refreshWO()
+        fetchLineState()
+      }, 1000) // Refresh every 1 second for real-time sync
+      
+      return () => clearInterval(refreshInterval)
+    }
+  }, [isOperator, workOrder, lineId, refreshWO, fetchLineState])
+
+  // Note: VIEW ONLY mode no longer needs stage reset detection
+  // because Manager now uses syncedState exclusively from API
+
   // Close user menu when clicking outside
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -212,15 +361,45 @@ export function LiveViewV3({
     ? ((workOrder.goodQty / workOrder.completedQty) * 100).toFixed(1) 
     : '0.0'
 
-  // Determine active inspection data (real SSE or dev mock)
-  const activeInspection = currentInspection || devMockInspection
+  // Determine active inspection data
+  // Operator: use SSE currentInspection or dev mock
+  // VIEW ONLY: ONLY use synced state from API (no fallback to local SSE)
+  const activeInspection = isOperator 
+    ? (currentInspection || devMockInspection)
+    : syncedState.currentInspection
   
-  // Determine active stage - use SSE inspectionStage when connected, devMockStage for simulation
-  const activeStage = isConnected ? inspectionStage : devMockStage
+  // Determine active stage
+  // Operator: use SSE inspectionStage or dev mock
+  // VIEW ONLY: ONLY use synced state from API
+  const activeStage = isOperator
+    ? ((isConnected || inspectionStage.stageName !== 'idle') ? inspectionStage : devMockStage)
+    : (syncedState.stage || {
+        status: 'idle',
+        stageName: 'idle',
+        message: 'Syncing...',
+        stageIndex: 0,
+        totalStages: 7
+      })
 
   // Determine AI result for UI
   const aiResult = activeInspection?.decision === 'PASS' ? 'GOOD' : 
                    activeInspection?.decision === 'FAIL' ? 'NG' : 'WAITING'
+
+  // Determine effective process status
+  // Operator: use SSE processStatus, VIEW ONLY: use synced from API
+  const effectiveProcessStatus = isOperator ? processStatus : syncedState.processStatus
+  
+  // Determine effective hardware status
+  // Operator: use SSE hardwareStatus, VIEW ONLY: use synced from API
+  const effectiveHardwareStatus = isOperator 
+    ? hardwareStatus 
+    : (syncedState.hardware || { cameras: [], plcs: [] })
+  
+  // Determine effective AUTO-NG state
+  // Operator: use local state, VIEW ONLY: use synced from API
+  const effectiveAutoNgEnabled = isOperator 
+    ? autoNgEnabled 
+    : syncedState.autoNgEnabled
 
   // ============================================
   // Action Handlers
@@ -300,7 +479,11 @@ export function LiveViewV3({
           const overrideResult = await overrideResponse.json()
           
           if (overrideResult.success) {
-            console.log('[LiveView] ✅ Override created for Manager review:', overrideResult.data?.id)
+            if (overrideResult.duplicate) {
+              console.log('[LiveView] ℹ️ Override already exists for board:', boardId, '- using existing record:', overrideResult.data?.id)
+            } else {
+              console.log('[LiveView] ✅ Override created for Manager review:', overrideResult.data?.id)
+            }
           } else {
             console.warn('[LiveView] ⚠️ Override creation failed:', overrideResult.error)
           }
@@ -724,6 +907,9 @@ export function LiveViewV3({
             <div>
               <h1 className="font-display font-bold text-sm tracking-wider text-text-primary">
                 {lineName || `Line ${lineId}`}
+                {(customerName || workOrder?.customer?.name || workOrder?.customerName) && (
+                  <span className="text-phosphor-cyan ml-2">- {customerName || workOrder?.customer?.name || workOrder?.customerName}</span>
+                )}
               </h1>
               <p className="font-mono text-xxs text-phosphor-amber tracking-widest">
                 LIVE INSPECTION
@@ -733,7 +919,7 @@ export function LiveViewV3({
 
         </div>
 
-        {/* Center: Board ID only */}
+        {/* Center: WO Info only (simplified) */}
         <div className="flex items-center gap-4">
           {/* Work Order */}
           <div className="flex items-center gap-2 px-4 py-2 bg-terminal border border-surface-border">
@@ -746,74 +932,33 @@ export function LiveViewV3({
             </div>
           </div>
 
-          {/* Board ID - show when WO selected (persist through pause/stop) */}
-          <div className="flex items-center gap-2 px-4 py-2 bg-terminal border border-surface-border">
-            <Package className="w-4 h-4 text-text-tertiary" />
-            <div>
-              <p className="font-mono text-xxs text-text-tertiary">BOARD</p>
-              <p className="font-mono text-sm font-bold text-text-primary">
-                {workOrder?.woNumber
-                  ? `${workOrder.woNumber}-${String(boardSequenceRef.current + 1).padStart(4, '0')}`
-                  : '---'
-                }
-              </p>
-            </div>
-          </div>
-
-          {/* Auto-NG Toggle + Countdown */}
-          <div className="flex items-center gap-3">
-            {/* Auto-NG Toggle */}
-            <button
-              onClick={toggleAutoNg}
-              className={cn(
-                "flex items-center gap-2 px-3 py-2 border transition-all",
-                autoNgEnabled 
-                  ? "border-phosphor-amber bg-phosphor-amber/10" 
-                  : "border-surface-border bg-terminal hover:border-text-tertiary"
-              )}
-              title={autoNgEnabled ? "Auto-NG ON: Will auto-reject after 15s" : "Auto-NG OFF: Manual confirmation required"}
-            >
-              {autoNgEnabled ? (
-                <ToggleRight className="w-5 h-5 text-phosphor-amber" />
-              ) : (
-                <ToggleLeft className="w-5 h-5 text-text-tertiary" />
-              )}
+          {/* NG Review Countdown - only show when AI FAIL and Auto-NG is ON */}
+          {aiResult === 'NG' && activeInspection && effectiveAutoNgEnabled && (
+            <div className={cn(
+              "flex items-center gap-2 px-3 py-2 border",
+              reviewCountdown <= 5 
+                ? "bg-phosphor-red/20 border-phosphor-red animate-pulse" 
+                : "bg-phosphor-amber/10 border-phosphor-amber/50"
+            )}>
               <span className={cn(
-                "font-mono text-xs font-bold",
-                autoNgEnabled ? "text-phosphor-amber" : "text-text-tertiary"
+                "font-mono text-sm",
+                reviewCountdown <= 5 ? "text-phosphor-red" : "text-phosphor-amber"
+              )}>Auto NG in</span>
+              <span className={cn(
+                "font-mono text-2xl font-bold",
+                reviewCountdown <= 5 ? "text-phosphor-red" : "text-phosphor-amber"
               )}>
-                AUTO-NG
+                {reviewCountdown}s
               </span>
-            </button>
+            </div>
+          )}
 
-            {/* NG Review Countdown - only show when AI FAIL and Auto-NG is ON */}
-            {aiResult === 'NG' && activeInspection && autoNgEnabled && (
-              <div className={cn(
-                "flex items-center gap-2 px-3 py-2 border",
-                reviewCountdown <= 5 
-                  ? "bg-phosphor-red/20 border-phosphor-red animate-pulse" 
-                  : "bg-phosphor-amber/10 border-phosphor-amber/50"
-              )}>
-                <span className={cn(
-                  "font-mono text-sm",
-                  reviewCountdown <= 5 ? "text-phosphor-red" : "text-phosphor-amber"
-                )}>Auto NG in</span>
-                <span className={cn(
-                  "font-mono text-2xl font-bold",
-                  reviewCountdown <= 5 ? "text-phosphor-red" : "text-phosphor-amber"
-                )}>
-                  {reviewCountdown}s
-                </span>
-              </div>
-            )}
-
-            {/* Manual Mode Indicator - show when Auto-NG is OFF and NG detected */}
-            {aiResult === 'NG' && activeInspection && !autoNgEnabled && (
-              <div className="flex items-center gap-2 px-3 py-2 border border-phosphor-cyan bg-phosphor-cyan/10">
-                <span className="font-mono text-sm text-phosphor-cyan">MANUAL MODE</span>
-              </div>
-            )}
-          </div>
+          {/* Manual Mode Indicator - show when Auto-NG is OFF and NG detected */}
+          {aiResult === 'NG' && activeInspection && !effectiveAutoNgEnabled && (
+            <div className="flex items-center gap-2 px-3 py-2 border border-phosphor-cyan bg-phosphor-cyan/10">
+              <span className="font-mono text-sm text-phosphor-cyan">MANUAL MODE</span>
+            </div>
+          )}
         </div>
 
         {/* Right: User + Time */}
@@ -884,14 +1029,14 @@ export function LiveViewV3({
         <div className="flex items-center gap-3">
           {/* RUN Button */}
           <button
-            onClick={runProcess}
-            disabled={!isConnected || isControlling || processStatus === 'RUNNING'}
+            onClick={handleRunProcess}
+            disabled={!isOperator || !isConnected || isControlling || effectiveProcessStatus === 'RUNNING'}
             className={cn(
               "h-10 px-4 flex items-center gap-2 border-2 transition-all",
               "font-display text-xs font-bold tracking-wider",
-              processStatus === 'RUNNING'
+              effectiveProcessStatus === 'RUNNING'
                 ? "bg-phosphor-green border-phosphor-green text-void"
-                : isConnected && processStatus !== 'RUNNING'
+                : isOperator && isConnected && effectiveProcessStatus !== 'RUNNING'
                   ? "border-phosphor-green text-phosphor-green hover:bg-phosphor-green hover:text-void"
                   : "border-surface-border text-text-tertiary cursor-not-allowed"
             )}
@@ -902,14 +1047,14 @@ export function LiveViewV3({
 
           {/* PAUSE Button */}
           <button
-            onClick={pauseProcess}
-            disabled={!isConnected || isControlling || processStatus !== 'RUNNING'}
+            onClick={handlePauseProcess}
+            disabled={!isOperator || !isConnected || isControlling || effectiveProcessStatus !== 'RUNNING'}
             className={cn(
               "h-10 px-4 flex items-center gap-2 border-2 transition-all",
               "font-display text-xs font-bold tracking-wider",
-              processStatus === 'PAUSED'
+              effectiveProcessStatus === 'PAUSED'
                 ? "bg-phosphor-amber border-phosphor-amber text-void"
-                : isConnected && processStatus === 'RUNNING'
+                : isOperator && isConnected && effectiveProcessStatus === 'RUNNING'
                   ? "border-phosphor-amber text-phosphor-amber hover:bg-phosphor-amber hover:text-void"
                   : "border-surface-border text-text-tertiary cursor-not-allowed"
             )}
@@ -920,14 +1065,14 @@ export function LiveViewV3({
 
           {/* STOP Button */}
           <button
-            onClick={stopProcess}
-            disabled={!isConnected || isControlling || processStatus === 'IDLE' || processStatus === 'STOPPED'}
+            onClick={handleStopProcess}
+            disabled={!isOperator || !isConnected || isControlling || effectiveProcessStatus === 'IDLE' || effectiveProcessStatus === 'STOPPED'}
             className={cn(
               "h-10 px-4 flex items-center gap-2 border-2 transition-all",
               "font-display text-xs font-bold tracking-wider",
-              processStatus === 'STOPPED'
+              effectiveProcessStatus === 'STOPPED'
                 ? "bg-phosphor-red border-phosphor-red text-void"
-                : isConnected && processStatus !== 'IDLE' && processStatus !== 'STOPPED'
+                : isOperator && isConnected && effectiveProcessStatus !== 'IDLE' && effectiveProcessStatus !== 'STOPPED'
                   ? "border-phosphor-red text-phosphor-red hover:bg-phosphor-red hover:text-void"
                   : "border-surface-border text-text-tertiary cursor-not-allowed"
             )}
@@ -987,26 +1132,26 @@ export function LiveViewV3({
           {/* Camera Status */}
           <div className={cn(
             "flex items-center gap-2 px-3 py-1.5 border",
-            hardwareStatus.cameras?.[0]?.status === 'ONLINE' 
+            effectiveHardwareStatus?.cameras?.[0]?.status === 'ONLINE' 
               ? "border-phosphor-green/50 bg-phosphor-green/5" 
-              : hardwareStatus.cameras?.length > 0
+              : effectiveHardwareStatus?.cameras?.length > 0
                 ? "border-phosphor-red/50 bg-phosphor-red/5"
                 : "border-surface-border bg-surface-border/10"
           )}>
             <Camera className={cn(
               "w-4 h-4",
-              hardwareStatus.cameras?.[0]?.status === 'ONLINE' 
+              effectiveHardwareStatus?.cameras?.[0]?.status === 'ONLINE' 
                 ? "text-phosphor-green" 
-                : hardwareStatus.cameras?.length > 0
+                : effectiveHardwareStatus?.cameras?.length > 0
                   ? "text-phosphor-red"
                   : "text-text-tertiary"
             )} />
             <span className="font-mono text-xs text-text-secondary">CAM</span>
             <div className={cn(
               "w-2 h-2 rounded-full",
-              hardwareStatus.cameras?.[0]?.status === 'ONLINE' 
+              effectiveHardwareStatus?.cameras?.[0]?.status === 'ONLINE' 
                 ? "bg-phosphor-green" 
-                : hardwareStatus.cameras?.length > 0
+                : effectiveHardwareStatus?.cameras?.length > 0
                   ? "bg-phosphor-red animate-pulse"
                   : "bg-surface-border"
             )} />
@@ -1015,30 +1160,57 @@ export function LiveViewV3({
           {/* PLC Status */}
           <div className={cn(
             "flex items-center gap-2 px-3 py-1.5 border",
-            hardwareStatus.plcs?.[0]?.status === 'ONLINE' 
+            effectiveHardwareStatus?.plcs?.[0]?.status === 'ONLINE' 
               ? "border-phosphor-green/50 bg-phosphor-green/5" 
-              : hardwareStatus.plcs?.length > 0
+              : effectiveHardwareStatus?.plcs?.length > 0
                 ? "border-phosphor-red/50 bg-phosphor-red/5"
                 : "border-surface-border bg-surface-border/10"
           )}>
             <Activity className={cn(
               "w-4 h-4",
-              hardwareStatus.plcs?.[0]?.status === 'ONLINE' 
+              effectiveHardwareStatus?.plcs?.[0]?.status === 'ONLINE' 
                 ? "text-phosphor-green" 
-                : hardwareStatus.plcs?.length > 0
+                : effectiveHardwareStatus?.plcs?.length > 0
                   ? "text-phosphor-red"
                   : "text-text-tertiary"
             )} />
             <span className="font-mono text-xs text-text-secondary">PLC</span>
             <div className={cn(
               "w-2 h-2 rounded-full",
-              hardwareStatus.plcs?.[0]?.status === 'ONLINE' 
+              effectiveHardwareStatus?.plcs?.[0]?.status === 'ONLINE' 
                 ? "bg-phosphor-green" 
-                : hardwareStatus.plcs?.length > 0
+                : effectiveHardwareStatus?.plcs?.length > 0
                   ? "bg-phosphor-red animate-pulse"
                   : "bg-surface-border"
             )} />
           </div>
+
+          {/* Auto-NG Toggle */}
+          <button
+            onClick={toggleAutoNg}
+            disabled={!isOperator}
+            className={cn(
+              "flex items-center gap-2 px-3 py-1.5 border transition-all",
+              !isOperator 
+                ? "border-surface-border bg-surface-border/10 cursor-not-allowed"
+                : effectiveAutoNgEnabled 
+                  ? "border-phosphor-amber bg-phosphor-amber/10" 
+                  : "border-surface-border bg-surface-border/10 hover:border-text-tertiary"
+            )}
+            title={effectiveAutoNgEnabled ? "Auto-NG ON: Will auto-reject after 15s" : "Auto-NG OFF: Manual confirmation required"}
+          >
+            {effectiveAutoNgEnabled ? (
+              <ToggleRight className={cn("w-4 h-4", isOperator ? "text-phosphor-amber" : "text-text-tertiary")} />
+            ) : (
+              <ToggleLeft className="w-4 h-4 text-text-tertiary" />
+            )}
+            <span className={cn(
+              "font-mono text-xs font-bold",
+              !isOperator ? "text-text-tertiary" : effectiveAutoNgEnabled ? "text-phosphor-amber" : "text-text-tertiary"
+            )}>
+              AUTO-NG
+            </span>
+          </button>
         </div>
       </div>
 
@@ -1056,8 +1228,9 @@ export function LiveViewV3({
             <InspectionStage
               stage={activeStage}
               stageDefinitions={stageDefinitions}
-              processStatus={processStatus}
-              onResume={runProcess}
+              processStatus={effectiveProcessStatus}
+              onResume={handleRunProcess}
+              isOperator={isOperator}
               className="flex-1 bg-panel rounded-lg border border-surface-border"
             />
           )}
