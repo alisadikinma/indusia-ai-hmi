@@ -10,9 +10,11 @@
  * - Gradient progress bar with sweep animation
  * - Floating icon animation
  * - Shimmer effects on completed stages
+ * - Full i18n support
  */
 
 import { cn } from '@/lib/utils'
+import { useI18n } from '@/context/I18nContext'
 import { 
   Loader2, 
   Camera, 
@@ -51,21 +53,25 @@ const DEFAULT_STAGES = [
   { stage_id: 'stage-03', name: 'done', label: 'Done', icon: 'check' }
 ]
 
-// Message mapping by stage name
-const STAGE_MESSAGES = {
-  'idle': 'Waiting for board...',
-  'start': 'Board incoming...',
-  'position_1': 'Camera Position 1...',
-  'position_2': 'Camera Position 2...',
-  'flip': 'Flipping PCB...',
-  'position_3': 'Camera Position 3...',
-  'position_4': 'Camera Position 4...',
-  'running': 'Processing...',
-  'done': 'Ready for review'
-}
-
 export function InspectionStage({ stage, stageDefinitions, processStatus, onResume, isOperator = true, className }) {
+  const { t } = useI18n()
   const { status, stageName, message, stageIndex } = stage
+  
+  // Message mapping by stage name (with i18n)
+  const getStageMessage = (name) => {
+    const messages = {
+      'idle': t('hmi.waitingForBoard'),
+      'start': t('hmi.waitingForBoard'),
+      'position_1': t('hmi.capturing'),
+      'position_2': t('hmi.capturing'),
+      'flip': t('hmi.processing'),
+      'position_3': t('hmi.capturing'),
+      'position_4': t('hmi.capturing'),
+      'running': t('hmi.processing'),
+      'done': t('hmi.processing')
+    }
+    return messages[name] || t('hmi.processing')
+  }
   
   // Use provided stages or fallback
   const stages = stageDefinitions?.length > 0 ? stageDefinitions : DEFAULT_STAGES
@@ -93,10 +99,10 @@ export function InspectionStage({ stage, stageDefinitions, processStatus, onResu
         </div>
         
         <p className="text-2xl text-phosphor-amber font-display font-bold tracking-wider mb-2">
-          MACHINE PAUSED
+          {t('hmi.machinePaused')}
         </p>
         <p className="text-sm text-text-tertiary font-mono mb-6">
-          Inspection process is paused
+          {t('hmi.waitingToResume')}
         </p>
 
         {/* Resume Button - Only for Operator */}
@@ -111,11 +117,11 @@ export function InspectionStage({ stage, stageDefinitions, processStatus, onResu
             )}
           >
             <Play className="w-5 h-5" />
-            RESUME
+            {t('buttons.resume').toUpperCase()}
           </button>
         ) : (
           <div className="flex items-center gap-2 px-4 py-2 border border-surface-border bg-surface-border/10">
-            <span className="font-mono text-xs text-text-tertiary">VIEW ONLY - Cannot control machine</span>
+            <span className="font-mono text-xs text-text-tertiary">{t('hmi.viewOnlyCannotControl')}</span>
           </div>
         )}
       </div>
@@ -140,10 +146,10 @@ export function InspectionStage({ stage, stageDefinitions, processStatus, onResu
         </div>
         
         <p className="text-2xl text-phosphor-red font-display font-bold tracking-wider mb-2">
-          MACHINE STOPPED
+          {t('hmi.machineStopped')}
         </p>
         <p className="text-sm text-text-tertiary font-mono mb-6">
-          {isOperator ? 'Click RUN to start inspection' : 'Waiting for operator to start'}
+          {isOperator ? t('hmi.waitingForOperator') : t('hmi.waitingForOperator')}
         </p>
 
         {/* Start Button - Only for Operator */}
@@ -158,11 +164,11 @@ export function InspectionStage({ stage, stageDefinitions, processStatus, onResu
             )}
           >
             <Play className="w-5 h-5" />
-            START
+            {t('buttons.start').toUpperCase()}
           </button>
         ) : (
           <div className="flex items-center gap-2 px-4 py-2 border border-surface-border bg-surface-border/10">
-            <span className="font-mono text-xs text-text-tertiary">VIEW ONLY - Cannot control machine</span>
+            <span className="font-mono text-xs text-text-tertiary">{t('hmi.viewOnlyCannotControl')}</span>
           </div>
         )}
       </div>
@@ -187,10 +193,10 @@ export function InspectionStage({ stage, stageDefinitions, processStatus, onResu
         </div>
         
         <p className="text-2xl text-text-secondary font-display font-bold tracking-wider mb-2">
-          READY TO START
+          {t('status.ready').toUpperCase()}
         </p>
         <p className="text-sm text-text-tertiary font-mono mb-6">
-          {isOperator ? 'Press RUN to begin inspection' : 'Waiting for operator to start'}
+          {isOperator ? t('hmi.waitingForOperator') : t('hmi.waitingForOperator')}
         </p>
 
         {/* Start Button - Only for Operator */}
@@ -205,11 +211,11 @@ export function InspectionStage({ stage, stageDefinitions, processStatus, onResu
             )}
           >
             <Play className="w-5 h-5" />
-            START
+            {t('buttons.start').toUpperCase()}
           </button>
         ) : (
           <div className="flex items-center gap-2 px-4 py-2 border border-surface-border bg-surface-border/10">
-            <span className="font-mono text-xs text-text-tertiary">VIEW ONLY - Cannot control machine</span>
+            <span className="font-mono text-xs text-text-tertiary">{t('hmi.viewOnlyCannotControl')}</span>
           </div>
         )}
       </div>
@@ -241,10 +247,10 @@ export function InspectionStage({ stage, stageDefinitions, processStatus, onResu
         </div>
         
         <p className="text-2xl text-text-secondary font-display font-bold tracking-wider mb-2">
-          WAITING FOR BOARD
+          {t('hmi.waitingForBoard').toUpperCase()}
         </p>
         <p className="text-sm text-text-tertiary font-mono">
-          System ready to receive next PCB
+          {t('status.ready')}
         </p>
 
         {/* Stage dots with labels (all inactive) */}
@@ -379,7 +385,7 @@ export function InspectionStage({ stage, stageDefinitions, processStatus, onResu
         "text-2xl font-display font-bold tracking-wider mb-1 transition-colors",
         isComplete ? "text-phosphor-green" : "text-text-primary"
       )}>
-        {message || STAGE_MESSAGES[stageName] || 'Processing...'}
+        {message || getStageMessage(stageName)}
       </p>
       
       {/* Current Stage Name */}
@@ -414,7 +420,7 @@ export function InspectionStage({ stage, stageDefinitions, processStatus, onResu
 
       {/* Stage Counter */}
       <p className="text-sm text-text-tertiary font-mono mb-5">
-        Stage {stageIndex} of {actualTotalStages}
+        Stage {stageIndex} / {actualTotalStages}
       </p>
 
       {/* Enhanced Stage Progress indicators */}

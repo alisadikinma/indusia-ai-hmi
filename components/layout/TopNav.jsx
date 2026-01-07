@@ -137,8 +137,6 @@ export default function TopNav() {
             </span>
           </button>
 
-          <NotificationBell />
-
           <LanguageSwitcher />
 
           <button
@@ -148,6 +146,9 @@ export default function TopNav() {
           >
             <HelpCircle className="w-5 h-5" />
           </button>
+
+          {/* Notification Bell - next to user profile */}
+          <NotificationBell />
 
           <div className="relative" ref={menuRef}>
             <button

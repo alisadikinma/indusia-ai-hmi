@@ -66,3 +66,6 @@ export function useI18nContext() {
   }
   return context;
 }
+
+// Alias for convenience - both names work
+export const useI18n = useI18nContext;

@@ -4,6 +4,7 @@
  * Fetches overrides with cloud_image_paths that have been synced
  * Query params: 
  *   - limit: number (default 20)
+ *   - count: number - return only this many images (for sync session detail)
  */
 
 import { NextResponse } from 'next/server'
@@ -14,9 +15,11 @@ export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url)
     const limit = parseInt(searchParams.get('limit')) || 20
+    const count = searchParams.get('count') ? parseInt(searchParams.get('count')) : null
 
-    // Query overrides that are approved and have cloud images with actual URLs
-    const url = `${POSTGREST_URL}/overrides?select=id,board_id,status,cloud_image_paths,reviewed_at,sync_status&status=eq.approved&cloud_image_paths=not.is.null&order=reviewed_at.desc.nullslast&limit=${limit}`
+    // Query overrides that are approved and have cloud images
+    // Order by reviewed_at desc to get most recent first
+    let url = `${POSTGREST_URL}/overrides?select=id,board_id,status,cloud_image_paths,reviewed_at,sync_status&status=eq.approved&sync_status=eq.synced&cloud_image_paths=not.is.null&order=reviewed_at.desc.nullslast&limit=${limit}`
 
     console.log(`[API] Querying: ${url}`)
 
@@ -33,12 +36,12 @@ export async function GET(request) {
     const data = await response.json()
     
     console.log(`[API] Raw data count: ${data?.length || 0}`)
-    if (data?.length > 0) {
-      console.log(`[API] First record cloud_image_paths:`, data[0].cloud_image_paths)
-    }
 
     // Parse cloud_image_paths and flatten for display
+    // Use Set to track unique combinations of boardId + side + cloudPath
+    const seenImages = new Set()
     const images = []
+    
     for (const override of data || []) {
       try {
         // Skip empty or default values
@@ -58,34 +61,42 @@ export async function GET(request) {
         
         if (!hasTop && !hasBottom) continue
 
-        // Extract URLs from top images
+        // Extract URLs from top images (deduplicate by boardId + side + cloudPath)
         if (hasTop) {
           for (const img of paths.top) {
             if (img.publicUrl) {
-              images.push({
-                overrideId: override.id,
-                boardId: override.board_id,
-                side: 'top',
-                url: img.publicUrl,
-                cloudPath: img.cloudPath,
-                reviewedAt: override.reviewed_at
-              })
+              const key = `${override.board_id}:top:${img.cloudPath || img.publicUrl}`
+              if (!seenImages.has(key)) {
+                seenImages.add(key)
+                images.push({
+                  overrideId: override.id,
+                  boardId: override.board_id,
+                  side: 'top',
+                  url: img.publicUrl,
+                  cloudPath: img.cloudPath,
+                  reviewedAt: override.reviewed_at
+                })
+              }
             }
           }
         }
 
-        // Extract URLs from bottom images
+        // Extract URLs from bottom images (deduplicate)
         if (hasBottom) {
           for (const img of paths.bottom) {
             if (img.publicUrl) {
-              images.push({
-                overrideId: override.id,
-                boardId: override.board_id,
-                side: 'bottom',
-                url: img.publicUrl,
-                cloudPath: img.cloudPath,
-                reviewedAt: override.reviewed_at
-              })
+              const key = `${override.board_id}:bottom:${img.cloudPath || img.publicUrl}`
+              if (!seenImages.has(key)) {
+                seenImages.add(key)
+                images.push({
+                  overrideId: override.id,
+                  boardId: override.board_id,
+                  side: 'bottom',
+                  url: img.publicUrl,
+                  cloudPath: img.cloudPath,
+                  reviewedAt: override.reviewed_at
+                })
+              }
             }
           }
         }
@@ -94,12 +105,16 @@ export async function GET(request) {
       }
     }
 
-    console.log(`[API] GET /api/sync-queue/images: Found ${images.length} uploaded images`)
+    // If count specified, limit results
+    const finalImages = count ? images.slice(0, count) : images
+
+    console.log(`[API] GET /api/sync-queue/images: Found ${finalImages.length} unique uploaded images`)
 
     return NextResponse.json({
       success: true,
-      data: images,
-      count: images.length
+      data: finalImages,
+      count: finalImages.length,
+      total: images.length
     })
 
   } catch (error) {

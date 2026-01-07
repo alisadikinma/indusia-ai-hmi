@@ -217,12 +217,12 @@ export default function SideNav() {
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-1.5">
                 <Activity className="w-3 h-3 text-phosphor-green" />
-                <span className="font-mono text-xxs text-phosphor-green">SYSTEM OK</span>
+                <span className="font-mono text-xxs text-phosphor-green">{t('system.systemOk')}</span>
               </div>
               <span className="font-mono text-xxs text-text-tertiary">{currentTime}</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="font-mono text-xxs text-text-tertiary">UPTIME</span>
+              <span className="font-mono text-xxs text-text-tertiary">{t('system.uptime')}</span>
               <span className="font-mono text-xxs text-phosphor-amber">{systemUptime}</span>
             </div>
           </div>
@@ -236,14 +236,14 @@ export default function SideNav() {
             "hover:border-phosphor-amber hover:text-phosphor-amber transition-colors",
             "text-text-tertiary"
           )}
-          title={isCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+          title={isCollapsed ? t('sidebar.expand') : t('sidebar.collapse')}
         >
           {isCollapsed ? (
             <PanelLeft className="w-4 h-4" />
           ) : (
             <>
               <PanelLeftClose className="w-4 h-4" />
-              <span className="font-mono text-xxs">COLLAPSE</span>
+              <span className="font-mono text-xxs">{t('sidebar.collapse')}</span>
             </>
           )}
         </button>
@@ -257,7 +257,7 @@ export default function SideNav() {
             <div className="flex items-center gap-2">
               <Radio className="w-3 h-3 text-phosphor-amber" />
               <span className="font-display text-xxs font-semibold tracking-widest text-phosphor-amber">
-                NAVIGATION
+                {t('sidebar.navigation')}
               </span>
             </div>
           </div>
@@ -317,7 +317,7 @@ export default function SideNav() {
                       {isHMIWithSession && (
                         <div className="flex items-center gap-1.5">
                           <div className="w-2 h-2 bg-phosphor-green animate-pulse rounded-full" />
-                          <span className="font-mono text-xxs text-phosphor-green">ACTIVE</span>
+                          <span className="font-mono text-xxs text-phosphor-green">{t('sidebar.active')}</span>
                         </div>
                       )}
                       
@@ -444,11 +444,11 @@ export default function SideNav() {
           <div className="px-4 py-3">
             <div className="grid grid-cols-2 gap-2">
               <div className="bg-void border border-surface-border p-2">
-                <p className="font-mono text-xxs text-text-tertiary">VERSION</p>
+                <p className="font-mono text-xxs text-text-tertiary">{t('sidebar.version')}</p>
                 <p className="font-mono text-xs text-phosphor-amber">v1.0.0</p>
               </div>
               <div className="bg-void border border-surface-border p-2">
-                <p className="font-mono text-xxs text-text-tertiary">BUILD</p>
+                <p className="font-mono text-xxs text-text-tertiary">{t('sidebar.build')}</p>
                 <p className="font-mono text-xs text-phosphor-amber">2026.01</p>
               </div>
             </div>

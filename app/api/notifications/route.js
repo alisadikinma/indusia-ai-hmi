@@ -130,7 +130,7 @@ export async function POST(request) {
       title,
       message,
       severity: body.severity || 'INFO',
-      metadata: body.metadata ? (typeof body.metadata === 'string' ? body.metadata : JSON.stringify(body.metadata)) : null,
+      metadata: body.metadata || null,  // JSONB column - pass object directly
       read: false,
       created_at: new Date().toISOString()
     }

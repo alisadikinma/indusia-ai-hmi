@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
+import { useI18n } from '@/context/I18nContext';
 import { useToast } from '@/hooks/useToast';
 import SectionHeader from '@/components/common/SectionHeader';
 import SyncProgressModal from '@/components/sync/SyncProgressModal';
@@ -10,27 +11,52 @@ import { Clock, RefreshCw, AlertCircle, Cloud, Database, CheckCircle, ChevronRig
 
 const AUTO_SYNC_INTERVAL = 15 * 60 * 1000; // 15 minutes
 const HISTORY_PAGE_SIZE = 10;
+const CACHE_TTL = 15 * 60 * 1000; // 15 minutes
 
-// Table display names mapping
-const TABLE_DISPLAY_NAMES = {
-  'inspection_results': 'Inspection Results',
-  'inspection_defects': 'Inspection Defects',
-  'overrides': 'False Call Overrides',
-  'inspection_stats': 'Inspection Stats',
-  'work_orders': 'Work Orders',
-  'event_log': 'Event Log'
+// Cache helpers
+const getCache = (key) => {
+  if (typeof window === 'undefined') return null;
+  try {
+    const cached = localStorage.getItem(key);
+    if (!cached) return null;
+    const { data, timestamp } = JSON.parse(cached);
+    const age = Date.now() - timestamp;
+    return { data, timestamp, isExpired: age > CACHE_TTL };
+  } catch (e) {
+    return null;
+  }
 };
 
-// Helper to get display name
-const getTableDisplayName = (table) => {
-  return TABLE_DISPLAY_NAMES[table] || table.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+const setCache = (key, data) => {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(key, JSON.stringify({ data, timestamp: Date.now() }));
+  } catch (e) {
+    console.warn('[SyncPage] Cache save failed:', e);
+  }
 };
 
 export default function SyncPage() {
   const router = useRouter();
   const { user } = useAuth();
+  const { t } = useI18n();
   const { showToast } = useToast();
   const autoSyncIntervalRef = useRef(null);
+
+  // Table display names mapping (i18n)
+  const getTableDisplayName = useCallback((table) => {
+    const tableKeys = {
+      'inspection_results': 'syncTables.inspectionResults',
+      'inspection_defects': 'syncTables.inspectionDefects',
+      'overrides': 'syncTables.overrides',
+      'inspection_stats': 'syncTables.inspectionStats',
+      'work_orders': 'syncTables.workOrders',
+      'event_log': 'syncTables.eventLog'
+    };
+    const key = tableKeys[table];
+    if (key) return t(key);
+    return table.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+  }, [t]);
 
   // Tab state
   const [activeTab, setActiveTab] = useState('main');
@@ -66,9 +92,9 @@ export default function SyncPage() {
   const [uploadedImages, setUploadedImages] = useState([]);
   const [loadingImages, setLoadingImages] = useState(false);
 
-  const loadPendingCounts = useCallback(async () => {
+  const loadPendingCounts = useCallback(async (showLoading = true) => {
     try {
-      setIsLoading(true);
+      if (showLoading) setIsLoading(true);
       setError(null);
       
       const response = await fetch('/api/sync-queue');
@@ -77,40 +103,26 @@ export default function SyncPage() {
       if (result.success) {
         setPendingTables(result.data || []);
         setTotalPending(result.count || 0);
+        setCache('indusia_sync_pending', { tables: result.data, count: result.count });
       } else {
-        setError(result.error || 'Failed to load pending counts');
+        setError(result.error || t('sync.syncFailed'));
       }
     } catch (err) {
       setError(err.message);
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [t]);
 
-  // Load uploaded images filtered by sync session time
-  const loadUploadedImages = useCallback(async (syncStart, syncEnd) => {
-    if (!syncStart) return;
+  // Load uploaded images for sync session
+  const loadUploadedImages = useCallback(async (count) => {
+    if (!count || count <= 0) return;
     
     setLoadingImages(true);
     try {
       const params = new URLSearchParams();
+      params.set('count', count.toString());
       params.set('limit', '20');
-      
-      // Convert locale string back to ISO for API
-      // syncStart/syncEnd are locale strings like "1/7/2026, 1:07:18 PM"
-      try {
-        const startDate = new Date(syncStart);
-        const endDate = syncEnd ? new Date(syncEnd) : new Date();
-        
-        if (!isNaN(startDate.getTime())) {
-          params.set('syncStart', startDate.toISOString());
-        }
-        if (!isNaN(endDate.getTime())) {
-          params.set('syncEnd', endDate.toISOString());
-        }
-      } catch (e) {
-        console.warn('Failed to parse sync timestamps:', e);
-      }
       
       const response = await fetch(`/api/sync-queue/images?${params}`);
       const result = await response.json();
@@ -125,9 +137,9 @@ export default function SyncPage() {
     }
   }, []);
 
-  const loadSyncHistory = useCallback(async (page = 1) => {
+  const loadSyncHistory = useCallback(async (page = 1, showLoading = true) => {
     try {
-      setLoadingHistory(true);
+      if (showLoading) setLoadingHistory(true);
       const offset = (page - 1) * HISTORY_PAGE_SIZE;
       const response = await fetch(`/api/sync-queue/history?limit=${HISTORY_PAGE_SIZE}&offset=${offset}`);
       const result = await response.json();
@@ -135,8 +147,12 @@ export default function SyncPage() {
       if (result.success && result.data) {
         const history = result.data.map(item => ({
           id: item.id,
+          // Display format
           timestamp: item.started_at ? new Date(item.started_at).toLocaleString() : '-',
           completedAt: item.completed_at ? new Date(item.completed_at).toLocaleString() : '-',
+          // Raw ISO format for API filtering
+          startedAtRaw: item.started_at,
+          completedAtRaw: item.completed_at,
           recordCount: item.record_count || 0,
           successCount: item.success_count || 0,
           failedCount: item.failed_count || 0,
@@ -150,8 +166,10 @@ export default function SyncPage() {
         setSyncHistory(history);
         setTotalHistoryCount(result.total || history.length);
         
-        // Update last sync info from first completed
+        // Cache first page
         if (page === 1) {
+          setCache('indusia_sync_history', { history, total: result.total || history.length });
+          
           const lastCompleted = history.find(h => 
             h.status === 'completed' || 
             h.status === 'success' || 
@@ -179,7 +197,7 @@ export default function SyncPage() {
     const currentPending = result.count || 0;
     
     if (currentPending === 0) {
-      if (!isAuto) showToast('No records ready to sync.');
+      if (!isAuto) showToast(t('sync.noRecordsToSync'));
       return;
     }
     
@@ -189,17 +207,17 @@ export default function SyncPage() {
     setIsSyncing(true);
     setStatus('running');
     setProgress(0);
-    setCurrentStep('Connecting to cloud...');
+    setCurrentStep(t('sync.syncing'));
 
     try {
       const progressSteps = [
-        { percent: 10, step: 'Preparing payload...' },
-        { percent: 30, step: 'Uploading inspection results...' },
-        { percent: 45, step: 'Uploading inspection defects...' },
-        { percent: 60, step: 'Uploading overrides...' },
-        { percent: 75, step: 'Uploading inspection stats...' },
-        { percent: 85, step: 'Uploading work orders...' },
-        { percent: 95, step: 'Confirming cloud receipt...' }
+        { percent: 10, step: t('sync.syncing') },
+        { percent: 30, step: `${t('sync.syncing')} ${t('syncTables.inspectionResults')}...` },
+        { percent: 45, step: `${t('sync.syncing')} ${t('syncTables.inspectionDefects')}...` },
+        { percent: 60, step: `${t('sync.syncing')} ${t('syncTables.overrides')}...` },
+        { percent: 75, step: `${t('sync.syncing')} ${t('syncTables.inspectionStats')}...` },
+        { percent: 85, step: `${t('sync.syncing')} ${t('syncTables.workOrders')}...` },
+        { percent: 95, step: t('sync.syncing') }
       ];
 
       let stepIndex = 0;
@@ -226,14 +244,14 @@ export default function SyncPage() {
       if (syncResult.success) {
         setProgress(100);
         setStatus('completed');
-        setCurrentStep(`Synced ${syncResult.data.syncedCount} records successfully`);
+        setCurrentStep(`${syncResult.data.syncedCount} ${t('sync.recordsSynced')}`);
         setLastSyncTime(new Date().toLocaleString());
         setLastSyncStatus('success');
         
         await loadPendingCounts();
         await loadSyncHistory(1);
         
-        showToast(`Sync completed! ${syncResult.data.syncedCount} records uploaded.`, 'success');
+        showToast(t('sync.syncCompletedMsg', { count: syncResult.data.syncedCount }), 'success');
         
         setTimeout(() => {
           setIsProgressModalOpen(false);
@@ -241,17 +259,17 @@ export default function SyncPage() {
           setStatus('idle');
         }, 2000);
       } else {
-        throw new Error(syncResult.error || 'Sync failed');
+        throw new Error(syncResult.error || t('sync.syncFailed'));
       }
     } catch (err) {
       setStatus('error');
       setCurrentStep(err.message);
       if (!isAuto) {
-        showToast(`Sync failed: ${err.message}`, 'error');
+        showToast(t('sync.syncFailedMsg', { error: err.message }), 'error');
       }
       setIsSyncing(false);
     }
-  }, [isSyncing, user?.id, loadPendingCounts, loadSyncHistory, showToast]);
+  }, [isSyncing, user?.id, loadPendingCounts, loadSyncHistory, showToast, t]);
 
   // Auto sync effect
   useEffect(() => {
@@ -269,7 +287,7 @@ export default function SyncPage() {
         updateNextSync();
       }, AUTO_SYNC_INTERVAL);
       
-      showToast('Auto sync enabled. Next sync in 15 minutes.', 'info');
+      showToast(t('sync.autoSyncEnabled'), 'info');
       
       return () => {
         if (autoSyncIntervalRef.current) {
@@ -283,12 +301,48 @@ export default function SyncPage() {
         clearInterval(autoSyncIntervalRef.current);
       }
     }
-  }, [autoSync, executeSync, showToast]);
+  }, [autoSync, executeSync, showToast, t]);
 
-  // Initial load
+  // Initial load - use cache first
   useEffect(() => {
-    loadPendingCounts();
-    loadSyncHistory(1);
+    // Load from cache first
+    const cachedPending = getCache('indusia_sync_pending');
+    const cachedHistory = getCache('indusia_sync_history');
+    
+    if (cachedPending?.data) {
+      setPendingTables(cachedPending.data.tables || []);
+      setTotalPending(cachedPending.data.count || 0);
+      setIsLoading(false);
+      
+      // Refresh in background if expired
+      if (cachedPending.isExpired) {
+        loadPendingCounts(false);
+      }
+    } else {
+      loadPendingCounts(true);
+    }
+    
+    if (cachedHistory?.data) {
+      setSyncHistory(cachedHistory.data.history || []);
+      setTotalHistoryCount(cachedHistory.data.total || 0);
+      setLoadingHistory(false);
+      
+      // Set last sync from cached history
+      const lastCompleted = cachedHistory.data.history?.find(h => 
+        h.status === 'completed' || h.status === 'success' || h.status === 'completed_with_errors'
+      );
+      if (lastCompleted) {
+        setLastSyncTime(lastCompleted.timestamp);
+        setLastSyncStatus(lastCompleted.status);
+      }
+      
+      // Refresh in background if expired
+      if (cachedHistory.isExpired) {
+        loadSyncHistory(1, false);
+      }
+    } else {
+      loadSyncHistory(1, true);
+    }
   }, [loadPendingCounts, loadSyncHistory]);
 
   // Load history when tab changes or page changes
@@ -303,13 +357,12 @@ export default function SyncPage() {
     setSelectedHistory(event);
     setUploadedImages([]);
     
-    // Only load images if overrides table was synced with success > 0
     const overridesDetail = event.tableDetails?.overrides;
-    const hasOverridesSuccess = overridesDetail && overridesDetail.success > 0;
+    const successCount = overridesDetail?.success || 0;
     
-    if (hasOverridesSuccess) {
-      // Pass sync session timestamps to filter images
-      loadUploadedImages(event.timestamp, event.completedAt);
+    if (successCount > 0) {
+      // Load images based on successful override count
+      loadUploadedImages(successCount);
     }
   }, [loadUploadedImages]);
 
@@ -324,7 +377,7 @@ export default function SyncPage() {
     const timer = setInterval(() => {
       const diff = nextAutoSync - Date.now();
       if (diff <= 0) {
-        setCountdown('Syncing...');
+        setCountdown(t('sync.syncing'));
       } else {
         const mins = Math.floor(diff / 60000);
         const secs = Math.floor((diff % 60000) / 1000);
@@ -333,18 +386,26 @@ export default function SyncPage() {
     }, 1000);
     
     return () => clearInterval(timer);
-  }, [nextAutoSync]);
+  }, [nextAutoSync, t]);
 
   // Pagination
   const totalPages = Math.ceil(totalHistoryCount / HISTORY_PAGE_SIZE);
+
+  // Status label helper
+  const getStatusLabel = (status) => {
+    if (status === 'success' || status === 'completed') return t('status.success');
+    if (status === 'completed_with_errors') return t('sync.completedWithErrors');
+    if (status === 'never') return t('sync.neverSynced');
+    return status;
+  };
 
   if (!user) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center">
         <div className="bg-indusia-surface rounded-xl border border-indusia-border p-6 max-w-md text-center">
-          <h2 className="text-lg font-bold text-indusia-text mb-2">Not Logged In</h2>
+          <h2 className="text-lg font-bold text-indusia-text mb-2">{t('auth.notLoggedIn')}</h2>
           <button onClick={() => router.push('/login')} className="px-4 py-2 bg-indusia-primary text-white rounded-lg text-sm">
-            Go to Login
+            {t('auth.goToLogin')}
           </button>
         </div>
       </div>
@@ -354,8 +415,8 @@ export default function SyncPage() {
   return (
     <div>
       <SectionHeader
-        title="Sync to Cloud"
-        description="Upload pending records from local database to Supabase cloud for backup and AI retraining."
+        title={t('sync.title')}
+        description={t('sync.description')}
       />
 
       {error && (
@@ -363,7 +424,7 @@ export default function SyncPage() {
           <AlertCircle className="w-4 h-4 text-red-500" />
           <span className="text-red-400">{error}</span>
           <button onClick={loadPendingCounts} className="ml-auto px-2 py-1 text-xs bg-red-500/20 rounded hover:bg-red-500/30">
-            Retry
+            {t('buttons.retry')}
           </button>
         </div>
       )}
@@ -379,7 +440,7 @@ export default function SyncPage() {
           }`}
         >
           <Cloud className="w-4 h-4 inline-block mr-2" />
-          Sync Status
+          {t('sync.syncStatus')}
         </button>
         <button
           onClick={() => setActiveTab('history')}
@@ -390,7 +451,7 @@ export default function SyncPage() {
           }`}
         >
           <Clock className="w-4 h-4 inline-block mr-2" />
-          Sync History
+          {t('sync.syncHistory')}
           {totalHistoryCount > 0 && (
             <span className="ml-2 px-1.5 py-0.5 bg-white/20 rounded text-xs">{totalHistoryCount}</span>
           )}
@@ -405,16 +466,14 @@ export default function SyncPage() {
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
                 <Cloud className="w-5 h-5 text-indusia-primary" />
-                <span className="font-medium text-indusia-text">Cloud Sync Status</span>
+                <span className="font-medium text-indusia-text">{t('sync.cloudSyncStatus')}</span>
               </div>
               <span className={`text-xs px-2.5 py-1 rounded-full ${
                 lastSyncStatus === 'success' || lastSyncStatus === 'completed' ? 'bg-green-500/20 text-green-400' :
                 lastSyncStatus === 'completed_with_errors' ? 'bg-yellow-500/20 text-yellow-400' :
                 lastSyncStatus === 'never' ? 'bg-gray-500/20 text-gray-400' : 'bg-red-500/20 text-red-400'
               }`}>
-                {lastSyncStatus === 'never' ? 'Never synced' : 
-                 lastSyncStatus === 'completed' || lastSyncStatus === 'success' ? 'Success' :
-                 lastSyncStatus === 'completed_with_errors' ? 'Partial Success' : lastSyncStatus}
+                {getStatusLabel(lastSyncStatus)}
               </span>
             </div>
 
@@ -422,25 +481,25 @@ export default function SyncPage() {
               <p className={`text-4xl font-bold ${totalPending > 0 ? 'text-indusia-primary' : 'text-green-500'}`}>
                 {totalPending}
               </p>
-              <p className="text-sm text-indusia-textMuted mt-1">Records ready to upload</p>
+              <p className="text-sm text-indusia-textMuted mt-1">{t('sync.recordsReady')}</p>
             </div>
 
-            {pendingTables.length > 0 && pendingTables.some(t => t.count > 0) && (
+            {pendingTables.length > 0 && pendingTables.some(tb => tb.count > 0) && (
               <div className="mb-4 p-3 bg-indusia-bg rounded-lg space-y-1">
                 {pendingTables
-                  .filter(t => t.count > 0)
-                  .map(t => (
-                    <div key={t.table} className="flex justify-between text-sm">
-                      <span className="text-indusia-textMuted">{t.displayName}</span>
-                      <span className="text-indusia-primary font-medium">{t.count}</span>
+                  .filter(tb => tb.count > 0)
+                  .map(tb => (
+                    <div key={tb.table} className="flex justify-between text-sm">
+                      <span className="text-indusia-textMuted">{getTableDisplayName(tb.table)}</span>
+                      <span className="text-indusia-primary font-medium">{tb.count}</span>
                     </div>
                   ))}
               </div>
             )}
 
             <div className="flex justify-between text-sm text-indusia-textMuted mb-4">
-              <span>Last Sync:</span>
-              <span className="text-indusia-text">{lastSyncTime || 'Never'}</span>
+              <span>{t('sync.lastSync')}:</span>
+              <span className="text-indusia-text">{lastSyncTime || t('time.never')}</span>
             </div>
 
             <button
@@ -449,15 +508,15 @@ export default function SyncPage() {
               className="w-full py-3 bg-indusia-primary text-white rounded-lg font-medium hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-opacity"
             >
               {isSyncing ? <RefreshCw className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-              {isSyncing ? 'Syncing...' : 'Sync Now'}
+              {isSyncing ? t('sync.syncing') : t('sync.syncNow')}
             </button>
 
             <div className="mt-4 pt-4 border-t border-indusia-border">
               <div className="flex items-center justify-between">
                 <div>
-                  <span className="text-sm text-indusia-textMuted">Auto Sync (every 15 min)</span>
+                  <span className="text-sm text-indusia-textMuted">{t('sync.autoSyncInterval')}</span>
                   {autoSync && countdown && (
-                    <p className="text-xs text-indusia-primary mt-0.5">Next sync in {countdown}</p>
+                    <p className="text-xs text-indusia-primary mt-0.5">{t('sync.nextSync')} {countdown}</p>
                   )}
                 </div>
                 <button
@@ -475,7 +534,7 @@ export default function SyncPage() {
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
                 <Database className="w-5 h-5 text-indusia-textMuted" />
-                <span className="font-medium text-indusia-text">Tables Being Synced</span>
+                <span className="font-medium text-indusia-text">{t('sync.tablesSynced')}</span>
               </div>
               <button 
                 onClick={loadPendingCounts}
@@ -492,14 +551,14 @@ export default function SyncPage() {
               </div>
             ) : (
               <div className="space-y-2">
-                {pendingTables.map((t) => (
-                  <div key={t.table} className="flex items-center justify-between p-3 bg-indusia-bg rounded-lg">
+                {pendingTables.map((tb) => (
+                  <div key={tb.table} className="flex items-center justify-between p-3 bg-indusia-bg rounded-lg">
                     <div className="flex items-center gap-3">
                       <Table className="w-4 h-4 text-indusia-textMuted" />
-                      <span className="text-sm text-indusia-text">{t.displayName}</span>
+                      <span className="text-sm text-indusia-text">{getTableDisplayName(tb.table)}</span>
                     </div>
-                    <span className={`text-sm font-medium ${t.count > 0 ? 'text-indusia-primary' : 'text-indusia-textMuted'}`}>
-                      {t.count > 0 ? `${t.count} pending` : '0 pending'}
+                    <span className={`text-sm font-medium ${tb.count > 0 ? 'text-indusia-primary' : 'text-indusia-textMuted'}`}>
+                      {tb.count > 0 ? `${tb.count} ${t('sync.pending')}` : `0 ${t('sync.pending')}`}
                     </span>
                   </div>
                 ))}
@@ -507,8 +566,8 @@ export default function SyncPage() {
                 {totalPending === 0 && (
                   <div className="mt-4 p-4 text-center">
                     <CheckCircle className="w-10 h-10 text-indusia-pass mx-auto mb-2" />
-                    <p className="text-indusia-text font-medium">All Synced!</p>
-                    <p className="text-sm text-indusia-textMuted mt-1">All tables are up to date</p>
+                    <p className="text-indusia-text font-medium">{t('sync.allSynced')}</p>
+                    <p className="text-sm text-indusia-textMuted mt-1">{t('sync.allTablesUpToDate')}</p>
                   </div>
                 )}
               </div>
@@ -523,8 +582,8 @@ export default function SyncPage() {
           <div className="px-5 py-4 border-b border-indusia-border flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Clock className="w-5 h-5 text-indusia-textMuted" />
-              <span className="font-medium text-indusia-text">Sync History</span>
-              <span className="text-xs text-indusia-textMuted">({totalHistoryCount} total)</span>
+              <span className="font-medium text-indusia-text">{t('sync.syncHistory')}</span>
+              <span className="text-xs text-indusia-textMuted">({totalHistoryCount} {t('common.total')})</span>
             </div>
             <button 
               onClick={() => loadSyncHistory(historyPage)}
@@ -542,15 +601,15 @@ export default function SyncPage() {
           ) : syncHistory.length === 0 ? (
             <div className="py-16 text-center text-indusia-textMuted">
               <Clock className="w-12 h-12 mx-auto mb-3 opacity-50" />
-              <p className="text-sm">No sync history yet</p>
+              <p className="text-sm">{t('sync.noSyncHistory')}</p>
             </div>
           ) : (
             <>
               <div className="divide-y divide-indusia-border">
                 {syncHistory.map((event) => {
                   const tablesSummary = event.tableDetails && Object.keys(event.tableDetails).length > 0
-                    ? Object.keys(event.tableDetails).map(t => getTableDisplayName(t)).join(', ')
-                    : event.tables?.map(t => getTableDisplayName(t)).join(', ') || '-';
+                    ? Object.keys(event.tableDetails).map(tb => getTableDisplayName(tb)).join(', ')
+                    : event.tables?.map(tb => getTableDisplayName(tb)).join(', ') || '-';
                   
                   return (
                     <button
@@ -565,10 +624,10 @@ export default function SyncPage() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-3">
                           <p className="text-sm font-medium text-indusia-text">
-                            {event.successCount || event.recordCount} records synced
+                            {event.successCount || event.recordCount} {t('sync.recordsSynced')}
                           </p>
                           {event.failedCount > 0 && (
-                            <span className="text-xs text-red-400">({event.failedCount} failed)</span>
+                            <span className="text-xs text-red-400">({event.failedCount} {t('sync.failed')})</span>
                           )}
                         </div>
                         <p className="text-xs text-indusia-textMuted mt-0.5 truncate">
@@ -577,7 +636,9 @@ export default function SyncPage() {
                       </div>
                       <div className="text-right flex-shrink-0">
                         <p className="text-sm text-indusia-text">{event.timestamp}</p>
-                        <p className="text-xs text-indusia-textMuted capitalize">{event.triggeredBy}</p>
+                        <p className="text-xs text-indusia-textMuted capitalize">
+                          {event.triggeredBy === 'manual' ? t('sync.manual') : t('sync.auto')}
+                        </p>
                       </div>
                       <ChevronRight className="w-4 h-4 text-indusia-textMuted opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
                     </button>
@@ -589,7 +650,7 @@ export default function SyncPage() {
               {totalPages > 1 && (
                 <div className="px-5 py-4 border-t border-indusia-border flex items-center justify-between">
                   <p className="text-sm text-indusia-textMuted">
-                    Page {historyPage} of {totalPages}
+                    {t('pagination.page')} {historyPage} {t('pagination.of')} {totalPages}
                   </p>
                   <div className="flex gap-2">
                     <button
@@ -598,14 +659,14 @@ export default function SyncPage() {
                       className="px-3 py-1.5 bg-indusia-bg rounded text-sm text-indusia-text disabled:opacity-50 disabled:cursor-not-allowed hover:bg-indusia-border transition-colors flex items-center gap-1"
                     >
                       <ChevronLeft className="w-4 h-4" />
-                      Prev
+                      {t('pagination.prev')}
                     </button>
                     <button
                       onClick={() => setHistoryPage(p => Math.min(totalPages, p + 1))}
                       disabled={historyPage === totalPages || loadingHistory}
                       className="px-3 py-1.5 bg-indusia-bg rounded text-sm text-indusia-text disabled:opacity-50 disabled:cursor-not-allowed hover:bg-indusia-border transition-colors flex items-center gap-1"
                     >
-                      Next
+                      {t('pagination.next')}
                       <ChevronRight className="w-4 h-4" />
                     </button>
                   </div>
@@ -616,7 +677,7 @@ export default function SyncPage() {
         </div>
       )}
 
-      {/* Sync History Detail Modal - 2 column when images exist */}
+      {/* Sync History Detail Modal */}
       {selectedHistory && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div 
@@ -627,7 +688,7 @@ export default function SyncPage() {
             uploadedImages.length > 0 ? 'max-w-4xl' : 'max-w-lg'
           }`}>
             <div className="px-5 py-4 border-b border-indusia-border flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-indusia-text">Sync Details</h3>
+              <h3 className="text-lg font-semibold text-indusia-text">{t('sync.syncDetails')}</h3>
               <button
                 onClick={() => setSelectedHistory(null)}
                 className="text-indusia-textMuted hover:text-indusia-text transition-colors"
@@ -651,9 +712,11 @@ export default function SyncPage() {
                     selectedHistory.status === 'completed' || selectedHistory.status === 'success' ? 'text-indusia-pass' : 
                     selectedHistory.status === 'completed_with_errors' ? 'text-yellow-400' : 'text-indusia-fail'
                   }`}>
-                    {selectedHistory.status === 'completed' ? 'Completed Successfully' : 
-                     selectedHistory.status === 'completed_with_errors' ? 'Completed with Errors' : 
-                     selectedHistory.status}
+                    {selectedHistory.status === 'completed' || selectedHistory.status === 'success' 
+                      ? t('sync.completedSuccessfully') 
+                      : selectedHistory.status === 'completed_with_errors' 
+                        ? t('sync.completedWithErrors') 
+                        : selectedHistory.status}
                   </span>
                 </div>
 
@@ -661,38 +724,40 @@ export default function SyncPage() {
                 <div className="grid grid-cols-3 gap-3">
                   <div className="bg-indusia-bg rounded-lg p-3 text-center">
                     <p className="text-2xl font-bold text-indusia-text">{selectedHistory.recordCount}</p>
-                    <p className="text-xs text-indusia-textMuted">Total</p>
+                    <p className="text-xs text-indusia-textMuted">{t('sync.total')}</p>
                   </div>
                   <div className="bg-indusia-bg rounded-lg p-3 text-center">
                     <p className="text-2xl font-bold text-green-500">{selectedHistory.successCount}</p>
-                    <p className="text-xs text-indusia-textMuted">Success</p>
+                    <p className="text-xs text-indusia-textMuted">{t('sync.success')}</p>
                   </div>
                   <div className="bg-indusia-bg rounded-lg p-3 text-center">
                     <p className="text-2xl font-bold text-red-500">{selectedHistory.failedCount}</p>
-                    <p className="text-xs text-indusia-textMuted">Failed</p>
+                    <p className="text-xs text-indusia-textMuted">{t('sync.failed')}</p>
                   </div>
                 </div>
 
                 {/* Details */}
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between py-2 border-b border-indusia-border">
-                    <span className="text-indusia-textMuted">Started</span>
+                    <span className="text-indusia-textMuted">{t('sync.started')}</span>
                     <span className="text-indusia-text">{selectedHistory.timestamp}</span>
                   </div>
                   <div className="flex justify-between py-2 border-b border-indusia-border">
-                    <span className="text-indusia-textMuted">Completed</span>
+                    <span className="text-indusia-textMuted">{t('sync.completed')}</span>
                     <span className="text-indusia-text">{selectedHistory.completedAt}</span>
                   </div>
                   <div className="flex justify-between py-2 border-b border-indusia-border">
-                    <span className="text-indusia-textMuted">Triggered By</span>
-                    <span className="text-indusia-text capitalize">{selectedHistory.triggeredBy}</span>
+                    <span className="text-indusia-textMuted">{t('sync.triggeredBy')}</span>
+                    <span className="text-indusia-text capitalize">
+                      {selectedHistory.triggeredBy === 'manual' ? t('sync.manual') : t('sync.auto')}
+                    </span>
                   </div>
                 </div>
 
                 {/* Per-Table Breakdown */}
                 {selectedHistory.tableDetails && Object.keys(selectedHistory.tableDetails).length > 0 ? (
                   <div>
-                    <p className="text-sm font-medium text-indusia-textMuted mb-3">Records by Table</p>
+                    <p className="text-sm font-medium text-indusia-textMuted mb-3">{t('sync.recordsByTable')}</p>
                     <div className="space-y-2">
                       {Object.entries(selectedHistory.tableDetails).map(([table, detail]) => {
                         const tableName = getTableDisplayName(table);
@@ -707,7 +772,7 @@ export default function SyncPage() {
                             <div className="flex items-center justify-between mb-1.5">
                               <span className="text-sm font-medium text-indusia-text">{tableName}</span>
                               <span className="text-xs text-indusia-textMuted">
-                                {total} record{total !== 1 ? 's' : ''}
+                                {total} {t('common.records')}
                               </span>
                             </div>
                             <div className="flex items-center gap-4">
@@ -734,7 +799,7 @@ export default function SyncPage() {
                     </div>
                     
                     <div className="mt-3 pt-3 border-t border-indusia-border flex items-center justify-between text-xs">
-                      <span className="text-indusia-textMuted">Total Tables:</span>
+                      <span className="text-indusia-textMuted">{t('sync.totalTables')}:</span>
                       <span className="text-indusia-text font-medium">
                         {Object.keys(selectedHistory.tableDetails).length}
                       </span>
@@ -742,7 +807,7 @@ export default function SyncPage() {
                   </div>
                 ) : selectedHistory.tables && selectedHistory.tables.length > 0 ? (
                   <div>
-                    <p className="text-sm font-medium text-indusia-textMuted mb-2">Tables Synced</p>
+                    <p className="text-sm font-medium text-indusia-textMuted mb-2">{t('sync.tablesSynced')}</p>
                     <div className="flex flex-wrap gap-2">
                       {selectedHistory.tables.map((table, idx) => (
                         <span 
@@ -759,20 +824,23 @@ export default function SyncPage() {
                 {/* Error Message */}
                 {selectedHistory.errorMessage && (
                   <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
-                    <p className="text-xs font-medium text-red-400 mb-1">Error Message</p>
+                    <p className="text-xs font-medium text-red-400 mb-1">{t('sync.errorMessage')}</p>
                     <p className="text-sm text-red-300">{selectedHistory.errorMessage}</p>
                   </div>
                 )}
               </div>
 
-              {/* Right Column: Uploaded Images - only show when images exist */}
+              {/* Right Column: Uploaded Images */}
               {uploadedImages.length > 0 && (
                 <div className="border-l border-indusia-border pl-5">
                   <div className="flex items-center gap-2 mb-3">
                     <Image className="w-4 h-4 text-indusia-primary" />
-                    <span className="text-sm font-medium text-indusia-text">Uploaded Images</span>
+                    <span className="text-sm font-medium text-indusia-text">{t('sync.uploadedImages')}</span>
                     <span className="text-xs text-indusia-textMuted">({uploadedImages.length})</span>
                   </div>
+                  <p className="text-xs text-indusia-textMuted mb-3">
+                    {t('sync.recentlySyncedImages')}
+                  </p>
                   
                   <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
                       {uploadedImages.map((img, idx) => (
@@ -796,7 +864,7 @@ export default function SyncPage() {
                                 {img.boardId}
                               </p>
                               <p className="text-xs text-indusia-textMuted mt-0.5">
-                                Side: <span className="uppercase text-indusia-primary">{img.side}</span>
+                                {t('sync.side')}: <span className="uppercase text-indusia-primary">{img.side}</span>
                               </p>
                               <a
                                 href={img.url}
@@ -805,7 +873,7 @@ export default function SyncPage() {
                                 className="inline-flex items-center gap-1 text-xs text-indusia-primary hover:underline mt-1.5"
                               >
                                 <ExternalLink className="w-3 h-3" />
-                                View Full Image
+                                {t('sync.viewFullImage')}
                               </a>
                             </div>
                           </div>
@@ -821,7 +889,7 @@ export default function SyncPage() {
                 onClick={() => setSelectedHistory(null)}
                 className="w-full py-2 bg-indusia-bg text-indusia-text rounded-lg font-medium hover:bg-indusia-border transition-colors"
               >
-                Close
+                {t('buttons.close')}
               </button>
             </div>
           </div>

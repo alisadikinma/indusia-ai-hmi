@@ -83,7 +83,7 @@ function LayoutContent({ children }) {
       <ErrorBoundary>
         <I18nProvider>
           <HelpOverlayProvider defaultContext={getContextFromPath()}>
-            <NotificationProvider>
+            <NotificationProvider userId={user?.id}>
               <SystemHealthProvider>
                 <OfflineBanner />
                 <div className="h-screen bg-void relative">
@@ -131,7 +131,7 @@ function LayoutContent({ children }) {
     <ErrorBoundary>
       <I18nProvider>
         <HelpOverlayProvider defaultContext={getContextFromPath()}>
-          <NotificationProvider>
+          <NotificationProvider userId={user?.id}>
             <SystemHealthProvider>
               <OfflineBanner />
               <div className="flex h-screen bg-void">

@@ -9,12 +9,14 @@
  * - Real-time stats from /api/inspection/stats/[lineId]
  * - Active work order info with customer name
  * - Line status based on work order status
+ * - Full i18n support
  */
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { useSidebar } from '@/context/SidebarContext';
+import { useI18n } from '@/context/I18nContext';
 import { authFetch } from '@/lib/utils/authFetch';
 import { 
   Radio, Activity, ChevronRight, Factory, 
@@ -24,9 +26,10 @@ import {
   Pause, Square, Timer
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { HeaderInfoBar } from '@/components/inspection/HeaderInfoBar';
 
 // Helper: Format duration from start time to now
-function formatDuration(startTime) {
+function formatDuration(startTime, t) {
   if (!startTime) return null;
   
   const start = new Date(startTime);
@@ -41,54 +44,54 @@ function formatDuration(startTime) {
   
   if (diffDays > 0) {
     const remainingHours = diffHours % 24;
-    return `${diffDays}d ${remainingHours}h`;
+    return `${diffDays}${t('time.days').charAt(0)} ${remainingHours}${t('time.hours').charAt(0)}`;
   } else if (diffHours > 0) {
     const remainingMins = diffMins % 60;
-    return `${diffHours}h ${remainingMins}m`;
+    return `${diffHours}${t('time.hours').charAt(0)} ${remainingMins}${t('time.minutes').charAt(0)}`;
   } else {
-    return `${diffMins}m`;
+    return `${diffMins}${t('time.minutes').charAt(0)}`;
   }
 }
 
-function LineCard({ line, section, isSelected, onSelect, currentUserId, isOperator }) {
+function LineCard({ line, section, isSelected, onSelect, currentUserId, isOperator, t }) {
   const statusConfig = {
     running: { 
-      label: 'RUNNING', 
+      label: t('lineStatus.running'), 
       icon: Activity,
       bgClass: 'bg-phosphor-green/10 border-phosphor-green/50',
       textClass: 'text-phosphor-green',
       dotClass: 'bg-phosphor-green'
     },
     paused: { 
-      label: 'PAUSED', 
+      label: t('lineStatus.paused'), 
       icon: Pause,
       bgClass: 'bg-phosphor-amber/10 border-phosphor-amber/50',
       textClass: 'text-phosphor-amber',
       dotClass: 'bg-phosphor-amber'
     },
     stopped: { 
-      label: 'STOPPED', 
+      label: t('lineStatus.stopped'), 
       icon: Square,
       bgClass: 'bg-phosphor-red/10 border-phosphor-red/50',
       textClass: 'text-phosphor-red',
       dotClass: 'bg-phosphor-red'
     },
     idle: { 
-      label: 'IDLE', 
+      label: t('lineStatus.idle'), 
       icon: Clock,
       bgClass: 'bg-surface-border/50 border-surface-border',
       textClass: 'text-text-tertiary',
       dotClass: 'bg-text-tertiary'
     },
     maintenance: { 
-      label: 'MAINTENANCE', 
+      label: t('lineStatus.maintenance'), 
       icon: Settings,
       bgClass: 'bg-phosphor-magenta/10 border-phosphor-magenta/50',
       textClass: 'text-phosphor-magenta',
       dotClass: 'bg-phosphor-magenta'
     },
     offline: { 
-      label: 'OFFLINE', 
+      label: t('lineStatus.offline'), 
       icon: AlertTriangle,
       bgClass: 'bg-surface-border/50 border-surface-border',
       textClass: 'text-text-tertiary',
@@ -169,14 +172,14 @@ function LineCard({ line, section, isSelected, onSelect, currentUserId, isOperat
           {isInUseByOther && (
             <div className="flex items-center gap-2 px-3 py-1.5 border border-phosphor-cyan/50 bg-phosphor-cyan/10">
               <Lock size={12} className="text-phosphor-cyan" />
-              <span className="font-mono text-xs font-bold text-phosphor-cyan">IN USE</span>
+              <span className="font-mono text-xs font-bold text-phosphor-cyan">{t('lineStatus.inUse')}</span>
             </div>
           )}
           
           {isInUseByCurrent && (
             <div className="flex items-center gap-2 px-3 py-1.5 border border-phosphor-green/50 bg-phosphor-green/10">
               <CheckCircle2 size={12} className="text-phosphor-green" />
-              <span className="font-mono text-xs font-bold text-phosphor-green">YOUR SESSION</span>
+              <span className="font-mono text-xs font-bold text-phosphor-green">{t('lineStatus.yourSession')}</span>
             </div>
           )}
         </div>
@@ -195,7 +198,7 @@ function LineCard({ line, section, isSelected, onSelect, currentUserId, isOperat
               <div className="flex items-center gap-1.5">
                 <Timer size={12} className="text-text-tertiary" />
                 <span className="font-mono text-xxs text-text-secondary">
-                  {formatDuration(line.startedAt)}
+                  {formatDuration(line.startedAt, t)}
                 </span>
               </div>
             )}
@@ -205,7 +208,7 @@ function LineCard({ line, section, isSelected, onSelect, currentUserId, isOperat
           {line.lotSize > 0 && (
             <div>
               <div className="flex items-center justify-between mb-1">
-                <span className="font-mono text-xxs text-text-tertiary">PROGRESS</span>
+                <span className="font-mono text-xxs text-text-tertiary">{t('lineStats.progress')}</span>
                 <span className="font-mono text-xs font-bold text-phosphor-cyan">
                   {line.inspected?.toLocaleString() || 0} / {line.lotSize?.toLocaleString()}
                   <span className="text-text-tertiary font-normal ml-1">
@@ -233,19 +236,19 @@ function LineCard({ line, section, isSelected, onSelect, currentUserId, isOperat
       {hasStats && (
         <div className="grid grid-cols-4 gap-2 mb-3">
           <div className="bg-terminal border border-surface-border p-2 text-center">
-            <p className="font-mono text-xxs text-text-tertiary">INSPECTED</p>
+            <p className="font-mono text-xxs text-text-tertiary">{t('lineStats.inspected')}</p>
             <p className="font-mono text-lg font-bold text-phosphor-amber">{line.inspected?.toLocaleString() || 0}</p>
           </div>
           <div className="bg-terminal border border-surface-border p-2 text-center">
-            <p className="font-mono text-xxs text-text-tertiary">PASS</p>
+            <p className="font-mono text-xxs text-text-tertiary">{t('lineStats.pass')}</p>
             <p className="font-mono text-lg font-bold text-phosphor-green">{line.goodQty?.toLocaleString() || 0}</p>
           </div>
           <div className="bg-terminal border border-surface-border p-2 text-center">
-            <p className="font-mono text-xxs text-text-tertiary">FAIL</p>
+            <p className="font-mono text-xxs text-text-tertiary">{t('lineStats.fail')}</p>
             <p className="font-mono text-lg font-bold text-phosphor-red">{line.ngQty || 0}</p>
           </div>
           <div className="bg-terminal border border-surface-border p-2 text-center">
-            <p className="font-mono text-xxs text-text-tertiary">YIELD</p>
+            <p className="font-mono text-xxs text-text-tertiary">{t('lineStats.yield')}</p>
             <p className={cn(
               "font-mono text-lg font-bold",
               line.yield >= 98 ? "text-phosphor-green" : 
@@ -273,7 +276,7 @@ function LineCard({ line, section, isSelected, onSelect, currentUserId, isOperat
           )}
           {!line.customerName && !line.operatorName && !line.woNumber && line.inspected === 0 && (
             <span className="font-mono text-xs text-text-tertiary italic">
-              {line.status === 'idle' ? 'No active work order' : 'Line unavailable'}
+              {line.status === 'idle' ? t('lineStatus.noActiveWorkOrder') : t('lineStatus.lineUnavailable')}
             </span>
           )}
         </div>
@@ -287,7 +290,7 @@ function LineCard({ line, section, isSelected, onSelect, currentUserId, isOperat
           )}>
             {!isOperator && <Eye size={12} />}
             <span className="font-display text-xs font-bold tracking-wider">
-              {isSelected ? 'SELECTED' : isOperator ? 'SELECT' : 'VIEW'}
+              {isSelected ? t('line.selected') : isOperator ? t('line.select') : t('line.view')}
             </span>
             <ChevronRight size={14} />
           </div>
@@ -296,7 +299,7 @@ function LineCard({ line, section, isSelected, onSelect, currentUserId, isOperat
         {isInUseByOther && isOperator && (
           <div className="flex items-center gap-2 px-3 py-1.5 bg-phosphor-cyan/10 text-phosphor-cyan">
             <Lock size={12} />
-            <span className="font-display text-xs font-bold tracking-wider">LOCKED</span>
+            <span className="font-display text-xs font-bold tracking-wider">{t('line.locked')}</span>
           </div>
         )}
       </div>
@@ -308,6 +311,7 @@ export default function SelectLinePage() {
   const router = useRouter();
   const { user, isOperator, activeLineId, activeLineName, setActiveLine, hasActiveLine, hasMenuAccess, logout } = useAuth();
   const { showSidebar, isHidden } = useSidebar();
+  const { t } = useI18n();
   const [selectedSection, setSelectedSection] = useState('all');
   const [selectedLine, setSelectedLine] = useState(null);
   const [currentTime, setCurrentTime] = useState('');
@@ -349,7 +353,7 @@ export default function SelectLinePage() {
               sectionId: line.sectionId || line.section_id,
               customerId: line.customerId || line.customer_id,
               status: 'idle',
-              customerName: line.customer?.name || null, // Default from master data
+              customerName: line.customer?.name || null,
               customerCode: line.customer?.code || null,
               woNumber: null,
               lotSize: 0,
@@ -392,14 +396,12 @@ export default function SelectLinePage() {
                 const stats = data.stats || {};
                 const total = stats.total || 0;
                 
-                // Use stats if available
                 if (total > 0) {
                   lineData.inspected = total;
                   lineData.goodQty = stats.passed || 0;
                   lineData.ngQty = stats.failed || 0;
                   lineData.yield = parseFloat(stats.yield) || 0;
                   
-                  // Get WO info from stats if available
                   if (data.workOrder?.woNumber) {
                     lineData.woNumber = data.workOrder.woNumber;
                   }
@@ -412,14 +414,13 @@ export default function SelectLinePage() {
                 }
               }
               
-              // Fetch line-state for ACTUAL machine status (RUNNING/PAUSED/STOPPED/IDLE)
+              // Fetch line-state for ACTUAL machine status
               const lineStateRes = await authFetch(`/api/inspection/line-state/${line.id}`);
               const lineStateData = await lineStateRes.json();
               
               if (lineStateData.success && lineStateData.data) {
                 const processStatus = lineStateData.data.processStatus || 'IDLE';
                 
-                // Map processStatus to UI status
                 const statusMap = {
                   'RUNNING': 'running',
                   'PAUSED': 'paused',
@@ -430,12 +431,10 @@ export default function SelectLinePage() {
                 
                 lineData.status = statusMap[processStatus] || 'idle';
                 
-                // Get operator info from line-state if available
                 if (lineStateData.data.updatedBy) {
                   lineData.operatorName = lineStateData.data.updatedBy;
                 }
               } else if (lineData.woNumber) {
-                // Fallback: if no line-state but has WO, assume idle (WO assigned but not started)
                 lineData.status = 'idle';
               }
             } catch (err) {
@@ -463,7 +462,7 @@ export default function SelectLinePage() {
     }
   }, [user, fetchData]);
 
-  // Auto-refresh every 10 seconds for real-time machine status
+  // Auto-refresh every 10 seconds
   useEffect(() => {
     const interval = setInterval(() => {
       if (user && !dataLoading) {
@@ -485,8 +484,8 @@ export default function SelectLinePage() {
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
           <AlertTriangle className="w-12 h-12 text-red-500 mx-auto mb-4" />
-          <h2 className="text-lg font-semibold text-text-primary mb-2">Access Denied</h2>
-          <p className="text-text-secondary">You don&apos;t have permission to access this page.</p>
+          <h2 className="text-lg font-semibold text-text-primary mb-2">{t('auth.accessDenied')}</h2>
+          <p className="text-text-secondary">{t('auth.noPermission')}</p>
         </div>
       </div>
     );
@@ -531,8 +530,8 @@ export default function SelectLinePage() {
       <div className="min-h-screen flex items-center justify-center bg-void">
         <div className="bg-panel border border-surface-border p-8 max-w-md text-center">
           <div className="w-8 h-8 border-2 border-phosphor-amber border-t-transparent animate-spin mx-auto mb-4" />
-          <h2 className="text-xl font-display font-bold text-text-primary mb-3">LOADING...</h2>
-          <p className="text-sm font-mono text-text-tertiary">Verifying credentials</p>
+          <h2 className="text-xl font-display font-bold text-text-primary mb-3">{t('common.loading')}</h2>
+          <p className="text-sm font-mono text-text-tertiary">{t('auth.verifyingCredentials')}</p>
         </div>
       </div>
     );
@@ -543,8 +542,8 @@ export default function SelectLinePage() {
       <div className="min-h-screen flex items-center justify-center bg-void">
         <div className="bg-panel border border-surface-border p-8 max-w-md text-center">
           <div className="w-8 h-8 border-2 border-phosphor-green border-t-transparent animate-spin mx-auto mb-4" />
-          <h2 className="text-xl font-display font-bold text-phosphor-green mb-3">RESUMING SESSION</h2>
-          <p className="text-sm font-mono text-text-tertiary">Connecting to {activeLineName}...</p>
+          <h2 className="text-xl font-display font-bold text-phosphor-green mb-3">{t('line.resumingSession')}</h2>
+          <p className="text-sm font-mono text-text-tertiary">{t('line.connectingTo', { name: activeLineName })}</p>
         </div>
       </div>
     );
@@ -559,7 +558,7 @@ export default function SelectLinePage() {
           <button
             onClick={showSidebar}
             className="w-10 h-10 border border-surface-border bg-terminal flex items-center justify-center hover:border-phosphor-amber hover:bg-phosphor-amber/10 transition-colors"
-            title="Open Menu"
+            title={t('nav.settings')}
           >
             <Menu className="w-5 h-5 text-phosphor-amber" />
           </button>
@@ -574,17 +573,19 @@ export default function SelectLinePage() {
                 INDUSIA
               </h1>
               <p className="font-mono text-xxs text-phosphor-amber tracking-widest">
-                LINE SELECTION
+                {t('nav.lineSelection')}
               </p>
             </div>
           </div>
         </div>
 
-        {/* Right: User + Time */}
-        <div className="flex items-center gap-6">
+        {/* Right: Sync + Notifications + User + Time */}
+        <div className="flex items-center gap-4">
+          <HeaderInfoBar />
+          
           <div className="flex items-center gap-3">
             <div className="w-2 h-2 bg-phosphor-green animate-pulse" />
-            <span className="font-mono text-sm text-phosphor-green">ONLINE</span>
+            <span className="font-mono text-sm text-phosphor-green">{t('auth.online')}</span>
           </div>
           <span className="font-mono text-sm text-phosphor-amber">{currentTime}</span>
           
@@ -621,7 +622,7 @@ export default function SelectLinePage() {
                   className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-surface-border/30 transition-colors text-phosphor-red"
                 >
                   <LogOut size={16} />
-                  <span className="font-mono text-sm">LOGOUT</span>
+                  <span className="font-mono text-sm">{t('auth.logout')}</span>
                 </button>
               </div>
             )}
@@ -637,7 +638,7 @@ export default function SelectLinePage() {
             <div className="flex items-center gap-3">
               <Radio className="w-5 h-5 text-phosphor-amber" />
               <h2 className="font-display text-2xl font-bold text-text-primary tracking-wide">
-                SELECT PRODUCTION LINE
+                {t('line.selectTitle')}
               </h2>
             </div>
             <button
@@ -649,20 +650,20 @@ export default function SelectLinePage() {
                 "text-phosphor-amber",
                 isRefreshing && "animate-spin"
               )} />
-              <span className="font-mono text-xs text-text-secondary">REFRESH</span>
+              <span className="font-mono text-xs text-text-secondary">{t('buttons.refresh')}</span>
             </button>
           </div>
           <p className="font-mono text-sm text-text-tertiary">
             {isOperator 
-              ? 'Choose a production line to begin live inspection monitoring'
-              : 'Select a line to view inspection (view-only mode)'}
+              ? t('line.selectDescription')
+              : t('line.selectDescriptionViewOnly')}
           </p>
           
           {!isOperator && (
             <div className="mt-3 flex items-center gap-2 px-4 py-2 bg-phosphor-cyan/10 border border-phosphor-cyan/30 w-fit">
               <Eye size={16} className="text-phosphor-cyan" />
               <span className="font-mono text-xs text-phosphor-cyan">
-                VIEW-ONLY MODE — Actions disabled for {user.role?.toUpperCase()}
+                {t('line.viewOnlyMode', { role: user.role?.toUpperCase() })}
               </span>
             </div>
           )}
@@ -670,7 +671,7 @@ export default function SelectLinePage() {
 
         {/* Section Filter */}
         <div className="mb-6 flex items-center gap-3 flex-wrap">
-          <span className="font-mono text-xs text-text-tertiary">FILTER BY SECTION:</span>
+          <span className="font-mono text-xs text-text-tertiary">{t('line.filterBySection')}:</span>
           <div className="flex items-center gap-2 flex-wrap">
             <button
               onClick={() => setSelectedSection('all')}
@@ -681,7 +682,7 @@ export default function SelectLinePage() {
                   : "bg-terminal text-text-secondary border-surface-border hover:border-phosphor-amber/50"
               )}
             >
-              ALL LINES
+              {t('line.allLines')}
             </button>
             {sections.map(section => (
               <button
@@ -706,15 +707,15 @@ export default function SelectLinePage() {
             <div className="col-span-full flex items-center justify-center py-12">
               <div className="text-center">
                 <div className="w-8 h-8 border-2 border-phosphor-amber border-t-transparent animate-spin mx-auto mb-4" />
-                <p className="font-mono text-sm text-text-tertiary">Loading production lines...</p>
+                <p className="font-mono text-sm text-text-tertiary">{t('line.loadingLines')}</p>
               </div>
             </div>
           ) : filteredLines.length === 0 ? (
             <div className="col-span-full flex items-center justify-center py-12">
               <div className="text-center">
                 <Factory className="w-12 h-12 text-text-tertiary mx-auto mb-4" />
-                <p className="font-mono text-sm text-text-tertiary">No production lines found</p>
-                <p className="font-mono text-xs text-text-tertiary mt-1">Add lines in Master Data management</p>
+                <p className="font-mono text-sm text-text-tertiary">{t('line.noLinesFound')}</p>
+                <p className="font-mono text-xs text-text-tertiary mt-1">{t('line.addLinesHint')}</p>
               </div>
             </div>
           ) : (
@@ -727,6 +728,7 @@ export default function SelectLinePage() {
                 onSelect={setSelectedLine}
                 currentUserId={user?.id}
                 isOperator={isOperator}
+                t={t}
               />
             ))
           )}
@@ -740,12 +742,12 @@ export default function SelectLinePage() {
                 <CheckCircle2 className="w-6 h-6 text-phosphor-green" />
                 <div>
                   <p className="font-display font-bold text-text-primary">
-                    {selectedLine.name} Selected
+                    {selectedLine.name} {t('line.selected')}
                   </p>
                   <p className="font-mono text-xs text-text-tertiary">
                     {getSection(selectedLine.sectionId)?.name}
                     {selectedLine.customerName && ` • ${selectedLine.customerName}${selectedLine.customerCode ? ` (${selectedLine.customerCode})` : ''}`}
-                    {!isOperator && ' • View-only mode'}
+                    {!isOperator && ` • ${t('line.viewOnlyMode', { role: '' }).trim()}`}
                   </p>
                 </div>
               </div>
@@ -754,10 +756,10 @@ export default function SelectLinePage() {
                 <AlertTriangle className="w-6 h-6 text-phosphor-amber" />
                 <div>
                   <p className="font-display font-bold text-phosphor-amber">
-                    No Line Selected
+                    {t('line.noLineSelected')}
                   </p>
                   <p className="font-mono text-xs text-text-tertiary">
-                    Select a production line to continue
+                    {t('line.selectLineToContinue')}
                   </p>
                 </div>
               </div>
@@ -779,12 +781,12 @@ export default function SelectLinePage() {
             {isLoading ? (
               <>
                 <div className="w-5 h-5 border-2 border-void border-t-transparent animate-spin" />
-                <span>CONNECTING...</span>
+                <span>{t('line.connecting')}</span>
               </>
             ) : (
               <>
                 {isOperator ? <Zap className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                <span>{isOperator ? 'START INSPECTION' : 'VIEW INSPECTION'}</span>
+                <span>{isOperator ? t('line.startInspection') : t('line.viewInspection')}</span>
                 <ChevronRight className="w-5 h-5" />
               </>
             )}

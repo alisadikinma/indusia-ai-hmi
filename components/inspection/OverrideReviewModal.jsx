@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { X, FileText, CheckCircle, XCircle, ImageIcon } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import { useI18n } from '@/context/I18nContext';
 import { logOverrideApproved, logOverrideRejected } from '@/lib/eventLogger';
 import { notifyOverrideApproved, notifyOverrideRejected } from '@/lib/notificationHelper';
 
@@ -14,6 +15,7 @@ export default function OverrideReviewModal({
   override,
 }) {
   const { user } = useAuth();
+  const { t } = useI18n();
   const [reviewerNotes, setReviewerNotes] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState(null);
@@ -49,9 +51,10 @@ export default function OverrideReviewModal({
       });
 
       setReviewerNotes('');
+      setIsProcessing(false);
     } catch (err) {
       console.error('Failed to approve override:', err);
-      setError(err.message || 'Failed to approve override');
+      setError(err.message || t('manager.failedToApprove'));
       setIsProcessing(false);
     }
   };
@@ -76,9 +79,10 @@ export default function OverrideReviewModal({
       );
 
       setReviewerNotes('');
+      setIsProcessing(false);
     } catch (err) {
       console.error('Failed to reject override:', err);
-      setError(err.message || 'Failed to reject override');
+      setError(err.message || t('manager.failedToReject'));
       setIsProcessing(false);
     }
   };
@@ -104,7 +108,7 @@ export default function OverrideReviewModal({
             </div>
             <div>
               <h2 className="text-lg font-bold text-indusia-text">
-                {isReviewed ? 'View Override' : 'Review Override'}
+                {isReviewed ? t('manager.viewOverride') : t('manager.reviewOverride')}
               </h2>
               <p className="text-xs text-indusia-textMuted mt-0.5">
                 <span className="font-medium text-indusia-text">{override.boardId}</span>
@@ -113,7 +117,7 @@ export default function OverrideReviewModal({
                   <span className={`ml-2 px-1.5 py-0.5 rounded text-xs font-medium ${
                     override.status === 'approved' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
                   }`}>
-                    {override.status.toUpperCase()}
+                    {override.status === 'approved' ? t('manager.approved').toUpperCase() : t('manager.rejected').toUpperCase()}
                   </span>
                 )}
               </p>
@@ -139,7 +143,7 @@ export default function OverrideReviewModal({
           {/* AI Detection Image */}
           <div>
             <h3 className="text-xs font-semibold text-indusia-textMuted mb-2 uppercase tracking-wide">
-              AI Detection
+              {t('manager.aiDetection')}
             </h3>
             <div className="bg-indusia-bg rounded-lg border border-indusia-border overflow-hidden">
               {imageUrl && !imageError ? (
@@ -152,12 +156,12 @@ export default function OverrideReviewModal({
               ) : (
                 <div className="h-32 flex flex-col items-center justify-center text-indusia-textMuted">
                   <ImageIcon className="w-8 h-8 mb-1 opacity-50" />
-                  <p className="text-xs">No image available</p>
+                  <p className="text-xs">{t('manager.noImageAvailable')}</p>
                 </div>
               )}
             </div>
             <p className="text-xs text-indusia-textMuted mt-1.5 text-center">
-              AI flagged: <span className="text-indusia-fail font-medium">{override.defectType || override.defect_type || 'Unknown'}</span>
+              {t('manager.aiFlagged')}: <span className="text-indusia-fail font-medium">{override.defectType || override.defect_type || 'Unknown'}</span>
               {override.confidence && ` (${override.confidence}%)`}
             </p>
           </div>
@@ -166,7 +170,7 @@ export default function OverrideReviewModal({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <h3 className="text-xs font-semibold text-indusia-textMuted mb-1.5 uppercase tracking-wide">
-                Reason
+                {t('hmi.reason')}
               </h3>
               <div className="bg-indusia-bg rounded border border-indusia-border px-3 py-2">
                 <p className="text-sm text-indusia-text">{override.reason || '-'}</p>
@@ -174,7 +178,7 @@ export default function OverrideReviewModal({
             </div>
             <div>
               <h3 className="text-xs font-semibold text-indusia-textMuted mb-1.5 uppercase tracking-wide">
-                Operator Notes
+                {t('manager.operatorNotes')}
               </h3>
               <div className="bg-indusia-bg rounded border border-indusia-border px-3 py-2 min-h-[36px]">
                 <p className="text-sm text-indusia-text">
@@ -188,7 +192,7 @@ export default function OverrideReviewModal({
           {isReviewed ? (
             <div>
               <h3 className="text-xs font-semibold text-indusia-textMuted mb-1.5 uppercase tracking-wide">
-                Reviewer Notes
+                {t('manager.reviewerNotes')}
               </h3>
               <div className="bg-indusia-bg rounded border border-indusia-border px-3 py-2 min-h-[36px]">
                 <p className="text-sm text-indusia-text">
@@ -199,12 +203,12 @@ export default function OverrideReviewModal({
           ) : (
             <div>
               <h3 className="text-xs font-semibold text-indusia-textMuted mb-1.5 uppercase tracking-wide">
-                Reviewer Notes (Optional)
+                {t('manager.reviewerNotesOptional')}
               </h3>
               <textarea
                 value={reviewerNotes}
                 onChange={(e) => setReviewerNotes(e.target.value)}
-                placeholder="Add notes..."
+                placeholder={t('manager.addNotes')}
                 rows={2}
                 disabled={isProcessing}
                 className="w-full px-3 py-2 bg-indusia-bg border border-indusia-border rounded text-sm text-indusia-text placeholder-indusia-textMuted focus:outline-none focus:ring-1 focus:ring-indusia-primary resize-none disabled:opacity-50"
@@ -220,7 +224,7 @@ export default function OverrideReviewModal({
               onClick={handleClose}
               className="px-4 py-2 bg-indusia-surfaceMuted text-indusia-text rounded-lg font-medium text-sm hover:bg-indusia-border transition-colors"
             >
-              Close
+              {t('buttons.close')}
             </button>
           ) : (
             <>
@@ -234,7 +238,7 @@ export default function OverrideReviewModal({
                 ) : (
                   <XCircle className="w-4 h-4" />
                 )}
-                Reject
+                {t('manager.reject')}
               </button>
 
               <button
@@ -245,12 +249,12 @@ export default function OverrideReviewModal({
                 {isProcessing ? (
                   <>
                     <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    Processing...
+                    {t('manager.processing')}
                   </>
                 ) : (
                   <>
                     <CheckCircle className="w-4 h-4" />
-                    Approve
+                    {t('manager.approve')}
                   </>
                 )}
               </button>

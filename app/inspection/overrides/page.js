@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Search, Calendar, RefreshCw, Loader2, AlertCircle, Inbox, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useOverrides } from '@/hooks/useOverrides';
@@ -16,6 +16,7 @@ const PAGE_SIZE = 10;
 
 export default function OverrideApprovalsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user, hasMenuAccess } = useAuth();
   const { showToast } = useToast();
   const { t } = useI18nContext();
@@ -30,6 +31,8 @@ export default function OverrideApprovalsPage() {
     approveOverride,
     rejectOverride,
     refreshOverrides,
+    isStale,
+    lastUpdated,
   } = useOverrides();
 
   const [statusFilter, setStatusFilter] = useState('all');
@@ -37,6 +40,41 @@ export default function OverrideApprovalsPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [reviewModalOpen, setReviewModalOpen] = useState(false);
   const [selectedOverride, setSelectedOverride] = useState(null);
+  const [loadingReview, setLoadingReview] = useState(false);
+
+  // Handle ?review=overrideId query param from notification
+  useEffect(() => {
+    const reviewId = searchParams.get('review');
+    if (reviewId && overrides.length > 0 && !loadingReview) {
+      // Find override in loaded data first
+      const found = overrides.find(o => o.id === reviewId);
+      if (found) {
+        setSelectedOverride(found);
+        setReviewModalOpen(true);
+        // Clear query param
+        router.replace('/inspection/overrides', { scroll: false });
+      } else if (!loading) {
+        // If not found in current data, fetch it
+        setLoadingReview(true);
+        import('@/lib/utils/authFetch').then(({ authFetch }) => {
+          authFetch(`/api/overrides/${reviewId}`)
+            .then(res => res.json())
+            .then(json => {
+              if (json.success && json.data) {
+                setSelectedOverride(json.data);
+                setReviewModalOpen(true);
+              }
+              router.replace('/inspection/overrides', { scroll: false });
+            })
+            .catch(err => {
+              console.error('Failed to fetch override for review:', err);
+              router.replace('/inspection/overrides', { scroll: false });
+            })
+            .finally(() => setLoadingReview(false));
+        });
+      }
+    }
+  }, [searchParams, overrides, loading, loadingReview, router]);
 
   // Check access
   if (!user || !hasMenuAccess('menu_overrides')) {
@@ -249,6 +287,18 @@ export default function OverrideApprovalsPage() {
               )}
               {t('buttons.refresh')}
             </button>
+            
+            {/* Last updated indicator */}
+            {lastUpdated && (
+              <div className="text-xs text-indusia-textMuted flex items-center gap-1">
+                {isStale && (
+                  <span className="text-indusia-warning">●</span>
+                )}
+                <span>
+                  Updated: {lastUpdated.toLocaleTimeString()}
+                </span>
+              </div>
+            )}
           </div>
         </div>
       </div>

@@ -41,6 +41,7 @@ import {
 import { cn } from '@/lib/utils'
 import { useSidebar } from '@/context/SidebarContext'
 import { useAuth } from '@/context/AuthContext'
+import { useI18n } from '@/context/I18nContext'
 import { useActiveWorkOrder, useWorkOrderMutations } from '@/hooks/useWorkOrders'
 import { useLiveInspection } from '@/hooks/useLiveInspection'
 import { useAudioFeedback } from '@/hooks/useAudioFeedback'
@@ -50,6 +51,7 @@ import { InspectionStage } from './InspectionStage'
 import { InspectionResult } from './InspectionResult'
 import { FalseCallModal } from './FalseCallModal'
 import { VolumeControl } from './VolumeControl'
+import { HeaderInfoBar } from './HeaderInfoBar'
 
 // Services
 import { saveInspection } from '@/lib/services/inspectionService'
@@ -89,6 +91,7 @@ export function LiveViewV3({
   const router = useRouter()
   const { showSidebar } = useSidebar()
   const { logout } = useAuth()
+  const { t } = useI18n()
   
   // Work Order hooks
   const { workOrder: fetchedWO, hasActiveWO: fetchedHasWO, loading: woLoading, refresh: refreshWO } = useActiveWorkOrder(lineId)
@@ -991,14 +994,19 @@ export function LiveViewV3({
             </div>
           )}
 
-          {/* Volume Control */}
-          <VolumeControl
-            volume={volume}
-            isMuted={isMuted}
-            onVolumeChange={setVolume}
-            onMuteToggle={toggleMute}
-            onTest={testAudio}
-          />
+          {/* Last Sync & Notification Bell (for Manager/Engineer) */}
+          <HeaderInfoBar />
+
+          {/* Volume Control - Only for Operator */}
+          {isOperator && (
+            <VolumeControl
+              volume={volume}
+              isMuted={isMuted}
+              onVolumeChange={setVolume}
+              onMuteToggle={toggleMute}
+              onTest={testAudio}
+            />
+          )}
 
           <span className="font-mono text-sm text-phosphor-amber">{currentTime}</span>
 
