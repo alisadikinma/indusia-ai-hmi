@@ -11,15 +11,21 @@ import { aiModelsRepo } from '@/lib/repos/aiModelsRepo'
 import { validate } from '@/lib/validations/validate'
 import { z } from 'zod'
 
+// Schema matches actual DB columns:
+// id, name, version, description, training_job_id, dataset_id, storage_path, public_url,
+// file_size, base_model, framework, map50, map50_95, precision_val, recall,
+// inference_speed_ms, status, is_active, deployed_at, deployed_by, created_by, created_at
 const createModelSchema = z.object({
   name: z.string().min(1).max(100),
   version: z.string().min(1).max(20),
   description: z.string().optional(),
-  status: z.enum(['active', 'inactive', 'training', 'deprecated']).default('inactive'),
-  file_path: z.string().optional(),
-  config: z.object({}).passthrough().optional(),
-  metrics: z.object({}).passthrough().optional(),
-  training_job_id: z.string().uuid().optional()
+  status: z.enum(['draft', 'active', 'inactive', 'deprecated']).default('draft'),
+  storagePath: z.string().optional(),  // maps to storage_path
+  publicUrl: z.string().optional(),
+  baseModel: z.string().optional(),
+  framework: z.string().default('yolov10'),
+  trainingJobId: z.string().optional(),
+  datasetId: z.string().uuid().optional()
 })
 
 async function handleGET(request) {

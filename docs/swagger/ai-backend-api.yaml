@@ -1,0 +1,790 @@
+openapi: 3.0.3
+info:
+  title: INDUSIA AI Backend API
+  description: |
+    API contract for AI Backend integration with INDUSIA HMI system.
+    
+    ## Architecture
+    - AI Backend serves images via HTTP
+    - Model assigned per line
+    - UI handles operator GOOD/NG decisions
+  version: 2.0.0
+  contact:
+    name: INDUSIA AI Team
+
+servers:
+  - url: http://localhost:3000/api/ai
+    description: Local Development
+
+tags:
+  - name: Inspections
+    description: AI inspection records
+  - name: Models
+    description: AI model registry
+  - name: Boards
+    description: Board definitions (read-only)
+  - name: Lines
+    description: Line configuration with model assignment
+  - name: Dataset Images
+    description: Training dataset images
+  - name: Training Datasets
+    description: Training dataset collections
+  - name: Training Jobs
+    description: Model training jobs
+  - name: Defect Classes
+    description: Defect type reference (read-only)
+  - name: False Call Reasons
+    description: False call categorization (read-only)
+  - name: System Status
+    description: Hardware status updates
+
+paths:
+  /inspections:
+    get:
+      tags: [Inspections]
+      summary: List inspections
+      parameters:
+        - name: line_id
+          in: query
+          schema:
+            type: string
+        - name: ai_decision
+          in: query
+          schema:
+            type: string
+            enum: [PASS, FAIL]
+        - name: is_false_call
+          in: query
+          schema:
+            type: boolean
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedResponse'
+
+    post:
+      tags: [Inspections]
+      summary: Create inspection record
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateInspectionRequest'
+      responses:
+        '201':
+          description: Created
+
+  /inspections/{id}:
+    get:
+      tags: [Inspections]
+      summary: Get inspection by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Success
+        '404':
+          description: Not found
+
+  /models:
+    get:
+      tags: [Models]
+      summary: List AI models
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, inactive, training, deprecated]
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: Success
+
+    post:
+      tags: [Models]
+      summary: Register new model
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateModelRequest'
+      responses:
+        '201':
+          description: Created
+
+  /models/{id}:
+    get:
+      tags: [Models]
+      summary: Get model by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Success
+
+  /boards:
+    get:
+      tags: [Boards]
+      summary: List boards
+      parameters:
+        - name: customer_id
+          in: query
+          schema:
+            type: string
+        - name: part_number
+          in: query
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: Success
+
+  /boards/{id}:
+    get:
+      tags: [Boards]
+      summary: Get board by ID or part number
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Board ID (UUID) or part number
+      responses:
+        '200':
+          description: Success
+        '404':
+          description: Not found
+
+  /lines:
+    get:
+      tags: [Lines]
+      summary: List lines with model assignment
+      parameters:
+        - name: section_id
+          in: query
+          schema:
+            type: string
+        - name: customer_id
+          in: query
+          schema:
+            type: string
+        - name: has_model
+          in: query
+          schema:
+            type: boolean
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: Success
+
+  /lines/{id}:
+    get:
+      tags: [Lines]
+      summary: Get line configuration
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Success
+
+  /dataset-images:
+    get:
+      tags: [Dataset Images]
+      summary: List dataset images
+      parameters:
+        - name: dataset_id
+          in: query
+          schema:
+            type: string
+        - name: source
+          in: query
+          schema:
+            type: string
+            enum: [inspection, upload, augmented]
+        - name: is_labeled
+          in: query
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: Success
+
+    post:
+      tags: [Dataset Images]
+      summary: Create dataset image
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [image_url, source]
+              properties:
+                image_url:
+                  type: string
+                source:
+                  type: string
+                  enum: [inspection, upload, augmented]
+      responses:
+        '201':
+          description: Created
+
+  /dataset-images/bulk:
+    post:
+      tags: [Dataset Images]
+      summary: Bulk create dataset images
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                images:
+                  type: array
+                  items:
+                    type: object
+      responses:
+        '200':
+          description: Success
+
+  /dataset-images/{id}:
+    get:
+      tags: [Dataset Images]
+      summary: Get dataset image
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Success
+
+  /training-datasets:
+    get:
+      tags: [Training Datasets]
+      summary: List training datasets
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [draft, ready, in_use, archived]
+      responses:
+        '200':
+          description: Success
+
+    post:
+      tags: [Training Datasets]
+      summary: Create training dataset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+                status:
+                  type: string
+                  enum: [draft, ready, in_use, archived]
+      responses:
+        '201':
+          description: Created
+
+  /training-datasets/{id}:
+    get:
+      tags: [Training Datasets]
+      summary: Get training dataset
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Success
+
+  /training-datasets/{id}/images:
+    post:
+      tags: [Training Datasets]
+      summary: Add images to dataset
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                image_ids:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        '200':
+          description: Success
+
+  /training-jobs:
+    get:
+      tags: [Training Jobs]
+      summary: List training jobs
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [queued, running, completed, failed, cancelled]
+        - name: dataset_id
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Success
+
+    post:
+      tags: [Training Jobs]
+      summary: Create training job
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTrainingJobRequest'
+      responses:
+        '201':
+          description: Created
+
+  /training-jobs/{id}:
+    get:
+      tags: [Training Jobs]
+      summary: Get training job status
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Success
+
+  /training-jobs/{id}/cancel:
+    post:
+      tags: [Training Jobs]
+      summary: Cancel training job
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Cancelled
+
+  /training-metrics:
+    get:
+      tags: [Training Jobs]
+      summary: List metrics for a training job
+      parameters:
+        - name: job_id
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Success
+
+    post:
+      tags: [Training Jobs]
+      summary: Log training metrics
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [job_id, epoch]
+              properties:
+                job_id:
+                  type: string
+                epoch:
+                  type: integer
+                train_loss:
+                  type: number
+                val_loss:
+                  type: number
+      responses:
+        '201':
+          description: Created
+
+  /training-metrics/bulk:
+    post:
+      tags: [Training Jobs]
+      summary: Bulk log training metrics
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                job_id:
+                  type: string
+                metrics:
+                  type: array
+                  items:
+                    type: object
+      responses:
+        '200':
+          description: Success
+
+  /defect-classes:
+    get:
+      tags: [Defect Classes]
+      summary: List defect classes
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/DefectClass'
+
+  /defect-classes/{id}:
+    get:
+      tags: [Defect Classes]
+      summary: Get defect class
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Success
+
+  /false-call-reasons:
+    get:
+      tags: [False Call Reasons]
+      summary: List false call reasons
+      responses:
+        '200':
+          description: Success
+
+  /system-status:
+    get:
+      tags: [System Status]
+      summary: Get system status
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: '#/components/schemas/SystemStatus'
+
+    post:
+      tags: [System Status]
+      summary: Update system status
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSystemStatusRequest'
+      responses:
+        '200':
+          description: Updated
+
+components:
+  schemas:
+    PaginatedResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: array
+          items: {}
+        meta:
+          type: object
+          properties:
+            total:
+              type: integer
+            page:
+              type: integer
+            limit:
+              type: integer
+
+    CreateInspectionRequest:
+      type: object
+      required:
+        - external_inspection_id
+        - line_id
+        - model_id
+        - ai_decision
+        - results
+      properties:
+        external_inspection_id:
+          type: string
+          example: "insp-8e1c4c6b"
+        line_id:
+          type: string
+        model_id:
+          type: string
+          format: uuid
+        model_name:
+          type: string
+        ai_decision:
+          type: string
+          enum: [PASS, FAIL]
+        results:
+          type: object
+          properties:
+            top:
+              type: object
+              properties:
+                image_url:
+                  type: string
+                objects:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/DetectedObject'
+            bottom:
+              type: object
+              properties:
+                image_url:
+                  type: string
+                objects:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/DetectedObject'
+
+    DetectedObject:
+      type: object
+      properties:
+        name:
+          type: string
+          example: "solder_bridge"
+        box:
+          type: array
+          items:
+            type: number
+          example: [2405, 881.5, 2466, 922.5]
+        label:
+          type: integer
+        score:
+          type: number
+        crop_url:
+          type: string
+
+    CreateModelRequest:
+      type: object
+      required:
+        - name
+        - version
+      properties:
+        name:
+          type: string
+        version:
+          type: string
+        description:
+          type: string
+        status:
+          type: string
+          enum: [active, inactive, training, deprecated]
+          default: inactive
+        file_path:
+          type: string
+        config:
+          type: object
+
+    CreateTrainingJobRequest:
+      type: object
+      required:
+        - name
+        - dataset_id
+      properties:
+        name:
+          type: string
+        dataset_id:
+          type: string
+          format: uuid
+        base_model_id:
+          type: string
+          format: uuid
+        config:
+          type: object
+          properties:
+            epochs:
+              type: integer
+              default: 100
+            batch_size:
+              type: integer
+              default: 32
+            learning_rate:
+              type: number
+              default: 0.001
+
+    DefectClass:
+      type: object
+      properties:
+        id:
+          type: string
+        code:
+          type: string
+          example: "SOLDER_BRIDGE"
+        name:
+          type: string
+          example: "Solder Bridge"
+        description:
+          type: string
+        severity:
+          type: string
+          enum: [critical, major, minor, info]
+        color:
+          type: string
+          example: "#EF4444"
+
+    SystemStatus:
+      type: object
+      properties:
+        aiModel:
+          type: object
+          properties:
+            status:
+              type: string
+              enum: [online, offline, warning, error]
+            modelName:
+              type: string
+            modelVersion:
+              type: string
+        cameras:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              name:
+                type: string
+              status:
+                type: string
+                enum: [online, offline, warning, error]
+        plcs:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              name:
+                type: string
+              status:
+                type: string
+                enum: [online, offline, warning, error]
+        lastUpdated:
+          type: string
+          format: date-time
+
+    UpdateSystemStatusRequest:
+      type: object
+      properties:
+        component:
+          type: string
+          enum: [ai_model, camera, plc]
+        component_id:
+          type: string
+        status:
+          type: string
+          enum: [online, offline, warning, error]
+        message:
+          type: string

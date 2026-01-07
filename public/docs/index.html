@@ -1,0 +1,913 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>INDUSIA AI Backend API</title>
+  <link rel="icon" href="/favicon.ico" />
+  <style>
+    :root {
+      --bg-dark: #0A1628;
+      --bg-card: #ffffff;
+      --bg-gray: #f8fafc;
+      --text-dark: #1e293b;
+      --text-muted: #64748b;
+      --text-light: #94a3b8;
+      --border: #e2e8f0;
+      --accent: #0FB5BA;
+      --accent-hover: #0d9a9e;
+      --success: #10B981;
+      --warning: #F59E0B;
+      --error: #EF4444;
+      --purple: #8B5CF6;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg-gray); color: var(--text-dark); line-height: 1.5; }
+
+    /* Header */
+    .header { background: var(--bg-dark); color: white; padding: 16px 24px; position: sticky; top: 0; z-index: 100; display: flex; align-items: center; gap: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); }
+    .header h1 { font-size: 20px; font-weight: 600; }
+    .header .badge { background: var(--accent); padding: 4px 12px; border-radius: 20px; font-size: 12px; }
+    .header .back { margin-left: auto; color: var(--text-light); text-decoration: none; font-size: 14px; }
+    .header .back:hover { color: white; }
+
+    .container { max-width: 1400px; margin: 0 auto; padding: 24px; }
+
+    /* Stats */
+    .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+    .stat { background: var(--bg-card); border-radius: 12px; padding: 20px; border: 1px solid var(--border); }
+    .stat .num { font-size: 28px; font-weight: 700; }
+    .stat .lbl { font-size: 13px; color: var(--text-muted); margin-top: 4px; }
+    .stat.c1 .num { color: var(--accent); }
+    .stat.c2 .num { color: var(--success); }
+    .stat.c3 .num { color: var(--warning); }
+    .stat.c4 .num { color: var(--purple); }
+
+    /* Tabs */
+    .tabs { display: flex; gap: 8px; border-bottom: 2px solid var(--border); margin-bottom: 24px; }
+    .tab { padding: 12px 20px; border: none; background: none; font-size: 14px; font-weight: 500; color: var(--text-muted); cursor: pointer; border-bottom: 3px solid transparent; margin-bottom: -2px; transition: all 0.2s; }
+    .tab:hover { color: var(--text-dark); }
+    .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .panel { display: none; }
+    .panel.active { display: block; }
+
+    /* Endpoint Card */
+    .card { background: var(--bg-card); border-radius: 12px; margin-bottom: 16px; border: 1px solid var(--border); overflow: hidden; }
+    .card-head { padding: 16px 20px; display: flex; align-items: center; gap: 12px; cursor: pointer; transition: background 0.2s; }
+    .card-head:hover { background: var(--bg-gray); }
+    .card-body { display: none; padding: 24px; border-top: 1px solid var(--border); background: var(--bg-gray); }
+    .card-body.open { display: block; }
+
+    .method { padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 700; color: white; }
+    .method-get { background: var(--accent); }
+    .method-post { background: var(--success); }
+    .path { font-family: monospace; font-size: 14px; font-weight: 500; }
+    .desc { color: var(--text-muted); font-size: 14px; margin-left: 8px; }
+    .toggle { margin-left: auto; color: var(--text-light); transition: transform 0.2s; }
+    .card-head.open .toggle { transform: rotate(180deg); }
+
+    /* Form */
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; }
+    .section h4 { font-size: 14px; font-weight: 600; margin-bottom: 16px; }
+    .field { margin-bottom: 16px; }
+    .label { display: block; font-size: 13px; font-weight: 500; margin-bottom: 6px; }
+    .label .req { color: var(--error); }
+    .input, .select, .textarea { width: 100%; padding: 10px 14px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; background: var(--bg-card); }
+    .input:focus, .select:focus, .textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(15,181,186,0.1); }
+    .select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2394a3b8'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; background-size: 16px; padding-right: 40px; }
+    .hint { font-size: 12px; color: var(--text-light); margin-top: 4px; }
+    .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+    /* Buttons */
+    .btn { padding: 12px 20px; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; }
+    .btn-primary { background: var(--accent); color: white; }
+    .btn-primary:hover { background: var(--accent-hover); }
+    .btn-success { background: var(--success); color: white; }
+    .btn-success:hover { background: #0d9668; }
+    .btn-outline { background: transparent; color: var(--accent); border: 2px solid var(--accent); }
+    .btn-outline:hover { background: var(--accent); color: white; }
+    .btns { display: flex; flex-direction: column; gap: 8px; margin-top: 20px; }
+
+    /* Response */
+    .resp { background: #1e293b; border-radius: 10px; overflow: hidden; }
+    .resp-head { background: #334155; padding: 10px 16px; font-size: 12px; color: #94a3b8; display: flex; justify-content: space-between; }
+    .resp-body { padding: 16px; font-family: monospace; font-size: 13px; color: #e2e8f0; max-height: 400px; overflow: auto; white-space: pre-wrap; word-break: break-word; }
+    .resp-body.ok { border-left: 4px solid var(--success); }
+    .resp-body.err { border-left: 4px solid var(--error); }
+    .placeholder { color: var(--text-light); font-style: italic; }
+
+    /* JSON */
+    .jk { color: var(--accent); }
+    .js { color: var(--success); }
+    .jn { color: var(--warning); }
+    .jb { color: var(--purple); }
+    .jnull { color: var(--text-light); }
+
+    /* cURL */
+    .curl { background: #1e293b; border-radius: 8px; padding: 12px 16px; margin-top: 16px; display: none; }
+    .curl.show { display: block; }
+    .curl-head { display: flex; justify-content: space-between; margin-bottom: 8px; }
+    .curl-lbl { font-size: 11px; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; }
+    .curl-copy { background: #334155; border: none; color: #e2e8f0; padding: 4px 10px; border-radius: 4px; font-size: 11px; cursor: pointer; }
+    .curl-copy:hover { background: #475569; }
+    .curl-code { font-family: monospace; font-size: 12px; color: #a5f3fc; word-break: break-all; }
+
+    /* Info */
+    .info { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 10px; padding: 16px 20px; margin-bottom: 20px; }
+    .info h4 { color: #1d4ed8; font-size: 14px; margin-bottom: 6px; }
+    .info p { color: #1e40af; font-size: 13px; }
+
+    /* Reference Grid */
+    .refgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    .refcard { background: var(--bg-card); border-radius: 12px; border: 1px solid var(--border); overflow: hidden; }
+    .refcard.full { grid-column: span 2; }
+    .refcard-head { padding: 14px 18px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
+    .refcard-body { padding: 18px; }
+    .refdesc { font-size: 13px; color: var(--text-muted); margin-bottom: 14px; }
+
+    /* Loading */
+    .loading { position: relative; }
+    .loading::after { content: "Loading..."; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.7); color: white; padding: 8px 16px; border-radius: 6px; font-size: 12px; }
+
+    @media (max-width: 1024px) {
+      .stats { grid-template-columns: repeat(2, 1fr); }
+      .grid2 { grid-template-columns: 1fr; }
+      .refgrid { grid-template-columns: 1fr; }
+      .refcard.full { grid-column: span 1; }
+    }
+    @media (max-width: 768px) {
+      .stats { grid-template-columns: 1fr; }
+      .tabs { flex-wrap: wrap; }
+    }
+  </style>
+</head>
+<body>
+  <header class="header">
+    <h1>🏭 INDUSIA AI Backend API</h1>
+    <span class="badge">v2.0.0</span>
+    <a href="/" class="back">← Back to HMI</a>
+  </header>
+
+  <div class="container">
+    <!-- Stats -->
+    <div class="stats">
+      <div class="stat c1"><div class="num" id="s-lines">-</div><div class="lbl">Production Lines</div></div>
+      <div class="stat c2"><div class="num" id="s-boards">-</div><div class="lbl">PCB Boards</div></div>
+      <div class="stat c3"><div class="num" id="s-models">-</div><div class="lbl">AI Models</div></div>
+      <div class="stat c4"><div class="num" id="s-insp">-</div><div class="lbl">Inspections</div></div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tabs" id="tabs">
+      <button class="tab active" data-t="inspections">📋 Inspections</button>
+      <button class="tab" data-t="models">🤖 Models</button>
+      <button class="tab" data-t="boards">📦 Boards</button>
+      <button class="tab" data-t="lines">🏭 Lines</button>
+      <button class="tab" data-t="training">📊 Training</button>
+      <button class="tab" data-t="reference">📚 Reference</button>
+    </div>
+
+    <!-- Inspections Panel -->
+    <div id="p-inspections" class="panel active">
+      <!-- GET Inspections -->
+      <div class="card">
+        <div class="card-head open" onclick="toggle(this)">
+          <span class="method method-get">GET</span>
+          <span class="path">/api/ai/inspections</span>
+          <span class="desc">List inspections with smart filters</span>
+          <span class="toggle">▼</span>
+        </div>
+        <div class="card-body open">
+          <div class="grid2">
+            <div class="section">
+              <h4>Parameters</h4>
+              <div class="field">
+                <label class="label">Line</label>
+                <select id="i-line" class="select"><option value="">All Lines</option></select>
+                <div class="hint">Filter by production line</div>
+              </div>
+              <div class="field">
+                <label class="label">AI Decision</label>
+                <select id="i-decision" class="select" onchange="decisionHint()">
+                  <option value="">All</option>
+                  <option value="PASS">✅ PASS - No defects detected</option>
+                  <option value="FAIL">❌ FAIL - Defects detected</option>
+                </select>
+              </div>
+              <div class="field">
+                <label class="label">False Call</label>
+                <select id="i-fc" class="select">
+                  <option value="">All</option>
+                  <option value="true">🔄 Yes - Operator disagreed</option>
+                  <option value="false">✓ No - Operator agreed</option>
+                </select>
+                <div class="hint" id="fc-hint">Filter by operator override status</div>
+              </div>
+              <div class="row2">
+                <div class="field"><label class="label">Page</label><input type="number" id="i-page" value="1" min="1" class="input"></div>
+                <div class="field"><label class="label">Limit</label><input type="number" id="i-limit" value="20" min="1" max="100" class="input"></div>
+              </div>
+              <div class="btns">
+                <button class="btn btn-primary" onclick="getInspections()">▶ Execute Request</button>
+              </div>
+              <div class="curl" id="curl-insp"><div class="curl-head"><span class="curl-lbl">cURL</span><button class="curl-copy" onclick="copy('curl-insp-c')">Copy</button></div><div class="curl-code" id="curl-insp-c"></div></div>
+            </div>
+            <div class="section">
+              <h4>Response</h4>
+              <div class="resp"><div class="resp-head"><span>application/json</span></div><div class="resp-body" id="r-insp"><span class="placeholder">Click "Execute Request" to see response</span></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- POST Inspection -->
+      <div class="card">
+        <div class="card-head" onclick="toggle(this)">
+          <span class="method method-post">POST</span>
+          <span class="path">/api/ai/inspections</span>
+          <span class="desc">Create inspection from AI detection</span>
+          <span class="toggle">▼</span>
+        </div>
+        <div class="card-body">
+          <div class="grid2">
+            <div class="section">
+              <h4>Request Body</h4>
+              <div class="field"><label class="label">Inspection ID <span class="req">*</span></label><input type="text" id="pi-id" placeholder="e.g., insp-8e1c4c6b" class="input"><div class="hint">Unique identifier from AI Backend</div></div>
+              <div class="field"><label class="label">Line <span class="req">*</span></label><select id="pi-line" class="select"><option value="">Select Line...</option></select></div>
+              <div class="field"><label class="label">AI Model</label><select id="pi-model" class="select"><option value="">Select Model...</option></select></div>
+              <div class="field"><label class="label">AI Decision <span class="req">*</span></label><select id="pi-decision" class="select"><option value="PASS">✅ PASS</option><option value="FAIL">❌ FAIL</option></select></div>
+              <div class="field"><label class="label">Top Image URL</label><input type="text" id="pi-top" placeholder="http://localhost:8001/static/images/top.png" class="input"></div>
+              <div class="field"><label class="label">Bottom Image URL</label><input type="text" id="pi-bot" placeholder="http://localhost:8001/static/images/bottom.png" class="input"></div>
+              <div class="btns">
+                <button class="btn btn-outline" onclick="loadExInsp()">📝 Load Example</button>
+                <button class="btn btn-success" onclick="postInspection()">▶ Execute Request</button>
+              </div>
+            </div>
+            <div class="section">
+              <h4>Request Preview</h4>
+              <div class="resp" style="margin-bottom:16px"><div class="resp-head"><span>Request Body</span></div><div class="resp-body" id="prev-pi" style="max-height:200px"><span class="placeholder">Fill form to see preview</span></div></div>
+              <h4>Response</h4>
+              <div class="resp"><div class="resp-head"><span>application/json</span></div><div class="resp-body" id="r-pi" style="max-height:180px"><span class="placeholder">Click "Execute Request"</span></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Models Panel -->
+    <div id="p-models" class="panel">
+      <div class="card">
+        <div class="card-head open" onclick="toggle(this)">
+          <span class="method method-get">GET</span>
+          <span class="path">/api/ai/models</span>
+          <span class="desc">List AI models</span>
+          <span class="toggle">▼</span>
+        </div>
+        <div class="card-body open">
+          <div class="grid2">
+            <div class="section">
+              <h4>Parameters</h4>
+              <div class="field">
+                <label class="label">Status</label>
+                <select id="m-status" class="select">
+                  <option value="">All Status</option>
+                  <option value="active">🟢 Active</option>
+                  <option value="inactive">⚪ Inactive</option>
+                  <option value="training">🔄 Training</option>
+                  <option value="deprecated">🔴 Deprecated</option>
+                </select>
+              </div>
+              <div class="row2">
+                <div class="field"><label class="label">Page</label><input type="number" id="m-page" value="1" min="1" class="input"></div>
+                <div class="field"><label class="label">Limit</label><input type="number" id="m-limit" value="20" min="1" max="100" class="input"></div>
+              </div>
+              <div class="btns"><button class="btn btn-primary" onclick="getModels()">▶ Execute Request</button></div>
+            </div>
+            <div class="section">
+              <h4>Response</h4>
+              <div class="resp"><div class="resp-head"><span>application/json</span></div><div class="resp-body" id="r-models"><span class="placeholder">Click "Execute Request"</span></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head" onclick="toggle(this)">
+          <span class="method method-post">POST</span>
+          <span class="path">/api/ai/models</span>
+          <span class="desc">Register new AI model</span>
+          <span class="toggle">▼</span>
+        </div>
+        <div class="card-body">
+          <div class="grid2">
+            <div class="section">
+              <h4>Request Body</h4>
+              <div class="field"><label class="label">Model Name <span class="req">*</span></label><input type="text" id="pm-name" placeholder="e.g., pcb_defect_v2" class="input"></div>
+              <div class="field"><label class="label">Version <span class="req">*</span></label><input type="text" id="pm-ver" placeholder="e.g., 1.0.0" class="input"></div>
+              <div class="field"><label class="label">Description</label><textarea id="pm-desc" placeholder="Model description..." class="input" style="height:80px;resize:vertical"></textarea></div>
+              <div class="field"><label class="label">Status</label><select id="pm-status" class="select"><option value="inactive">⚪ Inactive</option><option value="active">🟢 Active</option></select></div>
+              <div class="field"><label class="label">File Path</label><input type="text" id="pm-path" placeholder="/models/best.pt" class="input"></div>
+              <div class="btns">
+                <button class="btn btn-outline" onclick="loadExModel()">📝 Load Example</button>
+                <button class="btn btn-success" onclick="postModel()">▶ Execute Request</button>
+              </div>
+            </div>
+            <div class="section">
+              <h4>Response</h4>
+              <div class="resp"><div class="resp-head"><span>application/json</span></div><div class="resp-body" id="r-pm"><span class="placeholder">Click "Execute Request"</span></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Boards Panel -->
+    <div id="p-boards" class="panel">
+      <div class="card">
+        <div class="card-head open" onclick="toggle(this)">
+          <span class="method method-get">GET</span>
+          <span class="path">/api/ai/boards</span>
+          <span class="desc">List PCB board definitions</span>
+          <span class="toggle">▼</span>
+        </div>
+        <div class="card-body open">
+          <div class="grid2">
+            <div class="section">
+              <h4>Parameters</h4>
+              <div class="field">
+                <label class="label">Customer</label>
+                <select id="b-cust" class="select"><option value="">All Customers</option></select>
+                <div class="hint">Filter boards by customer</div>
+              </div>
+              <div class="field">
+                <label class="label">Part Number</label>
+                <input type="text" id="b-pn" placeholder="Search by part number..." class="input">
+                <div class="hint">Partial match supported</div>
+              </div>
+              <div class="row2">
+                <div class="field"><label class="label">Page</label><input type="number" id="b-page" value="1" min="1" class="input"></div>
+                <div class="field"><label class="label">Limit</label><input type="number" id="b-limit" value="20" min="1" max="100" class="input"></div>
+              </div>
+              <div class="btns"><button class="btn btn-primary" onclick="getBoards()">▶ Execute Request</button></div>
+            </div>
+            <div class="section">
+              <h4>Response</h4>
+              <div class="resp"><div class="resp-head"><span>application/json</span></div><div class="resp-body" id="r-boards"><span class="placeholder">Click "Execute Request"</span></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head" onclick="toggle(this)">
+          <span class="method method-get">GET</span>
+          <span class="path">/api/ai/boards/{id}</span>
+          <span class="desc">Get board by ID or part number</span>
+          <span class="toggle">▼</span>
+        </div>
+        <div class="card-body">
+          <div class="grid2">
+            <div class="section">
+              <h4>Parameters</h4>
+              <div class="field">
+                <label class="label">Select Board</label>
+                <select id="b-sel" class="select" onchange="document.getElementById('b-id').value=this.value"><option value="">Choose a board...</option></select>
+                <div class="hint">Or enter ID manually below</div>
+              </div>
+              <div class="field">
+                <label class="label">Board ID / Part Number</label>
+                <input type="text" id="b-id" placeholder="UUID or part number" class="input">
+              </div>
+              <div class="btns"><button class="btn btn-primary" onclick="getBoardById()">▶ Execute Request</button></div>
+            </div>
+            <div class="section">
+              <h4>Response</h4>
+              <div class="resp"><div class="resp-head"><span>application/json</span></div><div class="resp-body" id="r-board-id"><span class="placeholder">Select a board</span></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Lines Panel -->
+    <div id="p-lines" class="panel">
+      <div class="card">
+        <div class="card-head open" onclick="toggle(this)">
+          <span class="method method-get">GET</span>
+          <span class="path">/api/ai/lines</span>
+          <span class="desc">List production lines with model assignment</span>
+          <span class="toggle">▼</span>
+        </div>
+        <div class="card-body open">
+          <div class="grid2">
+            <div class="section">
+              <h4>Parameters</h4>
+              <div class="field">
+                <label class="label">Customer</label>
+                <select id="l-cust" class="select" onchange="loadSections()"><option value="">All Customers</option></select>
+              </div>
+              <div class="field">
+                <label class="label">Section</label>
+                <select id="l-sect" class="select"><option value="">All Sections</option></select>
+                <div class="hint">Select customer first to filter</div>
+              </div>
+              <div class="field">
+                <label class="label">Has AI Model</label>
+                <select id="l-model" class="select">
+                  <option value="">All</option>
+                  <option value="true">🤖 Yes - Model assigned</option>
+                  <option value="false">⚪ No - No model</option>
+                </select>
+              </div>
+              <div class="btns"><button class="btn btn-primary" onclick="getLines()">▶ Execute Request</button></div>
+            </div>
+            <div class="section">
+              <h4>Response</h4>
+              <div class="resp"><div class="resp-head"><span>application/json</span></div><div class="resp-body" id="r-lines"><span class="placeholder">Click "Execute Request"</span></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head" onclick="toggle(this)">
+          <span class="method method-get">GET</span>
+          <span class="path">/api/ai/lines/{id}</span>
+          <span class="desc">Get line configuration</span>
+          <span class="toggle">▼</span>
+        </div>
+        <div class="card-body">
+          <div class="grid2">
+            <div class="section">
+              <h4>Parameters</h4>
+              <div class="field">
+                <label class="label">Select Line</label>
+                <select id="l-sel" class="select"><option value="">Choose a line...</option></select>
+              </div>
+              <div class="btns"><button class="btn btn-primary" onclick="getLineById()">▶ Execute Request</button></div>
+            </div>
+            <div class="section">
+              <h4>Response</h4>
+              <div class="resp"><div class="resp-head"><span>application/json</span></div><div class="resp-body" id="r-line-id"><span class="placeholder">Select a line</span></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Training Panel -->
+    <div id="p-training" class="panel">
+      <div class="info"><h4>🚧 Training Pipeline</h4><p>Training endpoints for dataset management and model training jobs.</p></div>
+
+      <div class="card">
+        <div class="card-head open" onclick="toggle(this)">
+          <span class="method method-get">GET</span>
+          <span class="path">/api/ai/training-jobs</span>
+          <span class="desc">List training jobs</span>
+          <span class="toggle">▼</span>
+        </div>
+        <div class="card-body open">
+          <div class="grid2">
+            <div class="section">
+              <h4>Parameters</h4>
+              <div class="field">
+                <label class="label">Status</label>
+                <select id="tj-status" class="select">
+                  <option value="">All Status</option>
+                  <option value="queued">⏳ Queued</option>
+                  <option value="running">🔄 Running</option>
+                  <option value="completed">✅ Completed</option>
+                  <option value="failed">❌ Failed</option>
+                  <option value="cancelled">🚫 Cancelled</option>
+                </select>
+              </div>
+              <div class="btns"><button class="btn btn-primary" onclick="getTrainingJobs()">▶ Execute Request</button></div>
+            </div>
+            <div class="section">
+              <h4>Response</h4>
+              <div class="resp"><div class="resp-head"><span>application/json</span></div><div class="resp-body" id="r-tj"><span class="placeholder">Click "Execute Request"</span></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head" onclick="toggle(this)">
+          <span class="method method-get">GET</span>
+          <span class="path">/api/ai/training-datasets</span>
+          <span class="desc">List training datasets</span>
+          <span class="toggle">▼</span>
+        </div>
+        <div class="card-body">
+          <div class="grid2">
+            <div class="section">
+              <h4>Parameters</h4>
+              <div class="field">
+                <label class="label">Status</label>
+                <select id="td-status" class="select">
+                  <option value="">All Status</option>
+                  <option value="draft">📝 Draft</option>
+                  <option value="ready">✅ Ready</option>
+                  <option value="in_use">🔄 In Use</option>
+                  <option value="archived">📦 Archived</option>
+                </select>
+              </div>
+              <div class="btns"><button class="btn btn-primary" onclick="getDatasets()">▶ Execute Request</button></div>
+            </div>
+            <div class="section">
+              <h4>Response</h4>
+              <div class="resp"><div class="resp-head"><span>application/json</span></div><div class="resp-body" id="r-td"><span class="placeholder">Click "Execute Request"</span></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Reference Panel -->
+    <div id="p-reference" class="panel">
+      <div class="refgrid">
+        <div class="refcard">
+          <div class="refcard-head"><span class="method method-get">GET</span><span class="path">/api/ai/defect-classes</span></div>
+          <div class="refcard-body">
+            <p class="refdesc">IPC-A-610 defect classifications</p>
+            <button class="btn btn-primary" onclick="getDefectClasses()">Load Defect Classes</button>
+            <div class="resp" style="margin-top:16px"><div class="resp-body" id="r-dc" style="max-height:250px"><span class="placeholder">Click to load</span></div></div>
+          </div>
+        </div>
+        <div class="refcard">
+          <div class="refcard-head"><span class="method method-get">GET</span><span class="path">/api/ai/false-call-reasons</span></div>
+          <div class="refcard-body">
+            <p class="refdesc">Reasons for operator overrides</p>
+            <button class="btn btn-primary" onclick="getFCReasons()">Load False Call Reasons</button>
+            <div class="resp" style="margin-top:16px"><div class="resp-body" id="r-fcr" style="max-height:250px"><span class="placeholder">Click to load</span></div></div>
+          </div>
+        </div>
+        <div class="refcard full">
+          <div class="refcard-head"><span class="method method-get">GET</span><span class="path">/api/ai/system-status</span><span class="desc">Hardware status</span></div>
+          <div class="refcard-body">
+            <button class="btn btn-primary" style="width:auto" onclick="getSystemStatus()">Check System Status</button>
+            <div class="resp" style="margin-top:16px"><div class="resp-body" id="r-ss" style="max-height:200px"><span class="placeholder">Click to check</span></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Cache
+    let C = { customers: [], sections: [], lines: [], boards: [], models: [] };
+
+    // Init
+    document.addEventListener('DOMContentLoaded', async () => {
+      setupTabs();
+      await loadData();
+      fillDropdowns();
+      loadStats();
+      setupInputListeners();
+    });
+
+    // Load all data with error handling
+    async function loadData() {
+      const safe = async (url) => {
+        try {
+          const r = await fetch(url);
+          if (!r.ok) return { data: [] };
+          const j = await r.json();
+          return j.success ? j : { data: [] };
+        } catch (e) {
+          console.warn('Load failed:', url, e);
+          return { data: [] };
+        }
+      };
+
+      const [cust, line, board, model, sect] = await Promise.all([
+        safe('/api/master-data/customers'),
+        safe('/api/ai/lines?limit=100'),
+        safe('/api/ai/boards?limit=100'),
+        safe('/api/ai/models?limit=100'),
+        safe('/api/master-data/sections')
+      ]);
+
+      C.customers = cust.data || [];
+      C.lines = line.data || [];
+      C.boards = board.data || [];
+      C.models = model.data || [];
+      C.sections = sect.data || [];
+
+      console.log('Data loaded:', { customers: C.customers.length, lines: C.lines.length, boards: C.boards.length, models: C.models.length });
+    }
+
+    // Stats
+    async function loadStats() {
+      document.getElementById('s-lines').textContent = C.lines.length || '0';
+      document.getElementById('s-boards').textContent = C.boards.length || '0';
+      document.getElementById('s-models').textContent = C.models.length || '0';
+      try {
+        const r = await fetch('/api/ai/inspections?limit=1');
+        const j = await r.json();
+        document.getElementById('s-insp').textContent = j.meta?.total || '0';
+      } catch { document.getElementById('s-insp').textContent = '0'; }
+    }
+
+    // Fill dropdowns
+    function fillDropdowns() {
+      // Customers - handle null code
+      const custOpts = C.customers.map(c => `<option value="${c.id}">${c.name}${c.code ? ' (' + c.code + ')' : ''}</option>`).join('');
+      ['b-cust', 'l-cust'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.innerHTML = '<option value="">All Customers</option>' + custOpts;
+      });
+
+      // Lines - handle nested objects
+      const lineOpts = C.lines.map(l => {
+        const custName = l.customer?.name || '';
+        return `<option value="${l.id}">${l.name}${custName ? ' (' + custName + ')' : ''}</option>`;
+      }).join('');
+      ['i-line', 'pi-line', 'l-sel'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.innerHTML = (id === 'i-line' ? '<option value="">All Lines</option>' : '<option value="">Select Line...</option>') + lineOpts;
+      });
+
+      // Boards
+      const boardOpts = C.boards.map(b => `<option value="${b.id}">${b.name}${b.partNumber ? ' (' + b.partNumber + ')' : ''}</option>`).join('');
+      const bSel = document.getElementById('b-sel');
+      if (bSel) bSel.innerHTML = '<option value="">Choose a board...</option>' + boardOpts;
+
+      // Models
+      const modelOpts = C.models.map(m => `<option value="${m.id}">${m.name} v${m.version || '?'}</option>`).join('');
+      const piModel = document.getElementById('pi-model');
+      if (piModel) piModel.innerHTML = '<option value="">Select Model...</option>' + modelOpts;
+    }
+
+    // Tabs
+    function setupTabs() {
+      document.querySelectorAll('.tab').forEach(t => {
+        t.addEventListener('click', () => {
+          document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+          document.querySelectorAll('.panel').forEach(x => x.classList.remove('active'));
+          t.classList.add('active');
+          document.getElementById('p-' + t.dataset.t).classList.add('active');
+        });
+      });
+    }
+
+    // Toggle
+    function toggle(el) {
+      el.classList.toggle('open');
+      el.nextElementSibling.classList.toggle('open');
+    }
+
+    // Decision hint
+    function decisionHint() {
+      const v = document.getElementById('i-decision').value;
+      const h = document.getElementById('fc-hint');
+      if (v === 'PASS') h.innerHTML = '<b>False Call = Yes:</b> AI missed defect<br><b>False Call = No:</b> Correct PASS';
+      else if (v === 'FAIL') h.innerHTML = '<b>False Call = Yes:</b> AI false positive<br><b>False Call = No:</b> Correct FAIL';
+      else h.textContent = 'Filter by operator override status';
+    }
+
+    // Load sections for customer
+    function loadSections() {
+      const cid = document.getElementById('l-cust').value;
+      const sel = document.getElementById('l-sect');
+      sel.innerHTML = '<option value="">All Sections</option>';
+      if (cid) {
+        const filtered = C.sections.filter(s => s.customerId === cid);
+        filtered.forEach(s => sel.innerHTML += `<option value="${s.id}">${s.name}</option>`);
+      }
+    }
+
+    // JSON format
+    function fmt(o) {
+      return JSON.stringify(o, null, 2)
+        .replace(/(".*?"):/g, '<span class="jk">$1</span>:')
+        .replace(/: (".*?")/g, ': <span class="js">$1</span>')
+        .replace(/: (\d+\.?\d*)/g, ': <span class="jn">$1</span>')
+        .replace(/: (true|false)/g, ': <span class="jb">$1</span>')
+        .replace(/: (null)/g, ': <span class="jnull">$1</span>');
+    }
+
+    // Show response
+    function show(id, data, err = false) {
+      const el = document.getElementById(id);
+      el.className = 'resp-body ' + (err ? 'err' : 'ok');
+      el.innerHTML = fmt(data);
+    }
+
+    // Copy
+    function copy(id) {
+      navigator.clipboard.writeText(document.getElementById(id).textContent);
+    }
+
+    // Input listeners for preview
+    function setupInputListeners() {
+      ['pi-id', 'pi-line', 'pi-model', 'pi-decision', 'pi-top', 'pi-bot'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+          el.addEventListener('input', updatePreview);
+          el.addEventListener('change', updatePreview);
+        }
+      });
+    }
+
+    function updatePreview() {
+      const body = {
+        external_inspection_id: document.getElementById('pi-id').value || 'insp-xxx',
+        line_id: document.getElementById('pi-line').value || null,
+        model_id: document.getElementById('pi-model').value || null,
+        ai_decision: document.getElementById('pi-decision').value,
+        ai_timestamp: new Date().toISOString(),
+        results: {
+          top: { image_url: document.getElementById('pi-top').value || '', objects: [] },
+          bottom: { image_url: document.getElementById('pi-bot').value || '', objects: [] }
+        }
+      };
+      document.getElementById('prev-pi').innerHTML = fmt(body);
+    }
+
+    // === API Calls ===
+    async function getInspections() {
+      const p = new URLSearchParams();
+      const line = document.getElementById('i-line').value;
+      const dec = document.getElementById('i-decision').value;
+      const fc = document.getElementById('i-fc').value;
+      if (line) p.append('line_id', line);
+      if (dec) p.append('ai_decision', dec);
+      if (fc) p.append('is_false_call', fc);
+      p.append('page', document.getElementById('i-page').value);
+      p.append('limit', document.getElementById('i-limit').value);
+
+      const url = `/api/ai/inspections?${p}`;
+      document.getElementById('curl-insp').classList.add('show');
+      document.getElementById('curl-insp-c').textContent = `curl -X GET "${location.origin}${url}"`;
+
+      try {
+        const r = await fetch(url);
+        const j = await r.json();
+        show('r-insp', j, !r.ok);
+      } catch (e) { show('r-insp', { error: e.message }, true); }
+    }
+
+    function loadExInsp() {
+      document.getElementById('pi-id').value = 'insp-' + Math.random().toString(36).substr(2, 8);
+      if (C.lines.length) document.getElementById('pi-line').value = C.lines[0].id;
+      if (C.models.length) document.getElementById('pi-model').value = C.models[0].id;
+      document.getElementById('pi-decision').value = 'PASS';
+      document.getElementById('pi-top').value = 'http://localhost:8001/static/images/top_001.png';
+      document.getElementById('pi-bot').value = 'http://localhost:8001/static/images/bottom_001.png';
+      updatePreview();
+    }
+
+    async function postInspection() {
+      const body = {
+        external_inspection_id: document.getElementById('pi-id').value,
+        line_id: document.getElementById('pi-line').value,
+        model_id: document.getElementById('pi-model').value || undefined,
+        ai_decision: document.getElementById('pi-decision').value,
+        ai_timestamp: new Date().toISOString(),
+        results: {
+          top: { image_url: document.getElementById('pi-top').value, objects: [] },
+          bottom: { image_url: document.getElementById('pi-bot').value, objects: [] }
+        }
+      };
+      try {
+        const r = await fetch('/api/ai/inspections', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        const j = await r.json();
+        show('r-pi', j, !r.ok);
+      } catch (e) { show('r-pi', { error: e.message }, true); }
+    }
+
+    async function getModels() {
+      const p = new URLSearchParams();
+      const st = document.getElementById('m-status').value;
+      if (st) p.append('status', st);
+      p.append('page', document.getElementById('m-page').value);
+      p.append('limit', document.getElementById('m-limit').value);
+      try {
+        const r = await fetch(`/api/ai/models?${p}`);
+        const j = await r.json();
+        show('r-models', j, !r.ok);
+      } catch (e) { show('r-models', { error: e.message }, true); }
+    }
+
+    function loadExModel() {
+      document.getElementById('pm-name').value = 'pcb_defect_detector';
+      document.getElementById('pm-ver').value = '2.0.0';
+      document.getElementById('pm-desc').value = 'YOLOv8 model for PCB defect detection.';
+      document.getElementById('pm-status').value = 'inactive';
+      document.getElementById('pm-path').value = '/models/pcb_defect_v2/best.pt';
+    }
+
+    async function postModel() {
+      const body = {
+        name: document.getElementById('pm-name').value,
+        version: document.getElementById('pm-ver').value,
+        description: document.getElementById('pm-desc').value,
+        status: document.getElementById('pm-status').value,
+        storagePath: document.getElementById('pm-path').value
+      };
+      try {
+        const r = await fetch('/api/ai/models', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        const j = await r.json();
+        show('r-pm', j, !r.ok);
+      } catch (e) { show('r-pm', { error: e.message }, true); }
+    }
+
+    async function getBoards() {
+      const p = new URLSearchParams();
+      const c = document.getElementById('b-cust').value;
+      const pn = document.getElementById('b-pn').value;
+      if (c) p.append('customer_id', c);
+      if (pn) p.append('part_number', pn);
+      p.append('page', document.getElementById('b-page').value);
+      p.append('limit', document.getElementById('b-limit').value);
+      try {
+        const r = await fetch(`/api/ai/boards?${p}`);
+        const j = await r.json();
+        show('r-boards', j, !r.ok);
+      } catch (e) { show('r-boards', { error: e.message }, true); }
+    }
+
+    async function getBoardById() {
+      const id = document.getElementById('b-id').value;
+      if (!id) { show('r-board-id', { error: 'Please select or enter a board ID' }, true); return; }
+      try {
+        const r = await fetch(`/api/ai/boards/${encodeURIComponent(id)}`);
+        const j = await r.json();
+        show('r-board-id', j, !r.ok);
+      } catch (e) { show('r-board-id', { error: e.message }, true); }
+    }
+
+    async function getLines() {
+      const p = new URLSearchParams();
+      const c = document.getElementById('l-cust').value;
+      const s = document.getElementById('l-sect').value;
+      const m = document.getElementById('l-model').value;
+      if (c) p.append('customer_id', c);
+      if (s) p.append('section_id', s);
+      if (m) p.append('has_model', m);
+      try {
+        const r = await fetch(`/api/ai/lines?${p}`);
+        const j = await r.json();
+        show('r-lines', j, !r.ok);
+      } catch (e) { show('r-lines', { error: e.message }, true); }
+    }
+
+    async function getLineById() {
+      const id = document.getElementById('l-sel').value;
+      if (!id) { show('r-line-id', { error: 'Please select a line' }, true); return; }
+      try {
+        const r = await fetch(`/api/ai/lines/${id}`);
+        const j = await r.json();
+        show('r-line-id', j, !r.ok);
+      } catch (e) { show('r-line-id', { error: e.message }, true); }
+    }
+
+    async function getTrainingJobs() {
+      const p = new URLSearchParams();
+      const st = document.getElementById('tj-status').value;
+      if (st) p.append('status', st);
+      try {
+        const r = await fetch(`/api/ai/training-jobs?${p}`);
+        const j = await r.json();
+        show('r-tj', j, !r.ok);
+      } catch (e) { show('r-tj', { error: e.message }, true); }
+    }
+
+    async function getDatasets() {
+      const p = new URLSearchParams();
+      const st = document.getElementById('td-status').value;
+      if (st) p.append('status', st);
+      try {
+        const r = await fetch(`/api/ai/training-datasets?${p}`);
+        const j = await r.json();
+        show('r-td', j, !r.ok);
+      } catch (e) { show('r-td', { error: e.message }, true); }
+    }
+
+    async function getDefectClasses() {
+      try {
+        const r = await fetch('/api/ai/defect-classes');
+        const j = await r.json();
+        document.getElementById('r-dc').innerHTML = fmt(j);
+      } catch (e) { document.getElementById('r-dc').innerHTML = `<span style="color:#ef4444">${e.message}</span>`; }
+    }
+
+    async function getFCReasons() {
+      try {
+        const r = await fetch('/api/ai/false-call-reasons');
+        const j = await r.json();
+        document.getElementById('r-fcr').innerHTML = fmt(j);
+      } catch (e) { document.getElementById('r-fcr').innerHTML = `<span style="color:#ef4444">${e.message}</span>`; }
+    }
+
+    async function getSystemStatus() {
+      try {
+        const r = await fetch('/api/ai/system-status');
+        const j = await r.json();
+        document.getElementById('r-ss').innerHTML = fmt(j);
+      } catch (e) { document.getElementById('r-ss').innerHTML = `<span style="color:#ef4444">${e.message}</span>`; }
+    }
+  </script>
+</body>
+</html>

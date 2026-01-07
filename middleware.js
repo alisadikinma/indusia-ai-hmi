@@ -26,11 +26,13 @@ const PROTECTED_PATHS = [
 // Public paths that don't require auth
 const PUBLIC_PATHS = [
   '/login',
+  '/docs',           // Swagger UI documentation
   '/api/auth/login',
   '/api/auth/logout',
+  '/api/docs',       // API documentation endpoints
   '/_next',
   '/favicon.ico',
-  '/api/error-log' // Allow error logging without auth
+  '/api/error-log'   // Allow error logging without auth
 ]
 
 /**
