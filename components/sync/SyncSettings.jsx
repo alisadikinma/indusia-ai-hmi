@@ -236,6 +236,9 @@ export function SyncSettings({ onClose }) {
               </div>
               <div className="text-sm text-indusia-textMuted">
                 {lastSync.successCount} synced, {lastSync.failedCount} failed
+                {lastSync.tables?.length > 0 && (
+                  <span className="ml-1">• {lastSync.tables.join(', ')}</span>
+                )}
               </div>
             </div>
           )}

@@ -11,6 +11,7 @@ import { validate } from '@/lib/validations/validate';
 import { sanitizeRequestBody } from '@/lib/utils/sanitize';
 import { workOrderRepo } from '@/lib/repos/workOrderRepo';
 import { updateWorkOrderSchema } from '@/lib/validations/workOrderSchema';
+import { notifyWorkOrderStarted, notifyWorkOrderCompleted } from '@/lib/notificationHelper';
 
 /**
  * GET /api/work-orders/[id]
@@ -81,6 +82,11 @@ async function handlePUT(request, { params }) {
       );
     }
 
+    // Get current WO to check status change
+    const currentWO = await workOrderRepo.getById(id);
+    const previousStatus = currentWO?.data?.status;
+    const newStatus = validation.data.status;
+
     const result = await workOrderRepo.update(id, validation.data);
 
     if (!result.success) {
@@ -88,6 +94,24 @@ async function handlePUT(request, { params }) {
         { success: false, error: result.error },
         { status: 500 }
       );
+    }
+
+    // Send notifications on status change (non-blocking)
+    if (newStatus && previousStatus !== newStatus) {
+      const woData = result.data || currentWO?.data;
+      
+      if (newStatus === 'active' && previousStatus !== 'active') {
+        // WO Started
+        notifyWorkOrderStarted(woData)
+          .catch(err => console.error('[Notification] Failed to notify WO start:', err));
+      } else if (newStatus === 'completed' && previousStatus !== 'completed') {
+        // WO Completed
+        notifyWorkOrderCompleted(woData, {
+          goodQty: woData?.goodQty || woData?.good_qty || 0,
+          ngQty: woData?.ngQty || woData?.ng_qty || 0,
+          falseCallQty: woData?.falseCallQty || woData?.false_call_qty || 0
+        }).catch(err => console.error('[Notification] Failed to notify WO complete:', err));
+      }
     }
 
     return NextResponse.json({

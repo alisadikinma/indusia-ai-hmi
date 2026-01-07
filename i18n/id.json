@@ -31,7 +31,9 @@
     "login": "Masuk",
     "logout": "Keluar",
     "engineeringMode": "Mode Engineer",
-    "online": "Online"
+    "online": "Online",
+    "accessDenied": "Akses Ditolak",
+    "noPermission": "Anda tidak memiliki izin untuk mengakses halaman ini."
   },
   "hmi": {
     "liveView": "Tampilan Inspeksi Live",
@@ -49,12 +51,16 @@
     "optionalNotes": "Catatan opsional",
     "aiDecision": "Keputusan AI",
     "operatorOverride": "Override Operator",
-    "selectReason": "Pilih alasan"
+    "selectReason": "Pilih alasan",
+    "good": "GOOD",
+    "ng": "NG",
+    "pass": "PASS",
+    "fail": "FAIL"
   },
   "manager": {
-    "overrideQueue": "Antrian Override",
-    "pendingReview": "Menunggu Review",
-    "reviewOverride": "Review Override",
+    "overrideQueue": "Antrian Persetujuan Override",
+    "pendingReview": "Review laporan false call operator sebelum dikirim ke pipeline training cloud.",
+    "reviewOverride": "Review",
     "approve": "Setuju",
     "reject": "Tolak",
     "approved": "Disetujui",
@@ -66,6 +72,33 @@
     "approvalComment": "Komentar Persetujuan",
     "addComment": "Tambah komentar (opsional)"
   },
+  "workOrder": {
+    "title": "Work Order",
+    "create": "Buat Work Order",
+    "edit": "Edit Work Order",
+    "woNumber": "Nomor WO",
+    "customer": "Customer",
+    "board": "Board",
+    "line": "Line",
+    "lotSize": "Ukuran Lot",
+    "status": "Status",
+    "progress": "Progress",
+    "startDate": "Tanggal Mulai",
+    "dueDate": "Tanggal Target",
+    "completedDate": "Tanggal Selesai",
+    "goodQty": "Jumlah Good",
+    "ngQty": "Jumlah NG",
+    "falseCallQty": "Jumlah False Call",
+    "statusDraft": "Draft",
+    "statusReady": "Siap",
+    "statusActive": "Aktif",
+    "statusCompleted": "Selesai",
+    "statusCancelled": "Dibatalkan",
+    "startWO": "Mulai WO",
+    "endWO": "Selesai WO",
+    "woStarted": "Work Order Dimulai",
+    "woCompleted": "Work Order Selesai"
+  },
   "engineering": {
     "console": "Konsol Engineer",
     "masterData": "Master Data",
@@ -76,14 +109,19 @@
     "addCustomer": "Tambah Customer",
     "addLine": "Tambah Line",
     "addBoard": "Tambah Board",
+    "addSection": "Tambah Section",
     "customerName": "Nama Customer",
     "lineName": "Nama Line",
     "boardName": "Nama Board",
+    "sectionName": "Nama Section",
+    "partNumber": "Part Number",
     "active": "Aktif",
     "inactive": "Nonaktif"
   },
   "sync": {
     "title": "Sinkron ke Cloud",
+    "syncStatus": "Status Sinkron",
+    "syncHistory": "Riwayat Sinkron",
     "syncNow": "Sinkron Sekarang",
     "lastSync": "Sinkron Terakhir",
     "pendingItems": "Item Tertunda",
@@ -91,13 +129,18 @@
     "syncComplete": "Sinkron Selesai",
     "syncFailed": "Sinkron Gagal",
     "itemsToSync": "item untuk disinkron",
-    "syncing": "Menyinkron",
+    "syncing": "Menyinkron...",
     "paused": "Dijeda",
     "cancelled": "Dibatalkan",
     "pauseSync": "Jeda Sinkron",
     "cancelSync": "Batal Sinkron",
     "resumeSync": "Lanjutkan Sinkron",
-    "retrySync": "Coba Lagi"
+    "retrySync": "Coba Lagi",
+    "autoSync": "Auto Sinkron",
+    "nextSync": "Sinkron berikutnya dalam",
+    "recordsReady": "record siap diupload",
+    "allSynced": "Semua Tersinkron!",
+    "uploadedImages": "Gambar Terupload"
   },
   "admin": {
     "panel": "Panel Super Admin",
@@ -137,7 +180,14 @@
     "category": "Kategori",
     "onlyUnread": "Belum Dibaca Saja",
     "all": "Semua",
-    "unread": "Belum Dibaca"
+    "unread": "Belum Dibaca",
+    "noNotifications": "Tidak ada notifikasi",
+    "allCaughtUp": "Semua sudah selesai!",
+    "newFalseCall": "False Call Baru Menunggu Approval",
+    "overrideApproved": "Override Disetujui",
+    "overrideRejected": "Override Ditolak",
+    "woStarted": "Work Order Dimulai",
+    "woCompleted": "Work Order Selesai"
   },
   "systemHealth": {
     "title": "Kesehatan Sistem",
@@ -163,7 +213,8 @@
     "completed": "Selesai",
     "failed": "Gagal",
     "pass": "Lolos",
-    "fail": "Gagal"
+    "fail": "Gagal",
+    "success": "Berhasil"
   },
   "buttons": {
     "save": "Simpan",
@@ -182,7 +233,10 @@
     "upload": "Unggah",
     "filter": "Filter",
     "search": "Cari",
-    "refresh": "Perbarui"
+    "refresh": "Perbarui",
+    "next": "Selanjutnya",
+    "prev": "Sebelumnya",
+    "goBack": "Kembali"
   },
   "states": {
     "emptyDefault": "Belum ada data.",
@@ -196,6 +250,7 @@
     "noBoards": "Tidak ada board.",
     "noUsers": "Tidak ada pengguna.",
     "noResults": "Tidak ada hasil.",
+    "noWorkOrders": "Tidak ada work order.",
     "tryDifferentFilters": "Coba sesuaikan filter Anda.",
     "checkBackLater": "Cek lagi nanti untuk pembaruan."
   },
@@ -230,6 +285,18 @@
     "description": "Deskripsi",
     "createdAt": "Dibuat Pada",
     "updatedAt": "Diperbarui Pada",
-    "createdBy": "Dibuat Oleh"
+    "createdBy": "Dibuat Oleh",
+    "items": "item",
+    "records": "record"
+  },
+  "table": {
+    "board": "Board",
+    "defect": "Defect",
+    "reason": "Alasan",
+    "operator": "Operator",
+    "status": "Status",
+    "actions": "Aksi",
+    "date": "Tanggal",
+    "time": "Waktu"
   }
 }

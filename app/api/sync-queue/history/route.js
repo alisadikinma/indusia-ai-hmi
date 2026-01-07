@@ -1,8 +1,10 @@
 /**
  * Sync History API
- * GET /api/sync-queue/history - Get sync history
+ * GET /api/sync-queue/history - Get sync history with pagination
  * 
- * Tries sync_log first, falls back to sync_history
+ * Query params:
+ *   - limit: number (default 10)
+ *   - offset: number (default 0)
  */
 
 import { NextResponse } from 'next/server'
@@ -12,16 +14,23 @@ export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url)
     const limit = parseInt(searchParams.get('limit')) || 10
+    const offset = parseInt(searchParams.get('offset')) || 0
 
-    // Try sync_log table first
+    // Get total count first
+    const { count: totalCount, error: countError } = await supabase
+      .from('sync_log')
+      .select('*', { count: 'exact', head: true })
+      .eq('sync_type', 'to_cloud')
+
+    // Get paginated data from sync_log table
     const { data: syncLogData, error: syncLogError } = await supabase
       .from('sync_log')
       .select('*')
       .eq('sync_type', 'to_cloud')
       .order('started_at', { ascending: false })
-      .limit(limit)
+      .range(offset, offset + limit - 1)
 
-    if (!syncLogError && syncLogData && syncLogData.length > 0) {
+    if (!syncLogError && syncLogData) {
       // Map sync_log format to UI format
       const mappedData = syncLogData.map(item => ({
         id: item.id,
@@ -34,22 +43,27 @@ export async function GET(request) {
         duration_ms: item.duration_ms,
         triggered_by: item.triggered_by,
         tables_synced: item.tables_synced,
-        table_details: item.table_details, // Per-table breakdown
+        table_details: item.table_details,
         error_message: item.error_message
       }))
 
-      return NextResponse.json({ success: true, data: mappedData })
+      return NextResponse.json({ 
+        success: true, 
+        data: mappedData,
+        total: totalCount || mappedData.length,
+        limit,
+        offset
+      })
     }
 
-    // Fallback to sync_history table
-    const { data: historyData, error: historyError } = await supabase
+    // Fallback to sync_history table if sync_log fails
+    const { data: historyData, error: historyError, count: historyCount } = await supabase
       .from('sync_history')
-      .select('*')
+      .select('*', { count: 'exact' })
       .order('created_at', { ascending: false })
-      .limit(limit)
+      .range(offset, offset + limit - 1)
 
-    if (!historyError && historyData && historyData.length > 0) {
-      // Map sync_history format to UI format
+    if (!historyError && historyData) {
       const mappedData = historyData.map(item => ({
         id: item.id,
         record_count: item.record_count,
@@ -62,15 +76,20 @@ export async function GET(request) {
         triggered_by: item.triggered_by
       }))
 
-      return NextResponse.json({ success: true, data: mappedData })
+      return NextResponse.json({ 
+        success: true, 
+        data: mappedData,
+        total: historyCount || mappedData.length,
+        limit,
+        offset
+      })
     }
 
-    // No data found in either table
-    return NextResponse.json({ success: true, data: [] })
+    // No data found
+    return NextResponse.json({ success: true, data: [], total: 0, limit, offset })
 
   } catch (error) {
     console.error('[API] GET /api/sync-queue/history error:', error)
-    // Return empty array on error (graceful degradation)
-    return NextResponse.json({ success: true, data: [] })
+    return NextResponse.json({ success: true, data: [], total: 0 })
   }
 }

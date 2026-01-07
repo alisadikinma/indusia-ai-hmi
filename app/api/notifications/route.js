@@ -1,5 +1,14 @@
+/**
+ * Notifications API
+ * 
+ * GET /api/notifications - List notifications for user
+ * POST /api/notifications - Create notification
+ * PATCH /api/notifications - Mark as read
+ */
+
 import { NextResponse } from 'next/server'
-import * as notificationsRepo from '@/lib/repos/notificationsRepo'
+
+const POSTGREST_URL = process.env.POSTGREST_URL || 'http://localhost:3001'
 
 /**
  * GET /api/notifications
@@ -17,36 +26,76 @@ export async function GET(request) {
       )
     }
 
-    const filters = {
-      read: searchParams.get('read') === 'true' ? true : searchParams.get('read') === 'false' ? false : undefined,
-      type: searchParams.get('type'),
-      severity: searchParams.get('severity'),
-      page: parseInt(searchParams.get('page')) || 1,
-      limit: parseInt(searchParams.get('limit')) || 50
-    }
+    const page = parseInt(searchParams.get('page')) || 1
+    const limit = parseInt(searchParams.get('limit')) || 50
+    const offset = (page - 1) * limit
 
-    // Remove undefined values
-    Object.keys(filters).forEach(key => {
-      if (filters[key] === undefined || filters[key] === null) delete filters[key]
-    })
+    // Build query string
+    let queryParts = [`user_id=eq.${userId}`]
+    
+    const readParam = searchParams.get('read')
+    if (readParam === 'true') queryParts.push('read=eq.true')
+    else if (readParam === 'false') queryParts.push('read=eq.false')
+    
+    const type = searchParams.get('type')
+    if (type) queryParts.push(`type=eq.${type}`)
+    
+    const severity = searchParams.get('severity')
+    if (severity) queryParts.push(`severity=eq.${severity}`)
 
-    const result = await notificationsRepo.list(userId, filters)
+    const queryString = queryParts.join('&')
 
-    if (result.error) {
+    // Get total count
+    const countRes = await fetch(
+      `${POSTGREST_URL}/notifications?${queryString}`,
+      { 
+        headers: { 
+          'Accept': 'application/json',
+          'Prefer': 'count=exact'
+        } 
+      }
+    )
+    const total = parseInt(countRes.headers.get('content-range')?.split('/')[1] || '0')
+
+    // Get paginated data
+    const dataRes = await fetch(
+      `${POSTGREST_URL}/notifications?${queryString}&order=created_at.desc&limit=${limit}&offset=${offset}`,
+      { headers: { 'Accept': 'application/json' } }
+    )
+
+    if (!dataRes.ok) {
+      const errorText = await dataRes.text()
       return NextResponse.json(
-        { success: false, error: result.error },
+        { success: false, error: errorText },
         { status: 500 }
       )
     }
 
+    const data = await dataRes.json()
+
+    // Transform to camelCase
+    const transformed = (data || []).map(item => ({
+      id: item.id,
+      userId: item.user_id,
+      type: item.type,
+      category: item.category,
+      title: item.title,
+      message: item.message,
+      severity: item.severity,
+      read: item.read,
+      metadata: item.metadata,
+      createdAt: item.created_at
+    }))
+
     return NextResponse.json({
       success: true,
-      data: result.data,
-      total: result.total,
-      page: filters.page,
-      limit: filters.limit
+      data: transformed,
+      total,
+      page,
+      limit
     })
   } catch (error) {
+    console.error('[API] GET /api/notifications error:', error)
     return NextResponse.json(
       { success: false, error: error.message },
       { status: 500 }
@@ -62,28 +111,55 @@ export async function POST(request) {
   try {
     const body = await request.json()
 
-    // Validate required fields
-    if (!body.userId || !body.title || !body.message) {
+    // Handle snake_case or camelCase input
+    const userId = body.userId || body.user_id
+    const title = body.title
+    const message = body.message
+
+    if (!userId || !title || !message) {
       return NextResponse.json(
         { success: false, error: 'Missing required fields: userId, title, message' },
         { status: 400 }
       )
     }
 
-    const result = await notificationsRepo.create(body)
+    const dbData = {
+      user_id: userId,
+      type: body.type || 'WORKFLOW',
+      category: body.category || 'GENERAL',
+      title,
+      message,
+      severity: body.severity || 'INFO',
+      metadata: body.metadata ? (typeof body.metadata === 'string' ? body.metadata : JSON.stringify(body.metadata)) : null,
+      read: false,
+      created_at: new Date().toISOString()
+    }
 
-    if (result.error) {
+    const response = await fetch(`${POSTGREST_URL}/notifications`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Prefer': 'return=representation'
+      },
+      body: JSON.stringify(dbData)
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
       return NextResponse.json(
-        { success: false, error: result.error },
+        { success: false, error: errorText },
         { status: 500 }
       )
     }
 
+    const data = await response.json()
+
     return NextResponse.json(
-      { success: true, data: result.data },
+      { success: true, data: data[0] || data },
       { status: 201 }
     )
   } catch (error) {
+    console.error('[API] POST /api/notifications error:', error)
     return NextResponse.json(
       { success: false, error: error.message },
       { status: 500 }
@@ -101,29 +177,74 @@ export async function PATCH(request) {
 
     // Mark all as read for user
     if (body.userId && body.markAllRead) {
-      const result = await notificationsRepo.markAllAsRead(body.userId)
-      if (result.error) {
+      const response = await fetch(
+        `${POSTGREST_URL}/notifications?user_id=eq.${body.userId}&read=eq.false`,
+        {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'Prefer': 'return=representation'
+          },
+          body: JSON.stringify({ read: true })
+        }
+      )
+
+      if (!response.ok) {
+        const errorText = await response.text()
         return NextResponse.json(
-          { success: false, error: result.error },
+          { success: false, error: errorText },
           { status: 500 }
         )
       }
+
       return NextResponse.json({ success: true, data: { markedAllRead: true } })
     }
 
-    // Mark specific notifications as read
-    if (body.ids && Array.isArray(body.ids)) {
-      const results = await Promise.all(
-        body.ids.map(id => notificationsRepo.markAsRead(id))
+    // Mark specific notification as read
+    if (body.id) {
+      const response = await fetch(
+        `${POSTGREST_URL}/notifications?id=eq.${body.id}`,
+        {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'Prefer': 'return=representation'
+          },
+          body: JSON.stringify({ read: true })
+        }
       )
-      const errors = results.filter(r => r.error)
-      if (errors.length > 0) {
+
+      if (!response.ok) {
+        const errorText = await response.text()
         return NextResponse.json(
-          { success: false, error: 'Some notifications failed to update' },
+          { success: false, error: errorText },
           { status: 500 }
         )
       }
-      return NextResponse.json({ success: true, data: { updated: body.ids.length } })
+
+      return NextResponse.json({ success: true, data: { updated: 1 } })
+    }
+
+    // Mark multiple as read
+    if (body.ids && Array.isArray(body.ids)) {
+      const results = await Promise.all(
+        body.ids.map(async (id) => {
+          const res = await fetch(
+            `${POSTGREST_URL}/notifications?id=eq.${id}`,
+            {
+              method: 'PATCH',
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({ read: true })
+            }
+          )
+          return res.ok
+        })
+      )
+      
+      const successCount = results.filter(Boolean).length
+      return NextResponse.json({ success: true, data: { updated: successCount } })
     }
 
     return NextResponse.json(
@@ -131,6 +252,7 @@ export async function PATCH(request) {
       { status: 400 }
     )
   } catch (error) {
+    console.error('[API] PATCH /api/notifications error:', error)
     return NextResponse.json(
       { success: false, error: error.message },
       { status: 500 }

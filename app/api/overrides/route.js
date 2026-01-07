@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server'
 import * as overridesRepo from '@/lib/repos/overridesRepo'
-import * as datasetQueueRepo from '@/lib/repos/datasetQueueRepo'
 import { createOverrideSchema, overrideFiltersSchema, paginationSchema } from '@/lib/validations/schemas'
 import { validate, validationErrorResponse, validateQueryParams } from '@/lib/validations/validate'
 import { withAuth } from '@/lib/auth/apiAuth'
 import { filterBySection, validateSectionAccess, getSectionFilter } from '@/lib/auth/sectionAccess'
 import { sanitizeRequestBody } from '@/lib/utils/sanitize'
+import { notifyManagersNewOverride } from '@/lib/notificationHelper'
 
 /**
  * GET /api/overrides
@@ -102,93 +102,7 @@ async function handlePOST(request) {
     // Sanitize input
     const sanitizedBody = sanitizeRequestBody(body)
 
-    // ============================================
-    // Annotation-based override flow (has images array)
-    // ============================================
-    const hasAnnotations = Array.isArray(sanitizedBody.images) && sanitizedBody.images.length > 0
-    console.log('[POST /api/overrides] hasAnnotations:', hasAnnotations)
-
-    if (hasAnnotations) {
-      // Annotation-based override flow
-      const {
-        board_id,
-        section_id,
-        line_id,
-        customer_id,
-        override_type,
-        reason,
-        correct_class,
-        submitted_by,
-        submitted_by_name,
-        images
-      } = sanitizedBody
-
-      // Basic validation for annotation flow
-      if (!board_id || !override_type || !reason) {
-        return NextResponse.json(
-          { success: false, error: 'board_id, override_type, and reason are required' },
-          { status: 400 }
-        )
-      }
-
-      // Validate section access if section_id provided
-      if (section_id) {
-        try {
-          validateSectionAccess(request.user, section_id)
-        } catch (accessError) {
-          return NextResponse.json(
-            { success: false, error: accessError.message, code: accessError.code },
-            { status: accessError.statusCode || 403 }
-          )
-        }
-      }
-
-      // Create override with annotations
-      const result = await overridesRepo.createWithAnnotation({
-        board_id,
-        section_id,
-        line_id,
-        customer_id,
-        override_type,
-        reason,
-        correct_class,
-        submitted_by: submitted_by || request.user?.id,
-        submitted_by_name: submitted_by_name || request.user?.name,
-        images
-      })
-
-      if (result.error) {
-        return NextResponse.json(
-          { success: false, error: result.error },
-          { status: 500 }
-        )
-      }
-
-      // Auto-queue for training based on override type
-      if (result.data) {
-        try {
-          await datasetQueueRepo.autoQueueFromOverride({
-            id: result.data.id,
-            override_type
-          })
-        } catch (queueError) {
-          // Log but don't fail the override creation
-          console.error('[POST /api/overrides] Auto-queue error:', queueError)
-        }
-      }
-
-      return NextResponse.json(
-        {
-          success: true,
-          data: result.data,
-          imageError: result.imageError // Include if image insert had issues
-        },
-        { status: 201 }
-      )
-    }
-
-    // Original flow - validate with schema
-    console.log('[POST /api/overrides] Using original flow (no annotations)')
+    // Validate with schema
     const validation = validate(createOverrideSchema, sanitizedBody)
     if (!validation.success) {
       console.log('[POST /api/overrides] Validation failed:', validation.errors)
@@ -233,6 +147,14 @@ async function handlePOST(request) {
     // Log if duplicate was detected
     if (result.duplicate) {
       console.log(`[POST /api/overrides] Duplicate detected for board_id: ${data.board_id}, returning existing record`)
+    } else {
+      // Notify managers about new false call (non-blocking)
+      notifyManagersNewOverride({
+        id: result.data?.id,
+        boardId: data.board_id,
+        operatorName: data.operator_name,
+        workOrderId: data.work_order_id
+      }).catch(err => console.error('[Notification] Failed to notify managers:', err))
     }
 
     return NextResponse.json(

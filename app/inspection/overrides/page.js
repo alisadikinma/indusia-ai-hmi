@@ -1,22 +1,25 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { Search, Calendar, RefreshCw, Loader2, AlertCircle, Inbox } from 'lucide-react';
+import { Search, Calendar, RefreshCw, Loader2, AlertCircle, Inbox, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useOverrides } from '@/hooks/useOverrides';
+import { useI18nContext } from '@/context/I18nContext';
 import SectionHeader from '@/components/common/SectionHeader';
 import Card from '@/components/common/Card';
 import StatusBadge from '@/components/common/StatusBadge';
 import OverrideReviewModal from '@/components/inspection/OverrideReviewModal';
 import { useToast } from '@/hooks/useToast';
 
+const PAGE_SIZE = 10;
+
 export default function OverrideApprovalsPage() {
   const router = useRouter();
   const { user, hasMenuAccess } = useAuth();
   const { showToast } = useToast();
+  const { t } = useI18nContext();
 
-  // Use the useOverrides hook - NO MOCK DATA
   const {
     overrides,
     loading,
@@ -31,25 +34,26 @@ export default function OverrideApprovalsPage() {
 
   const [statusFilter, setStatusFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
   const [reviewModalOpen, setReviewModalOpen] = useState(false);
   const [selectedOverride, setSelectedOverride] = useState(null);
 
-  // Check access via database permissions
+  // Check access
   if (!user || !hasMenuAccess('menu_overrides')) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center">
         <div className="bg-indusia-surface rounded-xl shadow-xl border border-indusia-border p-8 max-w-md text-center">
           <h2 className="text-xl font-bold text-indusia-text mb-3">
-            Access Denied
+            {t('status.error')}
           </h2>
           <p className="text-sm text-indusia-textMuted mb-6">
-            You do not have permission to access the Override Approval Queue.
+            {t('states.noResults')}
           </p>
           <button
             onClick={() => router.back()}
             className="px-6 py-3 bg-indusia-primary text-white rounded-lg font-medium hover:opacity-90 transition-opacity"
           >
-            Go Back
+            {t('buttons.cancel')}
           </button>
         </div>
       </div>
@@ -59,29 +63,44 @@ export default function OverrideApprovalsPage() {
   const allowedSectionIds = user?.sections || [];
   const userRole = user?.role || '';
 
-  const filteredOverrides = overrides
-    .filter((override) => {
-      if (userRole === 'manager') {
-        return allowedSectionIds.length === 0 || allowedSectionIds.includes(override.sectionId);
-      }
-      return true;
-    })
-    .filter((override) => {
-      if (statusFilter === 'all') return true;
-      return override.status === statusFilter;
-    })
-    .filter((override) => {
-      if (!searchQuery) return true;
-      const query = searchQuery.toLowerCase();
-      return (
-        (override.boardId || '').toLowerCase().includes(query) ||
-        (override.operator || override.operatorName || '').toLowerCase().includes(query)
-      );
-    });
+  // Filter overrides
+  const filteredOverrides = useMemo(() => {
+    return overrides
+      .filter((override) => {
+        if (userRole === 'manager') {
+          return allowedSectionIds.length === 0 || allowedSectionIds.includes(override.sectionId);
+        }
+        return true;
+      })
+      .filter((override) => {
+        if (statusFilter === 'all') return true;
+        return override.status === statusFilter;
+      })
+      .filter((override) => {
+        if (!searchQuery) return true;
+        const query = searchQuery.toLowerCase();
+        return (
+          (override.boardId || '').toLowerCase().includes(query) ||
+          (override.operator || override.operatorName || '').toLowerCase().includes(query)
+        );
+      });
+  }, [overrides, userRole, allowedSectionIds, statusFilter, searchQuery]);
+
+  // Pagination
+  const totalPages = Math.ceil(filteredOverrides.length / PAGE_SIZE);
+  const paginatedOverrides = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE;
+    return filteredOverrides.slice(start, start + PAGE_SIZE);
+  }, [filteredOverrides, currentPage]);
+
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [statusFilter, searchQuery]);
 
   const handleStatusFilterChange = (status) => {
     setStatusFilter(status);
-    // Also update API filter
+    setCurrentPage(1);
     if (status === 'all') {
       setFilters({ status: null });
     } else {
@@ -97,19 +116,17 @@ export default function OverrideApprovalsPage() {
   const handleApprove = async (id, reviewerNotes) => {
     try {
       await approveOverride(id, user?.id, user?.name, reviewerNotes);
-
       showToast({
-        title: 'Override approved',
-        description: 'Added to cloud sync queue.',
+        title: t('manager.approved'),
+        description: t('sync.syncComplete'),
         variant: 'success',
       });
-
       setReviewModalOpen(false);
       setSelectedOverride(null);
     } catch (err) {
       console.error('Failed to approve:', err);
       showToast({
-        title: 'Failed to approve',
+        title: t('status.failed'),
         description: err.message,
         variant: 'error',
       });
@@ -119,18 +136,16 @@ export default function OverrideApprovalsPage() {
   const handleReject = async (id, reviewerNotes) => {
     try {
       await rejectOverride(id, user?.id, user?.name, reviewerNotes);
-
       showToast({
-        title: 'Override rejected',
+        title: t('manager.rejected'),
         variant: 'error',
       });
-
       setReviewModalOpen(false);
       setSelectedOverride(null);
     } catch (err) {
       console.error('Failed to reject:', err);
       showToast({
-        title: 'Failed to reject',
+        title: t('status.failed'),
         description: err.message,
         variant: 'error',
       });
@@ -140,13 +155,13 @@ export default function OverrideApprovalsPage() {
   const handleRefresh = async () => {
     await refreshOverrides();
     showToast({
-      title: 'Refreshed',
-      description: 'Override list updated.',
+      title: t('buttons.refresh'),
+      description: t('sync.syncComplete'),
       variant: 'success',
     });
   };
 
-  // Calculate status counts from current overrides
+  // Status counts
   const statusCounts = {
     all: overrides.length,
     pending: stats?.pending ?? overrides.filter((o) => o.status === 'pending').length,
@@ -154,29 +169,36 @@ export default function OverrideApprovalsPage() {
     rejected: stats?.rejected ?? overrides.filter((o) => o.status === 'rejected').length,
   };
 
+  const statusLabels = {
+    all: t('notifications.all'),
+    pending: t('manager.pending'),
+    approved: t('manager.approved'),
+    rejected: t('manager.rejected'),
+  };
+
   return (
     <div>
       <SectionHeader
-        title="Override Approval Queue"
-        description="Review operator-submitted false call reports before sending them to the cloud training pipeline."
+        title={t('manager.overrideQueue')}
+        description={t('manager.pendingReview')}
       />
 
       {/* Stats Cards */}
       <div className="grid grid-cols-4 gap-4 mb-6">
         <div className="bg-indusia-surface rounded-lg border border-indusia-border p-4">
-          <p className="text-xs text-indusia-textMuted uppercase tracking-wide mb-1">Total</p>
+          <p className="text-xs text-indusia-textMuted uppercase tracking-wide mb-1">{t('common.total')}</p>
           <p className="text-2xl font-bold text-indusia-text">{statusCounts.all}</p>
         </div>
         <div className="bg-indusia-surface rounded-lg border border-indusia-border p-4">
-          <p className="text-xs text-indusia-textMuted uppercase tracking-wide mb-1">Pending</p>
+          <p className="text-xs text-indusia-textMuted uppercase tracking-wide mb-1">{t('manager.pending')}</p>
           <p className="text-2xl font-bold text-indusia-warning">{statusCounts.pending}</p>
         </div>
         <div className="bg-indusia-surface rounded-lg border border-indusia-border p-4">
-          <p className="text-xs text-indusia-textMuted uppercase tracking-wide mb-1">Approved</p>
+          <p className="text-xs text-indusia-textMuted uppercase tracking-wide mb-1">{t('manager.approved')}</p>
           <p className="text-2xl font-bold text-indusia-pass">{statusCounts.approved}</p>
         </div>
         <div className="bg-indusia-surface rounded-lg border border-indusia-border p-4">
-          <p className="text-xs text-indusia-textMuted uppercase tracking-wide mb-1">Rejected</p>
+          <p className="text-xs text-indusia-textMuted uppercase tracking-wide mb-1">{t('manager.rejected')}</p>
           <p className="text-2xl font-bold text-indusia-fail">{statusCounts.rejected}</p>
         </div>
       </div>
@@ -198,7 +220,7 @@ export default function OverrideApprovalsPage() {
                   }
                 `}
               >
-                {status} ({statusCounts[status]})
+                {statusLabels[status]} ({statusCounts[status]})
               </button>
             ))}
           </div>
@@ -208,17 +230,12 @@ export default function OverrideApprovalsPage() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-indusia-textMuted" />
               <input
                 type="text"
-                placeholder="Search Board ID / Operator"
+                placeholder={t('buttons.search')}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-10 pr-4 py-2 bg-indusia-bg border border-indusia-border rounded-lg text-sm text-indusia-text placeholder-indusia-textMuted focus:outline-none focus:ring-2 focus:ring-indusia-primary focus:border-transparent w-64"
               />
             </div>
-
-            <button className="px-4 py-2 bg-indusia-bg border border-indusia-border rounded-lg text-sm text-indusia-textMuted hover:text-indusia-text transition-colors flex items-center gap-2">
-              <Calendar className="w-4 h-4" />
-              Date Range
-            </button>
 
             <button
               onClick={handleRefresh}
@@ -230,7 +247,7 @@ export default function OverrideApprovalsPage() {
               ) : (
                 <RefreshCw className="w-4 h-4" />
               )}
-              Refresh
+              {t('buttons.refresh')}
             </button>
           </div>
         </div>
@@ -240,138 +257,155 @@ export default function OverrideApprovalsPage() {
       {error && (
         <div className="bg-red-500/10 border border-red-500/30 rounded-lg px-4 py-3 mb-6 flex items-center gap-3">
           <AlertCircle className="w-5 h-5 text-red-400" />
-          <p className="text-sm text-red-400">Error loading overrides: {error}</p>
+          <p className="text-sm text-red-400">{t('status.error')}: {error}</p>
           <button
             onClick={handleRefresh}
             className="ml-auto text-sm text-red-400 hover:text-red-300 underline"
           >
-            Retry
+            {t('buttons.retry')}
           </button>
         </div>
       )}
 
       {/* Override List */}
       <Card
-        title={`${statusFilter === 'all' ? 'All' : statusFilter.charAt(0).toUpperCase() + statusFilter.slice(1)} Overrides`}
+        title={`${statusLabels[statusFilter]} Overrides`}
         subtitle={`${filteredOverrides.length} ${filteredOverrides.length === 1 ? 'item' : 'items'}`}
       >
         {loading && filteredOverrides.length === 0 ? (
           <div className="text-center py-12">
             <Loader2 className="w-8 h-8 animate-spin mx-auto text-indusia-primary mb-3" />
-            <p className="text-indusia-textMuted">Loading overrides...</p>
+            <p className="text-indusia-textMuted">{t('states.loadingDefault')}</p>
           </div>
         ) : filteredOverrides.length === 0 ? (
           <div className="text-center py-12">
             <Inbox className="w-12 h-12 text-indusia-textMuted mx-auto mb-3" />
-            <p className="text-indusia-textMuted font-medium">No overrides found</p>
+            <p className="text-indusia-textMuted font-medium">{t('states.noOverrides')}</p>
             <p className="text-sm text-indusia-textMuted mt-1">
-              {statusFilter !== 'all' 
-                ? `No ${statusFilter} overrides at this time.`
-                : 'Operator false call submissions will appear here.'}
+              {t('states.checkBackLater')}
             </p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="border-b border-indusia-border">
-                <tr>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-indusia-textMuted uppercase tracking-wide">
-                    Board
-                  </th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-indusia-textMuted uppercase tracking-wide">
-                    Defect
-                  </th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-indusia-textMuted uppercase tracking-wide">
-                    Reason
-                  </th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-indusia-textMuted uppercase tracking-wide">
-                    Operator
-                  </th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-indusia-textMuted uppercase tracking-wide">
-                    Status
-                  </th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-indusia-textMuted uppercase tracking-wide">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredOverrides.map((override) => (
-                  <tr
-                    key={override.id}
-                    className="border-b border-indusia-border hover:bg-indusia-surfaceMuted transition-colors"
-                  >
-                    <td className="px-4 py-4">
-                      <div>
-                        <p className="text-sm font-semibold text-indusia-text">
-                          {override.boardId}
-                        </p>
-                        <p className="text-xs text-indusia-textMuted mt-1">
-                          {override.timestamp || override.createdAt}
-                        </p>
-                      </div>
-                    </td>
-                    <td className="px-4 py-4">
-                      <div>
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="border-b border-indusia-border">
+                  <tr>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-indusia-textMuted uppercase tracking-wide">
+                      {t('hmi.board')}
+                    </th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-indusia-textMuted uppercase tracking-wide">
+                      {t('hmi.defectType')}
+                    </th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-indusia-textMuted uppercase tracking-wide">
+                      {t('hmi.reason')}
+                    </th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-indusia-textMuted uppercase tracking-wide">
+                      Operator
+                    </th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-indusia-textMuted uppercase tracking-wide">
+                      Status
+                    </th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-indusia-textMuted uppercase tracking-wide">
+                      {t('common.actions')}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {paginatedOverrides.map((override) => (
+                    <tr
+                      key={override.id}
+                      className="border-b border-indusia-border hover:bg-indusia-surfaceMuted transition-colors"
+                    >
+                      <td className="px-4 py-4">
+                        <div>
+                          <p className="text-sm font-semibold text-indusia-text">
+                            {override.boardId}
+                          </p>
+                          <p className="text-xs text-indusia-textMuted mt-1">
+                            {override.timestamp || override.createdAt}
+                          </p>
+                        </div>
+                      </td>
+                      <td className="px-4 py-4">
                         <p className="text-sm text-indusia-text">
                           {override.defectType || 'FALSE_POSITIVE'}
                         </p>
-                        {override.confidence ? (
-                          <p className="text-xs text-indusia-textMuted mt-1">
-                            {override.location} - {override.confidence}%
+                      </td>
+                      <td className="px-4 py-4">
+                        <div className="max-w-xs">
+                          <p className="text-sm text-indusia-text">
+                            {override.reason}
                           </p>
-                        ) : override.location ? (
-                          <p className="text-xs text-indusia-textMuted mt-1">
-                            {override.location}
-                          </p>
-                        ) : null}
-                      </div>
-                    </td>
-                    <td className="px-4 py-4">
-                      <div className="max-w-xs">
+                          {override.reason === 'OTHER' && override.operatorNotes && (
+                            <p className="text-xs text-indusia-textMuted mt-1 italic truncate" title={override.operatorNotes}>
+                              &quot;{override.operatorNotes}&quot;
+                            </p>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-4">
                         <p className="text-sm text-indusia-text">
-                          {override.reason}
+                          {override.operator || override.operatorName}
                         </p>
-                        {override.reason === 'OTHER' && override.operatorNotes && (
-                          <p className="text-xs text-indusia-textMuted mt-1 italic truncate" title={override.operatorNotes}>
-                            &quot;{override.operatorNotes}&quot;
-                          </p>
+                      </td>
+                      <td className="px-4 py-4">
+                        <StatusBadge
+                          status={override.status}
+                          label={statusLabels[override.status] || override.status.toUpperCase()}
+                        />
+                      </td>
+                      <td className="px-4 py-4">
+                        {override.status === 'pending' ? (
+                          <button
+                            onClick={() => handleReview(override)}
+                            className="px-4 py-2 bg-indusia-primary text-white text-sm font-medium rounded-lg hover:opacity-90 transition-opacity"
+                          >
+                            {t('manager.reviewOverride')}
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => handleReview(override)}
+                            className="px-4 py-2 bg-indusia-surfaceMuted text-indusia-text text-sm font-medium rounded-lg hover:bg-indusia-border transition-colors"
+                          >
+                            {t('buttons.view')}
+                          </button>
                         )}
-                      </div>
-                    </td>
-                    <td className="px-4 py-4">
-                      <p className="text-sm text-indusia-text">
-                        {override.operator || override.operatorName}
-                      </p>
-                    </td>
-                    <td className="px-4 py-4">
-                      <StatusBadge
-                        status={override.status}
-                        label={override.status.toUpperCase()}
-                      />
-                    </td>
-                    <td className="px-4 py-4">
-                      {override.status === 'pending' ? (
-                        <button
-                          onClick={() => handleReview(override)}
-                          className="px-4 py-2 bg-indusia-primary text-white text-sm font-medium rounded-lg hover:opacity-90 transition-opacity"
-                        >
-                          Review
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => handleReview(override)}
-                          className="px-4 py-2 bg-indusia-surfaceMuted text-indusia-text text-sm font-medium rounded-lg hover:bg-indusia-border transition-colors"
-                        >
-                          View
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between px-4 py-4 border-t border-indusia-border">
+                <p className="text-sm text-indusia-textMuted">
+                  {t('common.showing')} {(currentPage - 1) * PAGE_SIZE + 1}-{Math.min(currentPage * PAGE_SIZE, filteredOverrides.length)} {t('common.of')} {filteredOverrides.length}
+                </p>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                    className="px-3 py-1.5 bg-indusia-bg rounded text-sm text-indusia-text disabled:opacity-50 disabled:cursor-not-allowed hover:bg-indusia-border transition-colors flex items-center gap-1"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  <span className="text-sm text-indusia-text px-2">
+                    {t('common.page')} {currentPage} / {totalPages}
+                  </span>
+                  <button
+                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                    disabled={currentPage === totalPages}
+                    className="px-3 py-1.5 bg-indusia-bg rounded text-sm text-indusia-text disabled:opacity-50 disabled:cursor-not-allowed hover:bg-indusia-border transition-colors flex items-center gap-1"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </Card>
 

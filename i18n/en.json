@@ -31,7 +31,9 @@
     "login": "Login",
     "logout": "Logout",
     "engineeringMode": "Engineering Mode",
-    "online": "Online"
+    "online": "Online",
+    "accessDenied": "Access Denied",
+    "noPermission": "You do not have permission to access this page."
   },
   "hmi": {
     "liveView": "Live Inspection View",
@@ -49,12 +51,16 @@
     "optionalNotes": "Optional notes",
     "aiDecision": "AI Decision",
     "operatorOverride": "Operator Override",
-    "selectReason": "Select reason"
+    "selectReason": "Select reason",
+    "good": "GOOD",
+    "ng": "NG",
+    "pass": "PASS",
+    "fail": "FAIL"
   },
   "manager": {
-    "overrideQueue": "Override Queue",
-    "pendingReview": "Pending Review",
-    "reviewOverride": "Review Override",
+    "overrideQueue": "Override Approval Queue",
+    "pendingReview": "Review operator-submitted false call reports before sending them to the cloud training pipeline.",
+    "reviewOverride": "Review",
     "approve": "Approve",
     "reject": "Reject",
     "approved": "Approved",
@@ -66,6 +72,33 @@
     "approvalComment": "Approval Comment",
     "addComment": "Add comment (optional)"
   },
+  "workOrder": {
+    "title": "Work Order",
+    "create": "Create Work Order",
+    "edit": "Edit Work Order",
+    "woNumber": "WO Number",
+    "customer": "Customer",
+    "board": "Board",
+    "line": "Line",
+    "lotSize": "Lot Size",
+    "status": "Status",
+    "progress": "Progress",
+    "startDate": "Start Date",
+    "dueDate": "Due Date",
+    "completedDate": "Completed Date",
+    "goodQty": "Good Qty",
+    "ngQty": "NG Qty",
+    "falseCallQty": "False Call Qty",
+    "statusDraft": "Draft",
+    "statusReady": "Ready",
+    "statusActive": "Active",
+    "statusCompleted": "Completed",
+    "statusCancelled": "Cancelled",
+    "startWO": "Start WO",
+    "endWO": "End WO",
+    "woStarted": "Work Order Started",
+    "woCompleted": "Work Order Completed"
+  },
   "engineering": {
     "console": "Engineering Console",
     "masterData": "Master Data",
@@ -76,14 +109,19 @@
     "addCustomer": "Add Customer",
     "addLine": "Add Line",
     "addBoard": "Add Board",
+    "addSection": "Add Section",
     "customerName": "Customer Name",
     "lineName": "Line Name",
     "boardName": "Board Name",
+    "sectionName": "Section Name",
+    "partNumber": "Part Number",
     "active": "Active",
     "inactive": "Inactive"
   },
   "sync": {
     "title": "Sync to Cloud",
+    "syncStatus": "Sync Status",
+    "syncHistory": "Sync History",
     "syncNow": "Sync Now",
     "lastSync": "Last Sync",
     "pendingItems": "Pending Items",
@@ -91,13 +129,18 @@
     "syncComplete": "Sync Complete",
     "syncFailed": "Sync Failed",
     "itemsToSync": "items to sync",
-    "syncing": "Syncing",
+    "syncing": "Syncing...",
     "paused": "Paused",
     "cancelled": "Cancelled",
     "pauseSync": "Pause Sync",
     "cancelSync": "Cancel Sync",
     "resumeSync": "Resume Sync",
-    "retrySync": "Retry Sync"
+    "retrySync": "Retry",
+    "autoSync": "Auto Sync",
+    "nextSync": "Next sync in",
+    "recordsReady": "records ready to upload",
+    "allSynced": "All Synced!",
+    "uploadedImages": "Uploaded Images"
   },
   "admin": {
     "panel": "Super Admin Panel",
@@ -116,7 +159,7 @@
     "enableUser": "Enable User"
   },
   "eventLog": {
-    "title": "Event Log / Audit Trail",
+    "title": "Event Log / Audit",
     "filters": "Filters",
     "eventType": "Event Type",
     "severity": "Severity",
@@ -131,13 +174,20 @@
   },
   "notifications": {
     "title": "Notifications",
-    "markAllRead": "Mark all read",
+    "markAllRead": "Mark all as read",
     "markAsRead": "Mark as read",
     "type": "Type",
     "category": "Category",
-    "onlyUnread": "Only Unread",
+    "onlyUnread": "Unread Only",
     "all": "All",
-    "unread": "Unread"
+    "unread": "Unread",
+    "noNotifications": "No notifications",
+    "allCaughtUp": "You're all caught up!",
+    "newFalseCall": "New False Call Awaiting Approval",
+    "overrideApproved": "Override Approved",
+    "overrideRejected": "Override Rejected",
+    "woStarted": "Work Order Started",
+    "woCompleted": "Work Order Completed"
   },
   "systemHealth": {
     "title": "System Health",
@@ -163,7 +213,8 @@
     "completed": "Completed",
     "failed": "Failed",
     "pass": "Pass",
-    "fail": "Fail"
+    "fail": "Fail",
+    "success": "Success"
   },
   "buttons": {
     "save": "Save",
@@ -182,20 +233,24 @@
     "upload": "Upload",
     "filter": "Filter",
     "search": "Search",
-    "refresh": "Refresh"
+    "refresh": "Refresh",
+    "next": "Next",
+    "prev": "Previous",
+    "goBack": "Go Back"
   },
   "states": {
-    "emptyDefault": "No data to display.",
+    "emptyDefault": "No data available.",
     "loadingDefault": "Loading...",
-    "errorDefault": "Something went wrong.",
-    "noEvents": "No events found for the selected filters.",
+    "errorDefault": "An error occurred.",
+    "noEvents": "No events for this filter.",
     "noNotifications": "You're all caught up.",
-    "noOverrides": "No overrides waiting for review.",
+    "noOverrides": "No pending overrides.",
     "noCustomers": "No customers found.",
     "noLines": "No lines found.",
     "noBoards": "No boards found.",
     "noUsers": "No users found.",
     "noResults": "No results found.",
+    "noWorkOrders": "No work orders found.",
     "tryDifferentFilters": "Try adjusting your filters.",
     "checkBackLater": "Check back later for updates."
   },
@@ -230,6 +285,18 @@
     "description": "Description",
     "createdAt": "Created At",
     "updatedAt": "Updated At",
-    "createdBy": "Created By"
+    "createdBy": "Created By",
+    "items": "items",
+    "records": "records"
+  },
+  "table": {
+    "board": "Board",
+    "defect": "Defect",
+    "reason": "Reason",
+    "operator": "Operator",
+    "status": "Status",
+    "actions": "Actions",
+    "date": "Date",
+    "time": "Time"
   }
 }
