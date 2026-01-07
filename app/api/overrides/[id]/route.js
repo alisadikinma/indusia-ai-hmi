@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import * as overridesRepo from '@/lib/repos/overridesRepo'
 import { syncQueueRepo } from '@/lib/repos/syncQueueRepo'
 import { withAuth } from '@/lib/auth/apiAuth'
+import { uploadOverrideImages, isCloudSyncConfigured } from '@/lib/sync'
 
 /**
  * GET /api/overrides/:id
@@ -33,7 +34,8 @@ async function handleGET(request, { params }) {
  * 
  * Flow when APPROVED:
  * 1. Update override status → 'approved'
- * 2. Add to sync_queue for cloud upload
+ * 2. Upload images to Supabase Storage (if cloud configured)
+ * 3. Add to sync_queue for cloud upload
  */
 async function handlePATCH(request, { params }) {
   try {
@@ -55,6 +57,8 @@ async function handlePATCH(request, { params }) {
     }
 
     let result
+    let imageUploadResult = null
+    
     if (body.action === 'approve') {
       result = await overridesRepo.approve(
         id,
@@ -62,6 +66,25 @@ async function handlePATCH(request, { params }) {
         body.reviewerName,
         body.reviewNotes || ''
       )
+      
+      // Upload images to Supabase Storage (if cloud configured)
+      if (result.data && isCloudSyncConfigured()) {
+        try {
+          const localPaths = result.data.localImagePaths || result.data.local_image_paths
+          if (localPaths) {
+            imageUploadResult = await uploadOverrideImages(id, localPaths)
+            
+            if (imageUploadResult.success && imageUploadResult.cloudPaths) {
+              // Update override with cloud paths
+              await overridesRepo.updateCloudPaths(id, JSON.stringify(imageUploadResult.cloudPaths))
+              console.log('[PATCH /api/overrides] Images uploaded to cloud:', id, imageUploadResult.uploadCount)
+            }
+          }
+        } catch (uploadError) {
+          console.warn('[PATCH /api/overrides] Cloud image upload failed:', uploadError)
+          // Don't fail the approval - images will sync later
+        }
+      }
       
       // Add to sync_queue for cloud upload (after approval)
       if (result.data) {
@@ -120,7 +143,11 @@ async function handlePATCH(request, { params }) {
       )
     }
 
-    return NextResponse.json({ success: true, data: result.data })
+    return NextResponse.json({ 
+      success: true, 
+      data: result.data,
+      imageUpload: imageUploadResult 
+    })
   } catch (error) {
     return NextResponse.json(
       { success: false, error: error.message },

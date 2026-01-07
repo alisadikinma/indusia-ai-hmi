@@ -168,12 +168,6 @@ export function LiveViewV3({
       const response = await authFetch(`/api/inspection/line-state/${lineId}`)
       const result = await response.json()
       
-      // DEBUG log disabled - uncomment for troubleshooting
-      // console.log(`[${isOperator ? 'Operator' : 'Manager'}] Fetched state:`, {
-      //   autoNgEnabled: result.data?.autoNgEnabled,
-      //   processStatus: result.data?.processStatus
-      // })
-      
       if (result.success && result.data) {
         // Calculate new autoNgEnabled value
         const newAutoNgEnabled = result.data.autoNgEnabled ?? true
@@ -198,11 +192,6 @@ export function LiveViewV3({
           currentInspection: result.data.currentInspection,
           autoNgEnabled: newAutoNgEnabled
         }
-        
-        // DEBUG log disabled - uncomment for troubleshooting
-        // if (!isOperator) {
-        //   console.log('[Manager] Setting syncedState.autoNgEnabled:', newSyncedState.autoNgEnabled)
-        // }
         
         setSyncedState(newSyncedState)
         setSyncLoaded(true)
@@ -241,9 +230,14 @@ export function LiveViewV3({
   // OPERATOR: Push SSE state to API whenever it changes
   // Using ref to track last synced state and prevent unnecessary API calls
   const lastSyncedRef = useRef(null)
+  const lastAutoNgRef = useRef(autoNgEnabled)
   
   useEffect(() => {
     if (!isOperator || !lineId) return
+    
+    // Check if autoNgEnabled changed specifically (high priority sync)
+    const autoNgChanged = lastAutoNgRef.current !== autoNgEnabled
+    lastAutoNgRef.current = autoNgEnabled
     
     // Create state snapshot - INCLUDE autoNgEnabled for consistent sync
     const stateToSync = {
@@ -264,13 +258,14 @@ export function LiveViewV3({
       autoNgEnabled: autoNgEnabled  // Include in comparison key
     })
     
-    if (lastSyncedRef.current === stateKey) {
+    // Skip if no change (unless autoNg specifically changed - force sync)
+    if (lastSyncedRef.current === stateKey && !autoNgChanged) {
       return // No change, skip sync
     }
     
     lastSyncedRef.current = stateKey
     
-    // Push to API
+    // Push to API (silent)
     authFetch(`/api/inspection/line-state/${lineId}`, {
       method: 'PUT',
       body: JSON.stringify({
@@ -281,26 +276,12 @@ export function LiveViewV3({
     
   }, [isOperator, lineId, processStatus, inspectionStage, hardwareStatus, currentInspection, autoNgEnabled, user])
   
-  // Toggle Auto-NG and save to API (operator only)
+  // Toggle Auto-NG (operator only)
+  // State change triggers push effect which syncs to API
   const toggleAutoNg = useCallback(() => {
     if (!isOperator) return
-    const newValue = !autoNgEnabled
-    console.log('[Operator] Toggle autoNgEnabled:', autoNgEnabled, '→', newValue)
-    setAutoNgEnabled(newValue)
-    
-    // Directly call API to ensure immediate sync
-    authFetch(`/api/inspection/line-state/${lineId}`, {
-      method: 'PUT',
-      body: JSON.stringify({
-        autoNgEnabled: newValue,
-        updatedBy: user?.name || 'Unknown'
-      })
-    }).then(res => res.json())
-      .then(result => {
-        console.log('[Operator] API response autoNgEnabled:', result.data?.autoNgEnabled)
-      })
-      .catch(err => console.warn('[Operator] Toggle save failed:', err))
-  }, [isOperator, autoNgEnabled, lineId, user])
+    setAutoNgEnabled(prev => !prev)
+  }, [isOperator])
   
   // Process control wrappers that save state to API
   const handleRunProcess = useCallback(async () => {
@@ -346,7 +327,7 @@ export function LiveViewV3({
     stageName: 'idle',
     message: 'Waiting for board...',
     stageIndex: 0,
-    totalStages: 3,
+    totalStages: 7,  // Match 7-stage flow
     icon: 'hourglass'
   })
 
@@ -393,10 +374,10 @@ export function LiveViewV3({
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [showUserMenu])
 
-  // DEBUG log disabled - uncomment for troubleshooting
+  // DEBUG: Log effective AUTO-NG state (disabled - uncomment for troubleshooting)
   // useEffect(() => {
   //   const effective = isOperator ? autoNgEnabled : syncedState.autoNgEnabled
-  //   console.log(`[DEBUG ${isOperator ? 'Operator' : 'Manager'}] AUTO-NG state:`, {
+  //   console.log(`[DEBUG ${isOperator ? 'Operator' : 'Manager'}] AUTO-NG render:`, {
   //     isOperator,
   //     localAutoNg: autoNgEnabled,
   //     syncedAutoNg: syncedState.autoNgEnabled,
@@ -499,45 +480,34 @@ export function LiveViewV3({
           const uploadResult = await uploadResponse.json()
           const localPaths = uploadResult.success ? uploadResult.paths : {}
           
-          if (uploadResult.success) {
-            console.log('[LiveView] ✅ False call images saved locally:', localPaths)
-          } else {
-            console.warn('[LiveView] ⚠️ Local save failed:', uploadResult.error)
+          // Step 2: Create Override record for Manager review
+          const overridePayload = {
+            board_id: boardId,
+            section_id: sectionId,
+            line_id: lineId,
+            customer_id: customerId,
+            override_type: overrideType,
+            defect_type: overrideType,
+            reason: falseCallData?.reason || 'UNSPECIFIED',
+            operator_notes: falseCallData?.notes || '',
+            operator_id: user?.id,
+            operator_name: user?.name,
+            local_image_path: localPaths?.top?.[0]?.path || localPaths?.bottom?.[0]?.path || '',
+            local_image_paths: JSON.stringify(localPaths),
           }
           
-          // Step 2: Create Override record for Manager review
           const overrideResponse = await authFetch('/api/overrides', {
             method: 'POST',
-            body: JSON.stringify({
-              board_id: boardId,
-              section_id: sectionId,
-              line_id: lineId,
-              customer_id: customerId,
-              override_type: overrideType,
-              defect_type: overrideType, // Required by schema
-              reason: falseCallData?.reason || 'UNSPECIFIED',
-              operator_notes: falseCallData?.notes || '',
-              operator_id: user?.id,
-              operator_name: user?.name,
-              // Local paths for cloud sync after approval
-              local_image_path: localPaths?.top?.[0]?.path || localPaths?.bottom?.[0]?.path || '',
-              local_image_paths: JSON.stringify(localPaths), // Store all paths
-            })
+            body: JSON.stringify(overridePayload)
           })
           
           const overrideResult = await overrideResponse.json()
           
-          if (overrideResult.success) {
-            if (overrideResult.duplicate) {
-              console.log('[LiveView] ℹ️ Override already exists for board:', boardId, '- using existing record:', overrideResult.data?.id)
-            } else {
-              console.log('[LiveView] ✅ Override created for Manager review:', overrideResult.data?.id)
-            }
-          } else {
-            console.warn('[LiveView] ⚠️ Override creation failed:', overrideResult.error)
+          if (!overrideResult.success) {
+            console.error('[LiveView] Override creation failed:', overrideResult.error)
           }
         } catch (err) {
-          console.warn('[LiveView] ⚠️ False call process error:', err)
+          console.error('[LiveView] False call process error:', err)
         }
       }
 
@@ -601,7 +571,7 @@ export function LiveViewV3({
           stageName: 'idle',
           message: 'Waiting for board...',
           stageIndex: 0,
-          totalStages: 3,
+          totalStages: 7,  // Match 7-stage flow
           icon: 'hourglass'
         })
       }
@@ -750,19 +720,22 @@ export function LiveViewV3({
   const simulateInspection = useCallback(async (result) => {
     if (!workOrder || activeInspection) return
 
-    // Simulate stages (matches dev.py: start, running, done)
-    const stages = ['start', 'running', 'done']
+    // Simulate stages (7-stage flow for dual-side inspection)
+    const stages = ['board_incoming', 'position_1', 'position_2', 'pcb_flipping', 'position_3', 'position_4', 'done']
     
-    for (const stage of stages) {
+    for (let i = 0; i < stages.length; i++) {
+      const stage = stages[i]
       setDevMockStage({
-        status: stage === 'done' ? 'ready' : stage === 'running' ? 'processing' : 'capturing',
+        status: stage === 'done' ? 'ready' : 'processing',
         stageName: stage,
-        message: getStageMessage(stage),
-        stageIndex: stages.indexOf(stage) + 1,
-        totalStages: 3,
-        icon: getStageIcon(stage)
+        message: stage === 'done' ? 'Ready for review' : 
+                 stage === 'pcb_flipping' ? 'Flipping PCB...' : 
+                 `Processing ${stage}...`,
+        stageIndex: i + 1,
+        totalStages: 7,
+        icon: stage === 'done' ? 'check' : stage === 'pcb_flipping' ? 'rotate-ccw' : 'cpu'
       })
-      await new Promise(r => setTimeout(r, 300)) // Fast simulation
+      await new Promise(r => setTimeout(r, 200)) // Fast simulation
     }
 
     // Get mock images
@@ -1234,32 +1207,52 @@ export function LiveViewV3({
             )} />
           </div>
 
-          {/* Auto-NG Toggle */}
-          <button
-            onClick={toggleAutoNg}
-            disabled={!isOperator}
-            className={cn(
-              "flex items-center gap-2 px-3 py-1.5 border transition-all",
-              !isOperator && "cursor-not-allowed",
+          {/* Auto-NG Toggle (Operator) / Indicator (Manager) */}
+          {isOperator ? (
+            <button
+              onClick={toggleAutoNg}
+              className={cn(
+                "flex items-center gap-2 px-3 py-1.5 border transition-all",
+                effectiveAutoNgEnabled 
+                  ? "border-phosphor-amber bg-phosphor-amber/10" 
+                  : "border-surface-border bg-surface-border/10",
+                "hover:border-text-tertiary"
+              )}
+              title={effectiveAutoNgEnabled ? "Auto-NG ON: Will auto-reject after 15s" : "Auto-NG OFF: Manual confirmation required"}
+            >
+              {effectiveAutoNgEnabled ? (
+                <ToggleRight className="w-4 h-4 text-phosphor-amber" />
+              ) : (
+                <ToggleLeft className="w-4 h-4 text-text-tertiary" />
+              )}
+              <span className={cn(
+                "font-mono text-xs font-bold",
+                effectiveAutoNgEnabled ? "text-phosphor-amber" : "text-text-tertiary"
+              )}>
+                AUTO-NG
+              </span>
+            </button>
+          ) : (
+            /* Manager: Read-only indicator */
+            <div className={cn(
+              "flex items-center gap-2 px-3 py-1.5 border",
               effectiveAutoNgEnabled 
                 ? "border-phosphor-amber bg-phosphor-amber/10" 
-                : "border-surface-border bg-surface-border/10",
-              isOperator && !effectiveAutoNgEnabled && "hover:border-text-tertiary"
-            )}
-            title={effectiveAutoNgEnabled ? "Auto-NG ON: Will auto-reject after 15s" : "Auto-NG OFF: Manual confirmation required"}
-          >
-            {effectiveAutoNgEnabled ? (
-              <ToggleRight className="w-4 h-4 text-phosphor-amber" />
-            ) : (
-              <ToggleLeft className="w-4 h-4 text-text-tertiary" />
-            )}
-            <span className={cn(
-              "font-mono text-xs font-bold",
-              effectiveAutoNgEnabled ? "text-phosphor-amber" : "text-text-tertiary"
+                : "border-surface-border bg-surface-border/10"
             )}>
-              AUTO-NG
-            </span>
-          </button>
+              {effectiveAutoNgEnabled ? (
+                <ToggleRight className="w-4 h-4 text-phosphor-amber" />
+              ) : (
+                <ToggleLeft className="w-4 h-4 text-text-tertiary" />
+              )}
+              <span className={cn(
+                "font-mono text-xs font-bold",
+                effectiveAutoNgEnabled ? "text-phosphor-amber" : "text-text-tertiary"
+              )}>
+                AUTO-NG {effectiveAutoNgEnabled ? 'ON' : 'OFF'}
+              </span>
+            </div>
+          )}
         </div>
       </div>
 

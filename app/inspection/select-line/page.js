@@ -20,9 +20,35 @@ import {
   Radio, Activity, ChevronRight, Factory, 
   Users, Clock, AlertTriangle, CheckCircle2,
   Cpu, Zap, Settings, Lock, Eye, Menu, LogOut, ChevronDown,
-  Package, TrendingUp, XCircle, Building2, RefreshCw
+  Package, TrendingUp, XCircle, Building2, RefreshCw,
+  Pause, Square, Timer
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+
+// Helper: Format duration from start time to now
+function formatDuration(startTime) {
+  if (!startTime) return null;
+  
+  const start = new Date(startTime);
+  const now = new Date();
+  const diffMs = now - start;
+  
+  if (diffMs < 0) return null;
+  
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMins / 60);
+  const diffDays = Math.floor(diffHours / 24);
+  
+  if (diffDays > 0) {
+    const remainingHours = diffHours % 24;
+    return `${diffDays}d ${remainingHours}h`;
+  } else if (diffHours > 0) {
+    const remainingMins = diffMins % 60;
+    return `${diffHours}h ${remainingMins}m`;
+  } else {
+    return `${diffMins}m`;
+  }
+}
 
 function LineCard({ line, section, isSelected, onSelect, currentUserId, isOperator }) {
   const statusConfig = {
@@ -33,19 +59,33 @@ function LineCard({ line, section, isSelected, onSelect, currentUserId, isOperat
       textClass: 'text-phosphor-green',
       dotClass: 'bg-phosphor-green'
     },
-    idle: { 
-      label: 'IDLE', 
-      icon: Clock,
+    paused: { 
+      label: 'PAUSED', 
+      icon: Pause,
       bgClass: 'bg-phosphor-amber/10 border-phosphor-amber/50',
       textClass: 'text-phosphor-amber',
       dotClass: 'bg-phosphor-amber'
     },
-    maintenance: { 
-      label: 'MAINTENANCE', 
-      icon: Settings,
+    stopped: { 
+      label: 'STOPPED', 
+      icon: Square,
       bgClass: 'bg-phosphor-red/10 border-phosphor-red/50',
       textClass: 'text-phosphor-red',
       dotClass: 'bg-phosphor-red'
+    },
+    idle: { 
+      label: 'IDLE', 
+      icon: Clock,
+      bgClass: 'bg-surface-border/50 border-surface-border',
+      textClass: 'text-text-tertiary',
+      dotClass: 'bg-text-tertiary'
+    },
+    maintenance: { 
+      label: 'MAINTENANCE', 
+      icon: Settings,
+      bgClass: 'bg-phosphor-magenta/10 border-phosphor-magenta/50',
+      textClass: 'text-phosphor-magenta',
+      dotClass: 'bg-phosphor-magenta'
     },
     offline: { 
       label: 'OFFLINE', 
@@ -66,7 +106,7 @@ function LineCard({ line, section, isSelected, onSelect, currentUserId, isOperat
   const isDisabledForOperator = isOperator && (isMaintenanceOrOffline || isInUseByOther);
   const isDisabled = isOperator ? isDisabledForOperator : isMaintenanceOrOffline;
 
-  const hasStats = line.inspected > 0 || line.status === 'running';
+  const hasStats = line.inspected > 0 || ['running', 'paused', 'stopped'].includes(line.status);
 
   return (
     <button
@@ -117,7 +157,8 @@ function LineCard({ line, section, isSelected, onSelect, currentUserId, isOperat
             <div className={cn(
               "w-2 h-2",
               status.dotClass,
-              line.status === 'running' && "animate-pulse"
+              line.status === 'running' && "animate-pulse",
+              line.status === 'paused' && "animate-pulse"
             )} />
             <StatusIcon size={12} className={status.textClass} />
             <span className={cn("font-mono text-xs font-bold", status.textClass)}>
@@ -141,11 +182,50 @@ function LineCard({ line, section, isSelected, onSelect, currentUserId, isOperat
         </div>
       </div>
 
-      {/* Work Order Number - shown when active WO exists */}
+      {/* Work Order Info - shown when active WO exists */}
       {line.woNumber && (
-        <div className="flex items-center gap-2 mb-3 px-3 py-2 bg-terminal border border-surface-border">
-          <Package size={14} className="text-phosphor-amber" />
-          <span className="font-mono text-xs text-phosphor-amber font-medium">WO: {line.woNumber}</span>
+        <div className="mb-3 px-3 py-2 bg-terminal border border-surface-border">
+          {/* WO Number Row */}
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <Package size={14} className="text-phosphor-amber" />
+              <span className="font-mono text-xs text-phosphor-amber font-medium">WO: {line.woNumber}</span>
+            </div>
+            {line.startedAt && (
+              <div className="flex items-center gap-1.5">
+                <Timer size={12} className="text-text-tertiary" />
+                <span className="font-mono text-xxs text-text-secondary">
+                  {formatDuration(line.startedAt)}
+                </span>
+              </div>
+            )}
+          </div>
+          
+          {/* Progress Bar */}
+          {line.lotSize > 0 && (
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <span className="font-mono text-xxs text-text-tertiary">PROGRESS</span>
+                <span className="font-mono text-xs font-bold text-phosphor-cyan">
+                  {line.inspected?.toLocaleString() || 0} / {line.lotSize?.toLocaleString()}
+                  <span className="text-text-tertiary font-normal ml-1">
+                    ({((line.inspected / line.lotSize) * 100).toFixed(1)}%)
+                  </span>
+                </span>
+              </div>
+              <div className="h-2 bg-surface-border rounded-sm overflow-hidden">
+                <div 
+                  className={cn(
+                    "h-full transition-all duration-500",
+                    (line.inspected / line.lotSize) >= 0.9 ? "bg-phosphor-green" :
+                    (line.inspected / line.lotSize) >= 0.5 ? "bg-phosphor-cyan" :
+                    "bg-phosphor-amber"
+                  )}
+                  style={{ width: `${Math.min((line.inspected / line.lotSize) * 100, 100)}%` }}
+                />
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -272,6 +352,8 @@ export default function SelectLinePage() {
               customerName: line.customer?.name || null, // Default from master data
               customerCode: line.customer?.code || null,
               woNumber: null,
+              lotSize: 0,
+              startedAt: null,
               operatorId: null,
               operatorName: null,
               inspected: 0,
@@ -291,6 +373,8 @@ export default function SelectLinePage() {
                 lineData.customerName = wo.customer?.name || lineData.customerName;
                 lineData.customerCode = wo.customer?.code || lineData.customerCode;
                 lineData.woNumber = wo.woNumber;
+                lineData.lotSize = wo.lotSize || 0;
+                lineData.startedAt = wo.startedAt || wo.started_at || wo.createdAt || wo.created_at;
                 lineData.inspected = wo.completedQty || 0;
                 lineData.goodQty = wo.goodQty || 0;
                 lineData.ngQty = wo.ngQty || 0;
@@ -310,17 +394,49 @@ export default function SelectLinePage() {
                 
                 // Use stats if available
                 if (total > 0) {
-                  lineData.status = 'running'; // Has inspection activity
                   lineData.inspected = total;
                   lineData.goodQty = stats.passed || 0;
                   lineData.ngQty = stats.failed || 0;
                   lineData.yield = parseFloat(stats.yield) || 0;
                   
-                  // Get WO number from stats if available
+                  // Get WO info from stats if available
                   if (data.workOrder?.woNumber) {
                     lineData.woNumber = data.workOrder.woNumber;
                   }
+                  if (data.workOrder?.lotSize) {
+                    lineData.lotSize = data.workOrder.lotSize;
+                  }
+                  if (data.workOrder?.startedAt || data.workOrder?.started_at) {
+                    lineData.startedAt = data.workOrder.startedAt || data.workOrder.started_at;
+                  }
                 }
+              }
+              
+              // Fetch line-state for ACTUAL machine status (RUNNING/PAUSED/STOPPED/IDLE)
+              const lineStateRes = await authFetch(`/api/inspection/line-state/${line.id}`);
+              const lineStateData = await lineStateRes.json();
+              
+              if (lineStateData.success && lineStateData.data) {
+                const processStatus = lineStateData.data.processStatus || 'IDLE';
+                
+                // Map processStatus to UI status
+                const statusMap = {
+                  'RUNNING': 'running',
+                  'PAUSED': 'paused',
+                  'STOPPED': 'stopped',
+                  'IDLE': 'idle',
+                  'READY': 'idle'
+                };
+                
+                lineData.status = statusMap[processStatus] || 'idle';
+                
+                // Get operator info from line-state if available
+                if (lineStateData.data.updatedBy) {
+                  lineData.operatorName = lineStateData.data.updatedBy;
+                }
+              } else if (lineData.woNumber) {
+                // Fallback: if no line-state but has WO, assume idle (WO assigned but not started)
+                lineData.status = 'idle';
               }
             } catch (err) {
               console.warn(`Failed to fetch data for line ${line.id}:`, err);
@@ -347,13 +463,13 @@ export default function SelectLinePage() {
     }
   }, [user, fetchData]);
 
-  // Auto-refresh every 30 seconds
+  // Auto-refresh every 10 seconds for real-time machine status
   useEffect(() => {
     const interval = setInterval(() => {
       if (user && !dataLoading) {
         fetchData();
       }
-    }, 30000);
+    }, 10000);
     return () => clearInterval(interval);
   }, [user, dataLoading, fetchData]);
 

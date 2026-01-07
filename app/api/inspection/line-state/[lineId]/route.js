@@ -46,7 +46,7 @@ const getDefaultState = () => ({
   autoNgEnabled: true,
   processStatus: 'IDLE', // IDLE, RUNNING, PAUSED, STOPPED
   
-  // Stage info
+  // Stage info (7 stages for dual-side PCB inspection)
   stage: {
     status: 'idle',
     stageName: 'idle',
@@ -68,6 +68,27 @@ const getDefaultState = () => ({
   updatedAt: new Date().toISOString(),
   updatedBy: null
 })
+
+// Validate and fix state if it has incorrect values
+const validateState = (state) => {
+  const fixedState = { ...state }
+  
+  // Fix totalStages if incorrect (must be 7 for dual-side PCB)
+  if (fixedState.stage && fixedState.stage.totalStages !== 7) {
+    console.log('[LineState API] Fixing totalStages:', fixedState.stage.totalStages, '→ 7')
+    fixedState.stage = {
+      ...fixedState.stage,
+      totalStages: 7
+    }
+  }
+  
+  // Ensure autoNgEnabled is boolean
+  if (typeof fixedState.autoNgEnabled !== 'boolean') {
+    fixedState.autoNgEnabled = true
+  }
+  
+  return fixedState
+}
 
 // GET /api/inspection/line-state/[lineId]
 export async function GET(request, { params }) {
@@ -91,7 +112,16 @@ export async function GET(request, { params }) {
       writeStateStore(lineStateStore)
     }
 
-    const state = lineStateStore.get(lineId)
+    let state = lineStateStore.get(lineId)
+    
+    // Validate and fix state if needed
+    const validatedState = validateState(state)
+    if (JSON.stringify(state) !== JSON.stringify(validatedState)) {
+      // State was fixed, save it
+      lineStateStore.set(lineId, validatedState)
+      writeStateStore(lineStateStore)
+      state = validatedState
+    }
     
     // DEBUG log disabled - uncomment for troubleshooting
     // console.log(`[LineState API] GET line ${lineId} autoNgEnabled:`, state.autoNgEnabled)
@@ -137,7 +167,7 @@ export async function PUT(request, { params }) {
     const currentState = lineStateStore.get(lineId) || getDefaultState()
 
     // Update only provided fields
-    const updatedState = {
+    let updatedState = {
       ...currentState,
       ...(body.autoNgEnabled !== undefined && { autoNgEnabled: body.autoNgEnabled }),
       ...(body.processStatus !== undefined && { processStatus: body.processStatus }),
@@ -147,6 +177,9 @@ export async function PUT(request, { params }) {
       updatedAt: new Date().toISOString(),
       updatedBy: body.updatedBy || null
     }
+    
+    // Validate state before saving
+    updatedState = validateState(updatedState)
 
     // Save to store and persist to file
     lineStateStore.set(lineId, updatedState)

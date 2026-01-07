@@ -28,7 +28,10 @@ export default function SyncProgressModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/50" onClick={status === 'completed' ? onClose : undefined} />
+            <div 
+        className="absolute inset-0 bg-black/50" 
+        onClick={(status === 'completed' || status === 'error') ? onClose : undefined} 
+      />
       <div className="relative bg-indusia-surface rounded-xl shadow-2xl border border-indusia-border w-full max-w-2xl mx-4">
         <div className="px-6 py-4 border-b border-indusia-border flex items-center justify-between">
           <div>
@@ -43,7 +46,7 @@ export default function SyncProgressModal({
                 : 'Do not power off the station while upload is running.'}
             </p>
           </div>
-          {status === 'completed' && (
+                    {(status === 'completed' || status === 'error') && (
             <button
               onClick={onClose}
               className="text-indusia-textMuted hover:text-indusia-text transition-colors"

@@ -28,19 +28,26 @@ import {
 } from '@/lib/services/aiBackendService'
 
 // Default stage definitions (fallback if /stages fails)
+// Must match AI Backend's 7-stage flow
 const DEFAULT_STAGES = [
-  { stage_id: 'stage-01', name: 'start', label: 'Board', icon: 'box' },
-  { stage_id: 'stage-02', name: 'running', label: 'Process', icon: 'cpu' },
-  { stage_id: 'stage-03', name: 'done', label: 'Done', icon: 'check' }
+  { stage_id: 'stage-01', name: 'board_incoming', label: 'Board', icon: 'box' },
+  { stage_id: 'stage-02', name: 'position_1', label: 'Pos 1', icon: 'camera' },
+  { stage_id: 'stage-03', name: 'position_2', label: 'Pos 2', icon: 'camera' },
+  { stage_id: 'stage-04', name: 'pcb_flipping', label: 'Flip', icon: 'rotate-ccw' },
+  { stage_id: 'stage-05', name: 'position_3', label: 'Pos 3', icon: 'camera' },
+  { stage_id: 'stage-06', name: 'position_4', label: 'Pos 4', icon: 'camera' },
+  { stage_id: 'stage-07', name: 'done', label: 'Done', icon: 'check' }
 ]
 
 // Stage message map
 const STAGE_MESSAGES = {
   'idle': 'Waiting for board...',
   'start': 'Board incoming...',
+  'board_incoming': 'Board incoming...',
   'position_1': 'Camera Position 1...',
   'position_2': 'Camera Position 2...',
   'flip': 'Flipping PCB...',
+  'pcb_flipping': 'Flipping PCB...',
   'position_3': 'Camera Position 3...',
   'position_4': 'Camera Position 4...',
   'running': 'Processing...',

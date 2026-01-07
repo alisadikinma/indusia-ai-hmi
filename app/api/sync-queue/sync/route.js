@@ -1,176 +1,85 @@
 /**
  * Sync Execution API
- * POST /api/sync-queue/sync - Execute sync to Supabase Storage
+ * POST /api/sync-queue/sync - Execute sync from Local PG to Supabase Cloud
  * 
- * Uploads local images to Supabase Storage bucket for AI training
+ * Syncs pending records from local tables to cloud database
  */
 
-import { NextResponse } from 'next/server';
-import { readFile } from 'fs/promises';
-import { existsSync } from 'fs';
-import path from 'path';
-import { supabase } from '@/lib/supabaseClient';
-import { syncQueueRepo } from '@/lib/repos/syncQueueRepo';
-
-const TRAINING_BUCKET = 'training-data';
+import { NextResponse } from 'next/server'
+import { syncToCloud, isCloudSyncConfigured } from '@/lib/sync'
+import syncRepo from '@/lib/repos/syncRepo'
 
 export async function POST(request) {
-  const startTime = Date.now();
+  const startTime = Date.now()
   
   try {
-    const body = await request.json();
-    const { userId, itemIds } = body;
+    const body = await request.json()
+    const { userId } = body
 
-    // Get pending items (or specific items if IDs provided)
-    let itemsResult;
-    if (itemIds && itemIds.length > 0) {
-      // Sync specific items
-      const { data, error } = await supabase
-        .from('sync_queue')
-        .select('*')
-        .in('id', itemIds)
-        .eq('status', 'pending');
-      
-      itemsResult = { success: !error, data, error: error?.message };
-    } else {
-      // Sync all pending
-      itemsResult = await syncQueueRepo.getPendingItems();
+    // Check if cloud sync is configured
+    if (!isCloudSyncConfigured()) {
+      return NextResponse.json({
+        success: false,
+        error: 'Cloud sync not configured. Check SUPABASE_CLOUD_URL and SUPABASE_SERVICE_KEY in .env.local'
+      }, { status: 400 })
     }
 
-    if (!itemsResult.success) {
-      return NextResponse.json(
-        { success: false, error: itemsResult.error },
-        { status: 500 }
-      );
-    }
+    // Check pending count first
+    const pendingCounts = await syncRepo.getPendingCounts()
+    const totalPending = pendingCounts.reduce((sum, c) => sum + c.count, 0)
 
-    const items = itemsResult.data || [];
-    
-    if (items.length === 0) {
+    if (totalPending === 0) {
       return NextResponse.json({
         success: true,
         data: {
-          message: 'No pending items to sync',
+          message: 'No pending records to sync',
           syncedCount: 0,
           failedCount: 0,
-        },
-      });
+          durationMs: Date.now() - startTime
+        }
+      })
     }
 
-    // Mark all as syncing
-    await syncQueueRepo.markAsSyncing(items.map(i => i.id));
+    console.log(`[Sync] Starting sync of ${totalPending} records...`)
 
-    let successCount = 0;
-    let failedCount = 0;
-    const results = [];
-
-    // Process each item
-    for (const item of items) {
-      try {
-        const cloudPaths = {};
-
-        // Upload full image if exists
-        if (item.local_image_path) {
-          const localPath = path.join(process.cwd(), 'public', item.local_image_path);
-          
-          if (existsSync(localPath)) {
-            const fileBuffer = await readFile(localPath);
-            const cloudPath = `false-calls/${item.board_id}/${path.basename(item.local_image_path)}`;
-            
-            const { error: uploadError } = await supabase.storage
-              .from(TRAINING_BUCKET)
-              .upload(cloudPath, fileBuffer, {
-                contentType: 'image/png',
-                upsert: true,
-              });
-
-            if (uploadError) {
-              throw new Error(`Upload failed: ${uploadError.message}`);
-            }
-
-            cloudPaths.imagePath = cloudPath;
-          }
-        }
-
-        // Upload crop image if exists
-        if (item.local_crop_path) {
-          const localCropPath = path.join(process.cwd(), 'public', item.local_crop_path);
-          
-          if (existsSync(localCropPath)) {
-            const cropBuffer = await readFile(localCropPath);
-            const cloudCropPath = `false-calls/${item.board_id}/crops/${path.basename(item.local_crop_path)}`;
-            
-            const { error: cropUploadError } = await supabase.storage
-              .from(TRAINING_BUCKET)
-              .upload(cloudCropPath, cropBuffer, {
-                contentType: 'image/png',
-                upsert: true,
-              });
-
-            if (cropUploadError) {
-              throw new Error(`Crop upload failed: ${cropUploadError.message}`);
-            }
-
-            cloudPaths.cropPath = cloudCropPath;
-          }
-        }
-
-        // Mark as synced
-        await syncQueueRepo.markAsSynced(item.id, cloudPaths, userId);
-        successCount++;
-        
-        results.push({
-          id: item.id,
-          boardId: item.board_id,
-          status: 'synced',
-          cloudPaths,
-        });
-
-      } catch (itemError) {
-        console.error(`[Sync] Failed to sync item ${item.id}:`, itemError);
-        await syncQueueRepo.markAsFailed(item.id, itemError.message);
-        failedCount++;
-        
-        results.push({
-          id: item.id,
-          boardId: item.board_id,
-          status: 'failed',
-          error: itemError.message,
-        });
+    // Execute sync
+    const result = await syncToCloud({
+      triggeredBy: userId || 'manual',
+      onProgress: (progress) => {
+        console.log(`[Sync] Progress: ${progress.current}/${progress.total} (${progress.table})`)
       }
-    }
+    })
 
-    // Record sync history
-    const completedAt = new Date().toISOString();
-    const durationMs = Date.now() - startTime;
-    
-    await syncQueueRepo.addSyncHistory({
-      recordCount: items.length,
-      successCount,
-      failedCount,
-      status: failedCount === 0 ? 'success' : (successCount === 0 ? 'failed' : 'partial'),
-      startedAt: new Date(startTime).toISOString(),
-      completedAt,
-      durationMs,
-      triggeredBy: userId,
-    });
+    const durationMs = Date.now() - startTime
+
+    if (!result.success) {
+      return NextResponse.json({
+        success: false,
+        error: result.error,
+        data: {
+          ...result.stats,
+          durationMs
+        }
+      }, { status: 500 })
+    }
 
     return NextResponse.json({
       success: true,
       data: {
-        totalCount: items.length,
-        syncedCount: successCount,
-        failedCount,
-        durationMs,
-        results,
-      },
-    });
+        message: result.message || 'Sync completed',
+        totalCount: result.stats.processed,
+        syncedCount: result.stats.success,
+        failedCount: result.stats.failed,
+        tables: result.stats.tables,
+        durationMs
+      }
+    })
 
   } catch (error) {
-    console.error('[API] POST /api/sync-queue/sync error:', error);
+    console.error('[API] POST /api/sync-queue/sync error:', error)
     return NextResponse.json(
       { success: false, error: error.message },
       { status: 500 }
-    );
+    )
   }
 }

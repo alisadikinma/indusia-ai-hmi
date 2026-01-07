@@ -314,17 +314,30 @@ export default function OverrideApprovalsPage() {
                     <td className="px-4 py-4">
                       <div>
                         <p className="text-sm text-indusia-text">
-                          {override.defectType}
+                          {override.defectType || 'FALSE_POSITIVE'}
                         </p>
-                        <p className="text-xs text-indusia-textMuted mt-1">
-                          {override.location} - {override.confidence}%
-                        </p>
+                        {override.confidence ? (
+                          <p className="text-xs text-indusia-textMuted mt-1">
+                            {override.location} - {override.confidence}%
+                          </p>
+                        ) : override.location ? (
+                          <p className="text-xs text-indusia-textMuted mt-1">
+                            {override.location}
+                          </p>
+                        ) : null}
                       </div>
                     </td>
                     <td className="px-4 py-4">
-                      <p className="text-sm text-indusia-text max-w-xs truncate">
-                        {override.reason}
-                      </p>
+                      <div className="max-w-xs">
+                        <p className="text-sm text-indusia-text">
+                          {override.reason}
+                        </p>
+                        {override.reason === 'OTHER' && override.operatorNotes && (
+                          <p className="text-xs text-indusia-textMuted mt-1 italic truncate" title={override.operatorNotes}>
+                            &quot;{override.operatorNotes}&quot;
+                          </p>
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-4">
                       <p className="text-sm text-indusia-text">

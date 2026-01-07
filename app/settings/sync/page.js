@@ -1,50 +1,72 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/hooks/useToast';
 import SectionHeader from '@/components/common/SectionHeader';
 import SyncProgressModal from '@/components/sync/SyncProgressModal';
-import { Clock, RefreshCw, AlertCircle, Cloud, FileText, CheckCircle } from 'lucide-react';
+import { Clock, RefreshCw, AlertCircle, Cloud, Database, CheckCircle, ChevronRight, X, Table } from 'lucide-react';
+
+const AUTO_SYNC_INTERVAL = 15 * 60 * 1000; // 15 minutes
+
+// Table display names mapping
+const TABLE_DISPLAY_NAMES = {
+  'inspection_results': 'Inspection Results',
+  'inspection_defects': 'Inspection Defects',
+  'overrides': 'False Call Overrides',
+  'inspection_stats': 'Inspection Stats',
+  'work_orders': 'Work Orders',
+  'event_log': 'Event Log'
+};
+
+// Helper to get display name
+const getTableDisplayName = (table) => {
+  return TABLE_DISPLAY_NAMES[table] || table.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+};
 
 export default function SyncPage() {
   const router = useRouter();
   const { user } = useAuth();
   const { showToast } = useToast();
+  const autoSyncIntervalRef = useRef(null);
 
-  const [queueItems, setQueueItems] = useState([]);
+  const [pendingTables, setPendingTables] = useState([]);
+  const [totalPending, setTotalPending] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [lastSyncTime, setLastSyncTime] = useState(null);
   const [lastSyncStatus, setLastSyncStatus] = useState('never');
-  const [autoSync, setAutoSync] = useState(false);
+  const [autoSync, setAutoSync] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('autoSyncEnabled') === 'true';
+    }
+    return false;
+  });
+  const [nextAutoSync, setNextAutoSync] = useState(null);
   const [isProgressModalOpen, setIsProgressModalOpen] = useState(false);
   const [syncHistory, setSyncHistory] = useState([]);
   const [isSyncing, setIsSyncing] = useState(false);
   const [progress, setProgress] = useState(0);
   const [status, setStatus] = useState('idle');
   const [currentStep, setCurrentStep] = useState('');
+  
+  // Sync History Detail Modal
+  const [selectedHistory, setSelectedHistory] = useState(null);
 
-  const loadQueueItems = useCallback(async () => {
+  const loadPendingCounts = useCallback(async () => {
     try {
       setIsLoading(true);
       setError(null);
-      const response = await fetch('/api/sync-queue?grouped=true');
+      
+      const response = await fetch('/api/sync-queue');
       const result = await response.json();
+      
       if (result.success) {
-        const items = result.data.map((item, index) => ({
-          id: item.id || index,
-          customerName: item.customerName || 'Unknown',
-          sectionName: item.sectionName || '-',
-          boardId: item.boardId,
-          defectsCount: item.defectsCount || 1,
-          type: item.type || 'Override',
-          status: 'ready',
-        }));
-        setQueueItems(items);
+        setPendingTables(result.data || []);
+        setTotalPending(result.count || 0);
       } else {
-        setError(result.error || 'Failed to load queue');
+        setError(result.error || 'Failed to load pending counts');
       }
     } catch (err) {
       setError(err.message);
@@ -55,19 +77,31 @@ export default function SyncPage() {
 
   const loadSyncHistory = useCallback(async () => {
     try {
-      const response = await fetch('/api/sync-queue/history?limit=5');
+      const response = await fetch('/api/sync-queue/history?limit=10');
       const result = await response.json();
+      
       if (result.success && result.data) {
         const history = result.data.map(item => ({
           id: item.id,
-          timestamp: new Date(item.completed_at).toLocaleString(),
-          recordCount: item.record_count,
-          successCount: item.success_count,
-          failedCount: item.failed_count,
+          timestamp: item.started_at ? new Date(item.started_at).toLocaleString() : '-',
+          completedAt: item.completed_at ? new Date(item.completed_at).toLocaleString() : '-',
+          recordCount: item.record_count || 0,
+          successCount: item.success_count || 0,
+          failedCount: item.failed_count || 0,
           status: item.status,
+          tables: item.tables_synced || [],
+          tableDetails: item.table_details || {}, // Per-table breakdown
+          triggeredBy: item.triggered_by || 'manual',
+          errorMessage: item.error_message
         }));
+        
         setSyncHistory(history);
-        if (history.length > 0) {
+        
+        const lastSuccess = history.find(h => h.status === 'completed' || h.status === 'success');
+        if (lastSuccess) {
+          setLastSyncTime(lastSuccess.timestamp);
+          setLastSyncStatus('success');
+        } else if (history.length > 0) {
           setLastSyncTime(history[0].timestamp);
           setLastSyncStatus(history[0].status);
         }
@@ -77,58 +111,152 @@ export default function SyncPage() {
     }
   }, []);
 
-  useEffect(() => {
-    loadQueueItems();
-    loadSyncHistory();
-  }, [loadQueueItems, loadSyncHistory]);
-
-  const handleSyncNow = async () => {
-    if (queueItems.length === 0) {
-      showToast('No records ready to sync.');
+  // Execute sync
+  const executeSync = useCallback(async (isAuto = false) => {
+    if (isSyncing) return;
+    
+    // Reload pending counts first
+    const response = await fetch('/api/sync-queue');
+    const result = await response.json();
+    const currentPending = result.count || 0;
+    
+    if (currentPending === 0) {
+      if (!isAuto) showToast('No records ready to sync.');
       return;
     }
-    setIsProgressModalOpen(true);
+    
+    if (!isAuto) {
+      setIsProgressModalOpen(true);
+    }
     setIsSyncing(true);
-    setStatus('syncing');
+    setStatus('running');
     setProgress(0);
-    setCurrentStep('Preparing upload...');
+    setCurrentStep('Connecting to cloud...');
 
     try {
-      const progressInterval = setInterval(() => {
-        setProgress(prev => prev >= 90 ? (clearInterval(progressInterval), 90) : prev + 10);
-      }, 500);
+      const progressSteps = [
+        { percent: 10, step: 'Preparing payload...' },
+        { percent: 30, step: 'Uploading inspection results...' },
+        { percent: 45, step: 'Uploading inspection defects...' },
+        { percent: 60, step: 'Uploading overrides...' },
+        { percent: 75, step: 'Uploading inspection stats...' },
+        { percent: 85, step: 'Uploading work orders...' },
+        { percent: 95, step: 'Confirming cloud receipt...' }
+      ];
 
-      const response = await fetch('/api/sync-queue/sync', {
+      let stepIndex = 0;
+      const progressInterval = setInterval(() => {
+        if (stepIndex < progressSteps.length) {
+          setProgress(progressSteps[stepIndex].percent);
+          setCurrentStep(progressSteps[stepIndex].step);
+          stepIndex++;
+        }
+      }, 600);
+
+      const syncResponse = await fetch('/api/sync-queue/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user?.id }),
+        body: JSON.stringify({ 
+          userId: user?.id,
+          triggeredBy: isAuto ? 'auto' : 'manual'
+        }),
       });
+      
       clearInterval(progressInterval);
-      const result = await response.json();
+      const syncResult = await syncResponse.json();
 
-      if (result.success) {
+      if (syncResult.success) {
         setProgress(100);
         setStatus('completed');
-        setCurrentStep(`Synced ${result.data.syncedCount} records`);
+        setCurrentStep(`Synced ${syncResult.data.syncedCount} records successfully`);
         setLastSyncTime(new Date().toLocaleString());
         setLastSyncStatus('success');
-        await loadQueueItems();
+        
+        await loadPendingCounts();
         await loadSyncHistory();
-        showToast(`Sync completed! ${result.data.syncedCount} records uploaded.`);
+        
+        showToast(`Sync completed! ${syncResult.data.syncedCount} records uploaded.`, 'success');
+        
         setTimeout(() => {
           setIsProgressModalOpen(false);
           setIsSyncing(false);
           setStatus('idle');
         }, 2000);
       } else {
-        throw new Error(result.error || 'Sync failed');
+        throw new Error(syncResult.error || 'Sync failed');
       }
     } catch (err) {
-      setStatus('failed');
+      setStatus('error');
       setCurrentStep(err.message);
-      showToast(`Sync failed: ${err.message}`);
+      if (!isAuto) {
+        showToast(`Sync failed: ${err.message}`, 'error');
+      }
+      setIsSyncing(false);
     }
-  };
+  }, [isSyncing, user?.id, loadPendingCounts, loadSyncHistory, showToast]);
+
+  // Auto sync effect
+  useEffect(() => {
+    if (autoSync) {
+      // Save preference
+      localStorage.setItem('autoSyncEnabled', 'true');
+      
+      // Set next sync time
+      const updateNextSync = () => {
+        setNextAutoSync(new Date(Date.now() + AUTO_SYNC_INTERVAL));
+      };
+      updateNextSync();
+      
+      // Start interval
+      autoSyncIntervalRef.current = setInterval(() => {
+        console.log('[AutoSync] Running automatic sync...');
+        executeSync(true);
+        updateNextSync();
+      }, AUTO_SYNC_INTERVAL);
+      
+      showToast('Auto sync enabled. Next sync in 15 minutes.', 'info');
+      
+      return () => {
+        if (autoSyncIntervalRef.current) {
+          clearInterval(autoSyncIntervalRef.current);
+        }
+      };
+    } else {
+      localStorage.setItem('autoSyncEnabled', 'false');
+      setNextAutoSync(null);
+      if (autoSyncIntervalRef.current) {
+        clearInterval(autoSyncIntervalRef.current);
+      }
+    }
+  }, [autoSync, executeSync, showToast]);
+
+  // Initial load
+  useEffect(() => {
+    loadPendingCounts();
+    loadSyncHistory();
+  }, [loadPendingCounts, loadSyncHistory]);
+
+  // Countdown timer for next auto sync
+  const [countdown, setCountdown] = useState('');
+  useEffect(() => {
+    if (!nextAutoSync) {
+      setCountdown('');
+      return;
+    }
+    
+    const timer = setInterval(() => {
+      const diff = nextAutoSync - Date.now();
+      if (diff <= 0) {
+        setCountdown('Syncing...');
+      } else {
+        const mins = Math.floor(diff / 60000);
+        const secs = Math.floor((diff % 60000) / 1000);
+        setCountdown(`${mins}:${secs.toString().padStart(2, '0')}`);
+      }
+    }, 1000);
+    
+    return () => clearInterval(timer);
+  }, [nextAutoSync]);
 
   if (!user) {
     return (
@@ -147,14 +275,16 @@ export default function SyncPage() {
     <div>
       <SectionHeader
         title="Sync to Cloud"
-        description="Upload approved overrides to cloud for AI retraining."
+        description="Upload pending records from local database to Supabase cloud for backup and AI retraining."
       />
 
       {error && (
         <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg flex items-center gap-2 text-sm">
           <AlertCircle className="w-4 h-4 text-red-500" />
           <span className="text-red-400">{error}</span>
-          <button onClick={loadQueueItems} className="ml-auto px-2 py-1 text-xs bg-red-500/20 rounded">Retry</button>
+          <button onClick={loadPendingCounts} className="ml-auto px-2 py-1 text-xs bg-red-500/20 rounded hover:bg-red-500/30">
+            Retry
+          </button>
         </div>
       )}
 
@@ -169,17 +299,34 @@ export default function SyncPage() {
                 <span className="font-medium text-indusia-text">Cloud Sync Status</span>
               </div>
               <span className={`text-xs px-2.5 py-1 rounded-full ${
-                lastSyncStatus === 'success' ? 'bg-green-500/20 text-green-400' :
+                lastSyncStatus === 'success' || lastSyncStatus === 'completed' ? 'bg-green-500/20 text-green-400' :
                 lastSyncStatus === 'never' ? 'bg-yellow-500/20 text-yellow-400' : 'bg-red-500/20 text-red-400'
               }`}>
-                {lastSyncStatus === 'never' ? 'Never synced' : lastSyncStatus}
+                {lastSyncStatus === 'never' ? 'Never synced' : 
+                 lastSyncStatus === 'completed' ? 'Success' : lastSyncStatus}
               </span>
             </div>
 
             <div className="text-center py-6 bg-indusia-bg rounded-lg mb-4">
-              <p className="text-4xl font-bold text-indusia-primary">{queueItems.length}</p>
+              <p className={`text-4xl font-bold ${totalPending > 0 ? 'text-indusia-primary' : 'text-green-500'}`}>
+                {totalPending}
+              </p>
               <p className="text-sm text-indusia-textMuted mt-1">Records ready to upload</p>
             </div>
+
+            {/* Pending breakdown by table */}
+            {pendingTables.length > 0 && pendingTables.some(t => t.count > 0) && (
+              <div className="mb-4 p-3 bg-indusia-bg rounded-lg space-y-1">
+                {pendingTables
+                  .filter(t => t.count > 0)
+                  .map(t => (
+                    <div key={t.table} className="flex justify-between text-sm">
+                      <span className="text-indusia-textMuted">{t.displayName}</span>
+                      <span className="text-indusia-primary font-medium">{t.count}</span>
+                    </div>
+                  ))}
+              </div>
+            )}
 
             <div className="flex justify-between text-sm text-indusia-textMuted mb-4">
               <span>Last Sync:</span>
@@ -187,22 +334,29 @@ export default function SyncPage() {
             </div>
 
             <button
-              onClick={handleSyncNow}
-              disabled={isSyncing || queueItems.length === 0}
-              className="w-full py-3 bg-indusia-primary text-white rounded-lg font-medium hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2"
+              onClick={() => executeSync(false)}
+              disabled={isSyncing || totalPending === 0}
+              className="w-full py-3 bg-indusia-primary text-white rounded-lg font-medium hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-opacity"
             >
               {isSyncing ? <RefreshCw className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
               {isSyncing ? 'Syncing...' : 'Sync Now'}
             </button>
 
-            <div className="mt-4 pt-4 border-t border-indusia-border flex items-center justify-between">
-              <span className="text-sm text-indusia-textMuted">Auto Sync (every 15 min)</span>
-              <button
-                onClick={() => setAutoSync(!autoSync)}
-                className={`w-11 h-6 rounded-full transition-colors ${autoSync ? 'bg-indusia-primary' : 'bg-indusia-border'}`}
-              >
-                <div className={`w-5 h-5 bg-white rounded-full transition-transform ${autoSync ? 'translate-x-5' : 'translate-x-0.5'}`} />
-              </button>
+            <div className="mt-4 pt-4 border-t border-indusia-border">
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-sm text-indusia-textMuted">Auto Sync (every 15 min)</span>
+                  {autoSync && countdown && (
+                    <p className="text-xs text-indusia-primary mt-0.5">Next sync in {countdown}</p>
+                  )}
+                </div>
+                <button
+                  onClick={() => setAutoSync(!autoSync)}
+                  className={`w-11 h-6 rounded-full transition-colors ${autoSync ? 'bg-indusia-primary' : 'bg-indusia-border'}`}
+                >
+                  <div className={`w-5 h-5 bg-white rounded-full shadow transition-transform ${autoSync ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                </button>
+              </div>
             </div>
           </div>
 
@@ -220,86 +374,264 @@ export default function SyncPage() {
               </div>
             ) : (
               <div className="space-y-2">
-                {syncHistory.map((event) => (
-                  <div key={event.id} className="flex items-center gap-3 px-3 py-2.5 bg-indusia-bg rounded-lg">
-                    <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                      event.status === 'success' ? 'bg-indusia-pass' : 'bg-indusia-fail'
-                    }`} />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm text-indusia-text">
-                        {event.successCount || event.recordCount} records synced
-                        {event.failedCount > 0 && <span className="text-red-400 ml-1">({event.failedCount} failed)</span>}
-                      </p>
-                      <p className="text-xs text-indusia-textMuted">{event.timestamp}</p>
-                    </div>
-                    <span className={`text-xs font-medium ${
-                      event.status === 'success' ? 'text-indusia-pass' : 'text-indusia-fail'
-                    }`}>
-                      {event.status}
-                    </span>
-                  </div>
-                ))}
+                {syncHistory.slice(0, 5).map((event) => {
+                  // Build table summary string
+                  const tablesSummary = event.tableDetails && Object.keys(event.tableDetails).length > 0
+                    ? Object.entries(event.tableDetails)
+                        .map(([t, d]) => `${t.replace(/_/g, ' ').split(' ').map(w => w[0]?.toUpperCase()).join('')}: ${d.success}`)
+                        .join(', ')
+                    : event.tables?.length > 0 
+                      ? event.tables.map(t => t.replace(/_/g, ' ').split(' ').map(w => w[0]?.toUpperCase()).join('')).join(', ')
+                      : null;
+                  
+                  return (
+                    <button
+                      key={event.id}
+                      onClick={() => setSelectedHistory(event)}
+                      className="w-full flex items-center gap-3 px-3 py-2.5 bg-indusia-bg rounded-lg hover:bg-indusia-bg/80 transition-colors text-left group"
+                    >
+                      <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                        event.status === 'completed' || event.status === 'success' ? 'bg-indusia-pass' : 
+                        event.status === 'completed_with_errors' ? 'bg-yellow-500' : 'bg-indusia-fail'
+                      }`} />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm text-indusia-text">
+                          {event.successCount || event.recordCount} records synced
+                          {event.failedCount > 0 && <span className="text-red-400 ml-1">({event.failedCount} failed)</span>}
+                        </p>
+                        <div className="flex items-center gap-2">
+                          <p className="text-xs text-indusia-textMuted">{event.timestamp}</p>
+                          {tablesSummary && (
+                            <span className="text-xs text-indusia-primary">• {tablesSummary}</span>
+                          )}
+                        </div>
+                      </div>
+                      <ChevronRight className="w-4 h-4 text-indusia-textMuted opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </button>
+                  );
+                })}
               </div>
             )}
           </div>
         </div>
 
-        {/* Right Column: Queue Table */}
+        {/* Right Column: All Tables Status */}
         <div className="bg-indusia-surface rounded-xl border border-indusia-border p-5">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
-              <FileText className="w-5 h-5 text-indusia-textMuted" />
-              <span className="font-medium text-indusia-text">Sync Queue</span>
+              <Database className="w-5 h-5 text-indusia-textMuted" />
+              <span className="font-medium text-indusia-text">Tables Being Synced</span>
             </div>
-            <span className="text-sm text-indusia-textMuted">{queueItems.length} records queued</span>
+            <button 
+              onClick={loadPendingCounts}
+              disabled={isLoading}
+              className="p-1.5 rounded hover:bg-indusia-bg transition-colors"
+            >
+              <RefreshCw className={`w-4 h-4 text-indusia-textMuted ${isLoading ? 'animate-spin' : ''}`} />
+            </button>
           </div>
 
           {isLoading ? (
             <div className="py-16 flex justify-center">
               <RefreshCw className="w-6 h-6 text-indusia-primary animate-spin" />
             </div>
-          ) : queueItems.length === 0 ? (
-            <div className="py-16 text-center">
-              <CheckCircle className="w-12 h-12 text-indusia-pass mx-auto mb-3" />
-              <p className="text-indusia-text font-medium">All Synced!</p>
-              <p className="text-sm text-indusia-textMuted mt-1">No pending records</p>
-            </div>
           ) : (
-            <div className="overflow-hidden rounded-lg border border-indusia-border">
-              <table className="w-full text-sm">
-                <thead className="bg-indusia-bg">
-                  <tr>
-                    <th className="text-left px-4 py-2.5 text-xs font-semibold text-indusia-textMuted uppercase">Board</th>
-                    <th className="text-left px-4 py-2.5 text-xs font-semibold text-indusia-textMuted uppercase">Customer</th>
-                    <th className="text-left px-4 py-2.5 text-xs font-semibold text-indusia-textMuted uppercase">Type</th>
-                    <th className="text-center px-4 py-2.5 text-xs font-semibold text-indusia-textMuted uppercase">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-indusia-border">
-                  {queueItems.map((item) => (
-                    <tr key={item.id} className="hover:bg-indusia-bg/50">
-                      <td className="px-4 py-2.5 text-indusia-text font-medium">{item.boardId}</td>
-                      <td className="px-4 py-2.5 text-indusia-textMuted">{item.customerName}</td>
-                      <td className="px-4 py-2.5">
-                        <span className="inline-flex items-center gap-1 text-indusia-textMuted">
-                          <FileText className="w-3.5 h-3.5" />
-                          {item.type}
-                        </span>
-                      </td>
-                      <td className="px-4 py-2.5 text-center">
-                        <span className="inline-flex items-center gap-1 text-xs text-green-400">
-                          <span className="w-1.5 h-1.5 bg-green-400 rounded-full" />
-                          Ready
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="space-y-2">
+              {/* Show ALL tables with their pending counts */}
+              {pendingTables.map((t) => (
+                <div key={t.table} className="flex items-center justify-between p-3 bg-indusia-bg rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <Table className="w-4 h-4 text-indusia-textMuted" />
+                    <span className="text-sm text-indusia-text">{t.displayName}</span>
+                  </div>
+                  <span className={`text-sm font-medium ${t.count > 0 ? 'text-indusia-primary' : 'text-indusia-textMuted'}`}>
+                    {t.count > 0 ? `${t.count} pending` : '0 pending'}
+                  </span>
+                </div>
+              ))}
+
+              {totalPending > 0 && (
+                <div className="mt-4 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+                  <div className="flex items-start gap-2">
+                    <AlertCircle className="w-4 h-4 text-yellow-500 mt-0.5" />
+                    <div className="text-sm">
+                      <p className="text-yellow-400 font-medium">{totalPending} records waiting to sync</p>
+                      <p className="text-indusia-textMuted mt-1">
+                        Click "Sync Now" to upload to cloud database.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {totalPending === 0 && (
+                <div className="mt-4 p-4 text-center">
+                  <CheckCircle className="w-10 h-10 text-indusia-pass mx-auto mb-2" />
+                  <p className="text-indusia-text font-medium">All Synced!</p>
+                  <p className="text-sm text-indusia-textMuted mt-1">All tables are up to date</p>
+                </div>
+              )}
             </div>
           )}
         </div>
       </div>
+
+      {/* Sync History Detail Modal */}
+      {selectedHistory && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div 
+            className="absolute inset-0 bg-black/50" 
+            onClick={() => setSelectedHistory(null)} 
+          />
+          <div className="relative bg-indusia-surface rounded-xl shadow-2xl border border-indusia-border w-full max-w-lg mx-4">
+            <div className="px-5 py-4 border-b border-indusia-border flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-indusia-text">Sync Details</h3>
+              <button
+                onClick={() => setSelectedHistory(null)}
+                className="text-indusia-textMuted hover:text-indusia-text transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="p-5 space-y-4">
+              {/* Status Badge */}
+              <div className="flex items-center gap-2">
+                <div className={`w-3 h-3 rounded-full ${
+                  selectedHistory.status === 'completed' || selectedHistory.status === 'success' ? 'bg-indusia-pass' : 
+                  selectedHistory.status === 'completed_with_errors' ? 'bg-yellow-500' : 'bg-indusia-fail'
+                }`} />
+                <span className={`text-sm font-medium ${
+                  selectedHistory.status === 'completed' || selectedHistory.status === 'success' ? 'text-indusia-pass' : 
+                  selectedHistory.status === 'completed_with_errors' ? 'text-yellow-400' : 'text-indusia-fail'
+                }`}>
+                  {selectedHistory.status === 'completed' ? 'Completed Successfully' : 
+                   selectedHistory.status === 'completed_with_errors' ? 'Completed with Errors' : 
+                   selectedHistory.status}
+                </span>
+              </div>
+
+              {/* Stats Grid */}
+              <div className="grid grid-cols-3 gap-3">
+                <div className="bg-indusia-bg rounded-lg p-3 text-center">
+                  <p className="text-2xl font-bold text-indusia-text">{selectedHistory.recordCount}</p>
+                  <p className="text-xs text-indusia-textMuted">Total</p>
+                </div>
+                <div className="bg-indusia-bg rounded-lg p-3 text-center">
+                  <p className="text-2xl font-bold text-green-500">{selectedHistory.successCount}</p>
+                  <p className="text-xs text-indusia-textMuted">Success</p>
+                </div>
+                <div className="bg-indusia-bg rounded-lg p-3 text-center">
+                  <p className="text-2xl font-bold text-red-500">{selectedHistory.failedCount}</p>
+                  <p className="text-xs text-indusia-textMuted">Failed</p>
+                </div>
+              </div>
+
+              {/* Details */}
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between py-2 border-b border-indusia-border">
+                  <span className="text-indusia-textMuted">Started</span>
+                  <span className="text-indusia-text">{selectedHistory.timestamp}</span>
+                </div>
+                <div className="flex justify-between py-2 border-b border-indusia-border">
+                  <span className="text-indusia-textMuted">Completed</span>
+                  <span className="text-indusia-text">{selectedHistory.completedAt}</span>
+                </div>
+                <div className="flex justify-between py-2 border-b border-indusia-border">
+                  <span className="text-indusia-textMuted">Triggered By</span>
+                  <span className="text-indusia-text capitalize">{selectedHistory.triggeredBy}</span>
+                </div>
+              </div>
+
+              {/* Per-Table Breakdown */}
+              {selectedHistory.tableDetails && Object.keys(selectedHistory.tableDetails).length > 0 ? (
+                <div>
+                  <p className="text-sm font-medium text-indusia-textMuted mb-3">Records by Table</p>
+                  <div className="space-y-2">
+                    {Object.entries(selectedHistory.tableDetails).map(([table, detail]) => {
+                      const tableName = getTableDisplayName(table);
+                      const total = (detail.success || 0) + (detail.failed || 0);
+                      const successPercent = total > 0 ? Math.round((detail.success / total) * 100) : 0;
+                      
+                      return (
+                        <div 
+                          key={table}
+                          className="px-3 py-2.5 bg-indusia-bg rounded-lg"
+                        >
+                          <div className="flex items-center justify-between mb-1.5">
+                            <span className="text-sm font-medium text-indusia-text">{tableName}</span>
+                            <span className="text-xs text-indusia-textMuted">
+                              {total} record{total !== 1 ? 's' : ''}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-4">
+                            {/* Mini progress bar */}
+                            <div className="flex-1 h-1.5 bg-indusia-border rounded-full overflow-hidden">
+                              <div 
+                                className="h-full bg-green-500 rounded-full"
+                                style={{ width: `${successPercent}%` }}
+                              />
+                            </div>
+                            <div className="flex items-center gap-3 text-xs">
+                              <span className="text-green-500 font-medium">
+                                ✓ {detail.success || 0}
+                              </span>
+                              {detail.failed > 0 && (
+                                <span className="text-red-500 font-medium">
+                                  ✗ {detail.failed}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  
+                  {/* Summary */}
+                  <div className="mt-3 pt-3 border-t border-indusia-border flex items-center justify-between text-xs">
+                    <span className="text-indusia-textMuted">Total Tables:</span>
+                    <span className="text-indusia-text font-medium">
+                      {Object.keys(selectedHistory.tableDetails).length}
+                    </span>
+                  </div>
+                </div>
+              ) : selectedHistory.tables && selectedHistory.tables.length > 0 ? (
+                <div>
+                  <p className="text-sm font-medium text-indusia-textMuted mb-2">Tables Synced</p>
+                  <div className="flex flex-wrap gap-2">
+                    {selectedHistory.tables.map((table, idx) => (
+                      <span 
+                        key={idx}
+                        className="px-2 py-1 bg-indusia-bg rounded text-xs text-indusia-text"
+                      >
+                        {getTableDisplayName(table)}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+              {/* Error Message */}
+              {selectedHistory.errorMessage && (
+                <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
+                  <p className="text-xs font-medium text-red-400 mb-1">Error Message</p>
+                  <p className="text-sm text-red-300">{selectedHistory.errorMessage}</p>
+                </div>
+              )}
+            </div>
+
+            <div className="px-5 py-4 border-t border-indusia-border">
+              <button
+                onClick={() => setSelectedHistory(null)}
+                className="w-full py-2 bg-indusia-bg text-indusia-text rounded-lg font-medium hover:bg-indusia-border transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <SyncProgressModal
         isOpen={isProgressModalOpen}

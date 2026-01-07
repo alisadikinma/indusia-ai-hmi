@@ -14,7 +14,6 @@ import { sanitizeRequestBody } from '@/lib/utils/sanitize'
  * Section filtered: Users only see overrides from their assigned sections
  */
 async function handleGET(request) {
-  console.log('[GET /api/overrides] Called')
   try {
     const { searchParams } = new URL(request.url)
 
@@ -46,9 +45,7 @@ async function handleGET(request) {
 
     // Apply section filter based on user's access
     const user = request.user
-    console.log('[GET /api/overrides] User:', user?.id, 'sections:', user?.sections)
     const allowedSections = getSectionFilter(user)
-    console.log('[GET /api/overrides] allowedSections:', allowedSections)
 
     if (allowedSections !== null) {
       // User has restricted section access
@@ -66,9 +63,7 @@ async function handleGET(request) {
       }
     }
 
-    console.log('[GET /api/overrides] Final filters:', filters)
     const result = await overridesRepo.list(filters)
-    console.log('[GET /api/overrides] Result:', result.data?.length, 'records, total:', result.total)
 
     if (result.error) {
       return NextResponse.json(
@@ -101,10 +96,8 @@ async function handleGET(request) {
  * Section restricted: Can only create overrides for assigned sections
  */
 async function handlePOST(request) {
-  console.log('[POST /api/overrides] Handler called, user:', request.user?.id, 'role:', request.user?.role_id)
   try {
     const body = await request.json()
-    console.log('[POST /api/overrides] Body received:', JSON.stringify(body).substring(0, 500))
 
     // Sanitize input
     const sanitizedBody = sanitizeRequestBody(body)
