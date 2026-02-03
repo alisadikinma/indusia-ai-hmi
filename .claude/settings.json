@@ -2,5 +2,31 @@
   "enabledPlugins": {
     "frontend-design@claude-code-plugins": true,
     "code-review@claude-code-plugins": true
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [[ \"{{file_path}}\" =~ \\.(ts|tsx)$ ]]; then npm run typecheck; fi",
+            "statusMessage": "Type-checking TypeScript files..."
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [[ \"{{file_path}}\" =~ (\\.env|\\.env\\..*|package-lock\\.json|public/swagger-ui/) ]]; then echo 'Blocked: {{file_path}} is a protected file' && exit 1; fi",
+            "statusMessage": "Checking file protection rules..."
+          }
+        ]
+      }
+    ]
   }
 }

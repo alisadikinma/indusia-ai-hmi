@@ -10,29 +10,37 @@ INDUSIA AI HMI is a visual inspection manufacturing system built with Next.js an
 
 ```bash
 # Development server
-npm run dev
+npm run dev                   # Next.js dev server on port 3000
+
+# Setup Swagger UI (run once after npm install)
+npm run setup:swagger         # Copies swagger-ui-dist files to public/docs
+                              # Enables /docs API documentation endpoint
+
+# Full stack development (requires PostgREST)
+npm run dev:all               # Runs PostgreSQL + PostgREST + Next.js concurrently
+                              # Requires: postgrest.exe and postgrest.conf configured
+                              # See scripts in package.json for paths
 
 # Build for production
-npm run build
+npm run build                 # Creates optimized production build
+                              # Note: TypeScript/ESLint errors won't block build
 
 # Start production server
-npm run start
+npm run start                 # Runs production build (requires npm run build first)
 
-# Lint code
-npm run lint
-
-# Type checking
-npm run typecheck
+# Code quality
+npm run lint                  # ESLint check for code quality issues
+npm run typecheck             # TypeScript validation (errors won't block build)
 
 # Unit tests (Jest)
-npm test                  # Run all tests
-npm run test:watch        # Watch mode
-npm run test:coverage     # With coverage report
+npm test                      # Run all tests once
+npm run test:watch            # Watch mode for test-driven development
+npm run test:coverage         # Generate coverage report in coverage/
 
 # E2E tests (Playwright)
-npm run test:e2e          # Headless
-npm run test:e2e:headed   # With browser
-npm run test:e2e:ui       # Interactive UI mode
+npm run test:e2e              # Headless browser tests (CI mode)
+npm run test:e2e:headed       # Run with visible browser for debugging
+npm run test:e2e:ui           # Interactive Playwright UI mode
 ```
 
 ## Architecture
@@ -130,6 +138,51 @@ Hooks (hooks/) → API Routes (app/api/) → Repositories (lib/repos/) → Supab
 - `data/mockEvents.js` - Event log samples
 - `data/mockNotifications.js` - Notification samples
 
+### AI Backend Communication Architecture
+
+The system consists of two separate services that communicate via HTTP and Server-Sent Events (SSE):
+
+**Next.js HMI (this repository):**
+- Frontend UI (React components)
+- API routes (`app/api/`) for auth, CRUD operations, business logic
+- SSE consumer in `lib/services/aiBackendService.js`
+- Proxy endpoints in `/app/api/ai/*` that forward to AI Backend
+
+**AI Backend (separate FastAPI repository):**
+- Python-based AI inference server
+- Deep learning models for PCB defect detection
+- Model training and retraining pipeline
+- SSE event stream (`/sse` endpoint) for real-time inspection updates
+- Runs independently on port 8000 (configurable via `NEXT_PUBLIC_AI_BACKEND_URL`)
+
+**Communication Flow:**
+```
+[Browser Client]
+    ↕ React Components
+[Next.js Frontend]
+    ↕ API Routes (/app/api/)
+[Supabase Edge DB] ←→ [Repository Layer]
+
+[Next.js API Routes] (/api/ai/*)
+    ↕ HTTP + API Key Auth
+[AI Backend (FastAPI)] :8000
+    ↕ SSE Stream
+[Live Inspection Updates]
+    ↓
+[AI Models / Training Pipeline]
+```
+
+**Key Integration Points:**
+- Authentication: Next.js API routes use `AI_BACKEND_API_KEY` to authenticate with AI Backend
+- Live inspection: AI Backend publishes SSE events, Next.js consumes and displays in real-time
+- Model training: False call overrides are synced to cloud, AI Backend retrains models
+- API proxy: `/app/api/ai/*` routes forward requests to AI Backend with authentication
+
+**Environment Configuration:**
+- `NEXT_PUBLIC_AI_BACKEND_URL` - AI Backend base URL (http://localhost:8000)
+- `NEXT_PUBLIC_AI_BACKEND_SSE_URL` - SSE endpoint URL (http://localhost:8000/sse)
+- `AI_BACKEND_API_KEY` - Server-side API key for authenticating with AI Backend
+
 ### System Health Monitoring
 
 `SystemHealthContext` provides real-time system status monitoring with these components:
@@ -200,7 +253,7 @@ The cloud sync system enables uploading inspection data from edge PostgreSQL to 
 
 **Synced Tables**: inspection_results, inspection_defects, overrides, event_log, inspection_stats, work_orders (qty updates only)
 
-**Configuration**: Set `NEXT_PUBLIC_SUPABASE_CLOUD_URL` and `NEXT_PUBLIC_SUPABASE_CLOUD_SERVICE_ROLE_KEY` for cloud sync. Lock expires after 10 minutes, processes 100 records per batch by default.
+**Configuration**: Set `NEXT_PUBLIC_SUPABASE_CLOUD_URL` and `SUPABASE_CLOUD_SERVICE_ROLE_KEY` for cloud sync. ⚠️ **CRITICAL:** Never use `NEXT_PUBLIC_` prefix for service role keys - they are server-only secrets and must not be exposed to client-side code. Lock expires after 10 minutes, processes 100 records per batch by default.
 
 ### Import Aliases
 
@@ -243,14 +296,159 @@ TypeScript errors are currently ignored during builds (`ignoreBuildErrors: true`
 - Auto-starts dev server before tests
 - Reports generated in `playwright-report/`
 
+## Troubleshooting
+
+### Common Issues
+
+**"Module not found" errors**
+```bash
+rm -rf node_modules package-lock.json
+npm install
+```
+
+**"Port 3000 already in use"**
+```bash
+# Find and kill the process
+npx kill-port 3000
+# Or use a different port
+PORT=3001 npm run dev
+```
+
+**"Supabase connection failed"**
+- Check `.env.local` exists with correct `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- Verify Supabase project is running
+- Check network connectivity to Supabase URL
+
+**"CSRF token validation failed"**
+- Ensure `X-CSRF-Token` header is included in POST/PUT/DELETE requests
+- Token is generated by `GET /api/auth/csrf` endpoint
+- Check `lib/utils/csrf.js` for implementation details
+- CSRF validation is skipped in development mode
+
+**"AI Backend connection refused"**
+- Verify AI Backend is running: `curl http://localhost:8000/health`
+- Check `NEXT_PUBLIC_AI_BACKEND_URL` in `.env.local`
+- Ensure API key is configured: `AI_BACKEND_API_KEY`
+- AI Backend is a separate FastAPI service, must be started independently
+
+**"Unauthorized" errors on API routes**
+- In development: Check x-user-id header is being sent
+- In production: Verify authentication token is valid
+- Check user has required role/permissions for the endpoint
+- Review `withAuth()` middleware configuration in API route
+
+**TypeScript errors during development**
+- TypeScript errors won't block builds (`ignoreBuildErrors: true` in next.config.js)
+- Run `npm run typecheck` to see all type errors
+- Fix incrementally - type safety improves code quality and catches bugs
+
+**Build fails with memory error**
+- Increase Node.js memory: `NODE_OPTIONS="--max-old-space-size=4096" npm run build`
+- Check for circular dependencies or large bundle sizes
+
+**Tests failing locally but passing in CI**
+- Clear Jest cache: `npm test -- --clearCache`
+- Check for timezone-dependent test logic
+- Verify mock data matches test expectations
+
 ## Environment Setup
 
-Required environment variables (create `.env`):
+Required environment variables (create `.env.local`):
 
 ```env
+# Supabase - Client (NEXT_PUBLIC_ prefix for browser access)
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+
+# Supabase - Server (NEVER use NEXT_PUBLIC_ prefix - server-only secrets!)
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+
+# AI Backend Integration (server-side API key for /api/ai/* routes)
+AI_BACKEND_API_KEY=your-secure-api-key-here
+
+# AI Backend URLs (external Python/FastAPI microservice)
+# Run: cd ../indusia-ai-backend && uvicorn app.main:app --port 8000
+NEXT_PUBLIC_AI_BACKEND_URL=http://localhost:8000
+NEXT_PUBLIC_AI_BACKEND_SSE_URL=http://localhost:8000/sse
 ```
+
+**⚠️ Security Warning:** Service role keys (`SUPABASE_SERVICE_ROLE_KEY`) have full database access. NEVER expose them to client-side code by using `NEXT_PUBLIC_` prefix. Only use `NEXT_PUBLIC_` for non-sensitive configuration like URLs and anonymous keys.
+
+## Security & Known Issues
+
+### Critical Security Fixes Required
+
+⚠️ **Before production deployment**, address these critical vulnerabilities identified in security review (2026-02-03):
+
+1. **Upgrade Next.js** - Version 13.5.1 has 15+ critical CVEs including SSRF, DoS, and authorization bypass
+   ```bash
+   npm install next@latest
+   npm audit fix
+   ```
+
+2. **Development Auth Bypasses** - Production safeguards needed:
+   - `lib/auth/apiAuth.js:16-58` - x-user-id header authentication bypass in dev mode
+   - `lib/auth/apiKeyAuth.js:19-29` - AI Backend API key validation disabled in dev
+   - Risk: If NODE_ENV misconfigured, attackers can impersonate any user
+   - Fix: Add explicit production checks that block dev auth paths
+
+3. **Environment Variable Security**
+   - ⚠️ **NEVER** use `NEXT_PUBLIC_` prefix for service role keys or API keys
+   - ✅ Server-only: `SUPABASE_SERVICE_ROLE_KEY`, `AI_BACKEND_API_KEY`
+   - ✅ Client-safe: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+   - Any `NEXT_PUBLIC_` variable is exposed to browser JavaScript
+
+4. **Path Traversal Protection** - `app/api/storage/false-calls/[...path]/route.js`:
+   - Add strict path validation to prevent directory traversal attacks
+   - Verify resolved paths stay within intended storage directory
+
+5. **CSRF Protection in Development**
+   - `lib/utils/csrf.js:117-125` - CSRF validation completely skipped in dev mode
+   - Developers may not test CSRF protection, breaking production deployments
+   - Keep validation enabled in dev with clear error messages
+
+6. **Vulnerable Dependencies**
+   - Run `npm audit fix` to patch known vulnerabilities
+   - Critical issues in cross-spawn, glob, lodash
+
+7. **Missing Row Level Security (RLS) Policies**
+   - Verify Supabase RLS policies are enabled for all tables
+   - Even with application-level auth, direct database access bypasses security
+
+### Known Gotchas
+
+- **TypeScript errors ignored** - `ignoreBuildErrors: true` in next.config.js means type errors won't block builds. Run `npm run typecheck` to see all type errors.
+- **Mock auth in development** - x-user-id header allows user impersonation in dev mode only. This is intentional for testing but dangerous if NODE_ENV is misconfigured.
+- **CSRF protection required** - All state-changing API calls (POST/PUT/DELETE) need X-CSRF-Token header. Get token from `GET /api/auth/csrf`.
+- **localStorage for auth** - Current implementation stores user in localStorage. Will migrate to httpOnly cookies when moving to Supabase Auth.
+- **Service role key naming** - Documentation previously showed incorrect `NEXT_PUBLIC_` prefix pattern. Always use server-only env vars for secrets.
+- **Security headers configured** - `next.config.js` includes comprehensive security headers (CSP, HSTS, X-Frame-Options, etc.). Don't disable these in production.
+
+### Security Architecture
+
+The app implements defense-in-depth with multiple security layers:
+
+**Input Validation & Sanitization:**
+- Zod schemas validate all API inputs (`lib/validations/schemas.js`)
+- Sanitization utilities prevent XSS, SQL injection, prototype pollution (`lib/utils/sanitize.js`)
+- Magic bytes validation for file uploads prevents MIME spoofing
+
+**Authentication & Authorization:**
+- `withAuth()` middleware protects API routes (`lib/auth/apiAuth.js`)
+- Role-Based Access Control (RBAC) with permission system (`lib/auth/rbac.js`)
+- Section-based access control for data isolation (`lib/auth/sectionAccess.js`)
+- API key authentication for AI Backend services (`lib/auth/apiKeyAuth.js`)
+
+**Security Headers:**
+- Content Security Policy (CSP) configured in `next.config.js`
+- HSTS, X-Frame-Options, X-Content-Type-Options enabled
+- Referrer Policy and Permissions Policy configured
+
+**Rate Limiting & CSRF:**
+- Rate limiting on sensitive endpoints (login: 5 req/min)
+- Double-submit cookie CSRF protection with constant-time comparison (`lib/utils/csrf.js`)
+
+**Security Score: 6.5/10** (per security review) - Good architecture but critical dependency updates needed.
 
 ## Key Implementation Patterns
 
@@ -418,30 +616,7 @@ Major cleanup performed to improve code quality:
 
 **Codebase Quality Score: 7.2/10**
 
-### README Update Template
-
-When updating README.md after a phase, include:
-
-```markdown
-## Recent Updates
-
-### Phase X: [Phase Name] (YYYY-MM-DD)
-
-**New Features:**
-- Feature 1
-- Feature 2
-
-**New API Endpoints:**
-- `POST /api/xxx` - Description
-- `GET /api/xxx` - Description
-
-**New Components:**
-- `ComponentName.jsx` - Description
-
-**Database Changes:**
-- New table: `table_name`
-- New column: `table.column`
-```
+**Post-Phase Documentation:** After completing each phase, update README.md with new features, API endpoints, components, and database changes.
 
 ---
 
