@@ -1,0 +1,683 @@
+/**
+ * AI Backend Client Service
+ * Handles SSE connection and REST calls to AI Backend (main.py)
+ *
+ * NEW API (app/main.py):
+ * - /sse/{line_id} (SSE - single stream with named events)
+ * - /sse-open/{line_id} (SSE - no session validation, for testing)
+ * - /session/start (POST)
+ * - /session/run (POST)
+ * - /session/pause (POST)
+ * - /session/stop (POST)
+ * - /confirm (POST)
+ * - /stages (GET)
+ * - /health (GET)
+ *
+ * @module lib/services/aiBackendService
+ */
+
+const AI_BACKEND_URL = process.env.NEXT_PUBLIC_AI_BACKEND_URL || 'http://localhost:8000'
+
+// ============================================
+// Transform Layer
+// ============================================
+
+/**
+ * Convert operator decision to AI Backend format
+ * UI uses: 'GOOD' / 'NG'
+ * AI Backend expects: is_actual_ng (boolean)
+ *
+ * @param {string} operatorDecision - 'GOOD' or 'NG'
+ * @returns {object} - { is_actual_ng: boolean }
+ */
+export function toAiBackendFormat(operatorDecision) {
+  return {
+    is_actual_ng: operatorDecision === 'NG'
+  }
+}
+
+/**
+ * Convert AI Backend response to UI format
+ *
+ * @param {object} response - AI Backend response
+ * @returns {object} - Response with operator_decision added
+ */
+export function fromAiBackendFormat(response) {
+  return {
+    ...response,
+    operator_decision: response.is_actual_ng ? 'NG' : 'GOOD'
+  }
+}
+
+/**
+ * Calculate false call based on AI decision vs Operator decision
+ * False call = operator disagrees with AI
+ *
+ * @param {string} aiDecision - 'PASS' or 'FAIL'
+ * @param {string} operatorDecision - 'GOOD' or 'NG'
+ * @returns {boolean}
+ */
+export function calculateFalseCall(aiDecision, operatorDecision) {
+  return (
+    (aiDecision === 'PASS' && operatorDecision === 'NG') ||
+    (aiDecision === 'FAIL' && operatorDecision === 'GOOD')
+  )
+}
+
+// ============================================
+// SSE Connection Class (Single Stream)
+// ============================================
+
+/**
+ * SSE Connection Manager for NEW API (main.py)
+ * Connects to SINGLE SSE endpoint: /sse-open/{line_id}
+ *
+ * Named events received:
+ * - inspection
+ * - hardware_status
+ * - running_status
+ * - session_update
+ */
+export class SSEConnection {
+  constructor(lineId, options = {}) {
+    this.lineId = lineId
+    this.eventSource = null
+    this.reconnectAttempts = 0
+    this.maxReconnectAttempts = options.maxReconnectAttempts || 10
+    this.baseDelay = options.baseDelay || 1000
+    this.maxDelay = options.maxDelay || 30000
+    this.reconnectTimeoutId = null
+    this._connected = false
+    this.useOpenEndpoint = options.useOpenEndpoint !== false // Default true (skip session validation)
+
+    this.listeners = {
+      inspection: [],
+      hardware_status: [],
+      running_status: [],
+      session_update: [],
+      work_order_update: [],
+      confirmed: [],
+      connected: [],
+      error: [],
+      reconnecting: [],
+      heartbeat: []
+    }
+
+    this._lastEventTime = {}
+  }
+
+  /**
+   * Connect to SSE stream
+   */
+  connect() {
+    this.disconnect()
+
+    console.log(`[SSE] ========================================`)
+    console.log(`[SSE] Connecting to AI Backend at ${AI_BACKEND_URL}`)
+    console.log(`[SSE] Line ID: ${this.lineId}`)
+    console.log(`[SSE] ========================================`)
+
+    try {
+      // NEW API: Single SSE endpoint with named events
+      const endpoint = this.useOpenEndpoint
+        ? `${AI_BACKEND_URL}/sse-open/${this.lineId}`
+        : `${AI_BACKEND_URL}/sse/${this.lineId}`
+
+      console.log(`[SSE] 📡 Connecting to: ${endpoint}`)
+
+      this.eventSource = new EventSource(endpoint)
+
+      // Connection opened
+      this.eventSource.onopen = () => {
+        console.log(`[SSE] ✅ CONNECTED to single stream`)
+        this.reconnectAttempts = 0
+        this._connected = true
+        this._emit('connected', {
+          url: AI_BACKEND_URL,
+          endpoint,
+          timestamp: new Date().toISOString()
+        })
+      }
+
+      // Connection error
+      this.eventSource.onerror = (error) => {
+        console.error(`[SSE] ❌ SSE CONNECTION ERROR:`, error)
+        console.error(`[SSE] ReadyState:`, this.eventSource?.readyState)
+
+        if (this.eventSource?.readyState === 2) {
+          console.log(`[SSE] 🔄 Connection closed, attempting reconnect...`)
+          this._handleReconnect()
+        }
+      }
+
+      // Listen to NAMED EVENTS from backend
+      this._listenToEvent('inspection')
+      this._listenToEvent('hardware_status')
+      this._listenToEvent('running_status')
+      this._listenToEvent('session_update')
+
+      // Generic message fallback
+      this.eventSource.onmessage = (e) => {
+        console.log(`[SSE] 📨 Generic message (unnamed):`, e.data?.substring(0, 200))
+      }
+
+      // Start health check
+      this._startHealthCheck()
+
+    } catch (error) {
+      console.error('[SSE] Failed to create EventSource:', error)
+      this._handleReconnect()
+    }
+  }
+
+  /**
+   * Listen to a specific named event
+   * @param {string} eventName - Event name (e.g., 'inspection', 'hardware_status')
+   */
+  _listenToEvent(eventName) {
+    if (!this.eventSource) return
+
+    this.eventSource.addEventListener(eventName, (e) => {
+      this._lastEventTime[eventName] = Date.now()
+
+      try {
+        const data = JSON.parse(e.data)
+        console.log(`[SSE] 📩 ${eventName}:`, data)
+        this._emit(eventName, data)
+      } catch (err) {
+        console.error(`[SSE] ❌ Failed to parse ${eventName}:`, err, e.data)
+      }
+    })
+
+    console.log(`[SSE] 👂 Listening to: ${eventName}`)
+  }
+
+  /**
+   * Start periodic health check
+   */
+  _startHealthCheck() {
+    if (this._healthCheckInterval) {
+      clearInterval(this._healthCheckInterval)
+    }
+
+    const STALE_THRESHOLD_MS = 60000 // 60s without events = stale
+
+    this._healthCheckInterval = setInterval(() => {
+      if (!this._connected || !this.eventSource) return
+
+      const now = Date.now()
+      const readyState = this.eventSource.readyState
+      const states = ['CONNECTING', 'OPEN', 'CLOSED']
+
+      // Check if connection is closed
+      if (readyState === 2) {
+        console.warn('[SSE] ⚠️ HEALTH CHECK: Connection CLOSED! Reconnecting...')
+        this._handleReconnect()
+        return
+      }
+
+      // Check if connection is stuck in CONNECTING
+      if (readyState === 0) {
+        console.warn('[SSE] ⚠️ HEALTH CHECK: Still CONNECTING...')
+      }
+
+      // Check for stale connection (no events for too long)
+      const lastInspectionEvent = this._lastEventTime?.['inspection'] || 0
+      const timeSinceLastEvent = now - lastInspectionEvent
+
+      if (lastInspectionEvent > 0 && timeSinceLastEvent > STALE_THRESHOLD_MS) {
+        console.warn(`[SSE] ⚠️ HEALTH CHECK: Connection STALE (${Math.round(timeSinceLastEvent/1000)}s since last inspection)`)
+      }
+
+      // Log status
+      console.log(`[SSE] 🩺 Health check: ${states[readyState]} | Last inspection: ${lastInspectionEvent ? Math.round((now - lastInspectionEvent)/1000) + 's ago' : 'N/A'}`)
+
+    }, 15000) // Check every 15 seconds
+  }
+
+  /**
+   * Handle reconnection with exponential backoff
+   */
+  _handleReconnect() {
+    if (this.reconnectTimeoutId) {
+      clearTimeout(this.reconnectTimeoutId)
+    }
+
+    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+      console.error('[SSE] Max reconnect attempts reached')
+      this._emit('error', {
+        message: 'AI Backend tidak tersedia. Pastikan backend running: uvicorn app.main:app --reload',
+        fatal: true
+      })
+      return
+    }
+
+    const delay = Math.min(
+      this.baseDelay * Math.pow(2, this.reconnectAttempts) + Math.random() * 1000,
+      this.maxDelay
+    )
+
+    this.reconnectAttempts++
+    console.log(`[SSE] 🔄 Reconnecting in ${Math.round(delay)}ms (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`)
+
+    this._emit('reconnecting', {
+      attempt: this.reconnectAttempts,
+      delay: Math.round(delay)
+    })
+
+    this.reconnectTimeoutId = setTimeout(() => this.connect(), delay)
+  }
+
+  /**
+   * Disconnect SSE stream
+   */
+  disconnect() {
+    if (this._healthCheckInterval) {
+      clearInterval(this._healthCheckInterval)
+      this._healthCheckInterval = null
+    }
+
+    if (this.reconnectTimeoutId) {
+      clearTimeout(this.reconnectTimeoutId)
+      this.reconnectTimeoutId = null
+    }
+
+    if (this.eventSource) {
+      this.eventSource.close()
+      this.eventSource = null
+      console.log('[SSE] Disconnected')
+    }
+
+    this._connected = false
+  }
+
+  /**
+   * Get connection status
+   * @returns {object}
+   */
+  getStreamStatus() {
+    const states = ['CONNECTING', 'OPEN', 'CLOSED']
+
+    if (!this.eventSource) {
+      return {
+        status: 'DISCONNECTED',
+        readyState: null,
+        isOpen: false
+      }
+    }
+
+    return {
+      status: states[this.eventSource.readyState] || 'UNKNOWN',
+      readyState: this.eventSource.readyState,
+      isOpen: this.eventSource.readyState === 1,
+      lastEvents: this._lastEventTime
+    }
+  }
+
+  /**
+   * Check if stream is healthy
+   * @returns {boolean}
+   */
+  areStreamsHealthy() {
+    const status = this.getStreamStatus()
+    return status.isOpen
+  }
+
+  /**
+   * Add event listener
+   * @param {string} eventType
+   * @param {function} callback
+   * @returns {function} - Unsubscribe function
+   */
+  on(eventType, callback) {
+    if (this.listeners[eventType]) {
+      this.listeners[eventType].push(callback)
+    }
+    return () => this.off(eventType, callback)
+  }
+
+  /**
+   * Remove event listener
+   * @param {string} eventType
+   * @param {function} callback
+   */
+  off(eventType, callback) {
+    if (this.listeners[eventType]) {
+      this.listeners[eventType] = this.listeners[eventType].filter(cb => cb !== callback)
+    }
+  }
+
+  /**
+   * Emit event to listeners
+   * @param {string} eventType
+   * @param {*} data
+   */
+  _emit(eventType, data) {
+    if (this.listeners[eventType]) {
+      this.listeners[eventType].forEach(cb => {
+        try {
+          cb(data)
+        } catch (err) {
+          console.error(`[SSE] Listener error for ${eventType}:`, err)
+        }
+      })
+    }
+  }
+
+  /**
+   * Check if connected
+   * @returns {boolean}
+   */
+  isConnected() {
+    return this._connected && this.eventSource?.readyState === 1
+  }
+}
+
+// ============================================
+// REST API Calls
+// ============================================
+
+/**
+ * POST /confirm - Send operator confirmation to AI Backend
+ *
+ * @param {string} inspectionId - Inspection ID from SSE event
+ * @param {string} operatorDecision - 'GOOD' or 'NG'
+ * @param {string} aiDecision - 'PASS' or 'FAIL' (for false call calculation)
+ * @param {object} options - Additional options
+ * @returns {Promise<{success: boolean, data?: object, error?: string}>}
+ */
+export async function postConfirm(inspectionId, operatorDecision, aiDecision, options = {}) {
+  const { unitId, comment, falseCallReason } = options
+
+  const isFalseCall = calculateFalseCall(aiDecision, operatorDecision)
+
+  const payload = {
+    inspection_id: inspectionId,
+    ...toAiBackendFormat(operatorDecision),
+    ...(unitId && { unit_id: unitId }),
+    ...(comment && { comment }),
+    ...(falseCallReason && { false_call_reason: falseCallReason })
+  }
+
+  const endpoint = `${AI_BACKEND_URL}/confirm`
+
+  try {
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(errorData.detail || errorData.error || `HTTP ${response.status}`)
+    }
+
+    const data = await response.json()
+
+    return {
+      success: true,
+      data: {
+        ...fromAiBackendFormat(data),
+        is_false_call: isFalseCall,
+        ai_decision: aiDecision
+      }
+    }
+  } catch (error) {
+    console.error('[AI Backend] POST /confirm error:', error)
+    return {
+      success: false,
+      error: error.message || 'AI Backend tidak tersedia'
+    }
+  }
+}
+
+/**
+ * GET /stages - Get conveyor stage definitions
+ * @returns {Promise<{success: boolean, data?: object, error?: string}>}
+ */
+export async function getStages() {
+  const endpoint = `${AI_BACKEND_URL}/stages`
+
+  try {
+    const response = await fetch(endpoint)
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`)
+    }
+
+    const data = await response.json()
+    return { success: true, data }
+  } catch (error) {
+    console.error('[AI Backend] GET /stages error:', error)
+    return {
+      success: false,
+      error: error.message || 'AI Backend tidak tersedia'
+    }
+  }
+}
+
+/**
+ * GET /health - Check AI Backend health
+ * @returns {Promise<boolean>}
+ */
+export async function checkHealth() {
+  try {
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 3000)
+
+    const response = await fetch(`${AI_BACKEND_URL}/health`, {
+      method: 'GET',
+      signal: controller.signal
+    })
+
+    clearTimeout(timeoutId)
+    return response.ok
+  } catch {
+    return false
+  }
+}
+
+// ============================================
+// Session API Calls (NEW API)
+// ============================================
+
+/**
+ * POST /session/start - Start new session
+ * @param {object} sessionData
+ * @returns {Promise<{success: boolean, data?: object, error?: string}>}
+ */
+export async function startSession(sessionData) {
+  const endpoint = `${AI_BACKEND_URL}/session/start`
+
+  try {
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(sessionData)
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(errorData.detail || `HTTP ${response.status}`)
+    }
+
+    const data = await response.json()
+    console.log('[AI Backend] Session started:', data)
+    return { success: true, data }
+  } catch (error) {
+    console.error('[AI Backend] POST /session/start error:', error)
+    return {
+      success: false,
+      error: error.message || 'Failed to start session'
+    }
+  }
+}
+
+/**
+ * POST /session/run - Start inspection machine
+ * @returns {Promise<{success: boolean, data?: object, error?: string}>}
+ */
+export async function runSession() {
+  const endpoint = `${AI_BACKEND_URL}/session/run`
+
+  try {
+    const response = await fetch(endpoint, { method: 'POST' })
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(errorData.detail || `HTTP ${response.status}`)
+    }
+
+    const data = await response.json()
+    console.log('[AI Backend] Session running:', data)
+    return { success: true, data }
+  } catch (error) {
+    console.error('[AI Backend] POST /session/run error:', error)
+    return {
+      success: false,
+      error: error.message || 'Failed to run session'
+    }
+  }
+}
+
+/**
+ * POST /session/pause - Pause session
+ * @returns {Promise<{success: boolean, data?: object, error?: string}>}
+ */
+export async function pauseSession() {
+  const endpoint = `${AI_BACKEND_URL}/session/pause`
+
+  try {
+    const response = await fetch(endpoint, { method: 'POST' })
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(errorData.detail || `HTTP ${response.status}`)
+    }
+
+    const data = await response.json()
+    console.log('[AI Backend] Session paused:', data)
+    return { success: true, data }
+  } catch (error) {
+    console.error('[AI Backend] POST /session/pause error:', error)
+    return {
+      success: false,
+      error: error.message || 'Failed to pause session'
+    }
+  }
+}
+
+/**
+ * POST /session/stop - Stop and end session
+ * @returns {Promise<{success: boolean, data?: object, error?: string}>}
+ */
+export async function stopSession() {
+  const endpoint = `${AI_BACKEND_URL}/session/stop`
+
+  try {
+    const response = await fetch(endpoint, { method: 'POST' })
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(errorData.detail || `HTTP ${response.status}`)
+    }
+
+    const data = await response.json()
+    console.log('[AI Backend] Session stopped:', data)
+    return { success: true, data }
+  } catch (error) {
+    console.error('[AI Backend] POST /session/stop error:', error)
+    return {
+      success: false,
+      error: error.message || 'Failed to stop session'
+    }
+  }
+}
+
+/**
+ * GET /session/status - Get current session status
+ * @returns {Promise<{success: boolean, data?: object, error?: string}>}
+ */
+export async function getSessionStatus() {
+  const endpoint = `${AI_BACKEND_URL}/session/status`
+
+  try {
+    const response = await fetch(endpoint)
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(errorData.detail || `HTTP ${response.status}`)
+    }
+
+    const data = await response.json()
+    return { success: true, data }
+  } catch (error) {
+    console.error('[AI Backend] GET /session/status error:', error)
+    return {
+      success: false,
+      error: error.message || 'Failed to get session status'
+    }
+  }
+}
+
+// ============================================
+// Factory Function
+// ============================================
+
+/**
+ * Create AI Backend service instance
+ *
+ * @param {string} lineId
+ * @param {object} options
+ * @returns {object}
+ */
+export function createAiBackendService(lineId, options = {}) {
+  const connection = new SSEConnection(lineId, options)
+
+  return {
+    // SSE
+    connect: () => connection.connect(),
+    disconnect: () => connection.disconnect(),
+    on: (event, cb) => connection.on(event, cb),
+    off: (event, cb) => connection.off(event, cb),
+    isConnected: () => connection.isConnected(),
+    getStreamStatus: () => connection.getStreamStatus(),
+    areStreamsHealthy: () => connection.areStreamsHealthy(),
+
+    // REST - Core
+    postConfirm,
+    getStages,
+    checkHealth,
+
+    // REST - Session
+    startSession,
+    runSession,
+    pauseSession,
+    stopSession,
+    getSessionStatus,
+
+    // Utils
+    calculateFalseCall
+  }
+}
+
+export default {
+  SSEConnection,
+  // Core API
+  postConfirm,
+  getStages,
+  checkHealth,
+  // Session API
+  startSession,
+  runSession,
+  pauseSession,
+  stopSession,
+  getSessionStatus,
+  // Factory
+  createAiBackendService,
+  // Transform
+  toAiBackendFormat,
+  fromAiBackendFormat,
+  calculateFalseCall
+}

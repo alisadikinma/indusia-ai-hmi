@@ -7,24 +7,25 @@
  * 2. Listen for hardware_status, running_status, inspection events
  * 3. Display loading during capture/processing stages
  * 4. Display dual-side images when inspection event arrives
- * 5. POST /confirm after operator decision
+ * 5. Operator confirms (local only - no backend /confirm endpoint)
  * 6. Reset and wait for next inspection
  * 
  * @module hooks/useLiveInspection
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { 
-  createAiBackendService, 
-  startSession, 
-  // TODO: Uncomment when AI Backend endpoints ready
-  // runSession,
-  // pauseSession,
-  // stopSession,
-  getSessionStatus,
-  postConfirm,
+import {
+  createAiBackendService,
+  startInspection,
+  pauseInspection,
+  resumeInspection,
+  stopInspection,
+  selectModel,
+  getCurrentModel,
   checkHealth,
-  getStages
+  getStages,
+  calculateFalseCall,
+  triggerSimReady
 } from '@/lib/services/aiBackendService'
 
 // Default stage definitions (fallback if /stages fails)
@@ -129,7 +130,7 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
     setAiBackendAvailable(healthy)
     
     if (!healthy) {
-      setConnectionError('AI Backend tidak tersedia. Pastikan server berjalan di port 8001')
+      setConnectionError('AI Backend tidak tersedia. Pastikan Auto Inspect Edge berjalan di port 8002')
     }
     
     return healthy
@@ -164,46 +165,38 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
     if (!workOrder || sessionStartedRef.current) return false
 
     try {
-      const sessionData = {
-        work_order_id: workOrder.id,
-        work_order_number: workOrder.woNumber,
-        line_id: lineId,
-        line_name: workOrder.line?.name || null,
-        board_id: workOrder.boardId,
-        board_name: workOrder.board?.name || 'PCB',
-        lot_size: workOrder.lotSize,
-        side_count: workOrder.sideCount || 1
-      }
+      // Auto Inspect Edge: Select model based on board
+      // TEMP FIX: Skip model selection in simulation mode (model files not available)
+      const modelName = 'pcb_1'
 
-      console.log('[LiveInspection] Starting session:', sessionData)
-      const result = await startSession(sessionData)
+      console.log('[LiveInspection] Attempting to select model:', modelName)
+      const result = await selectModel(modelName)
 
       if (result.success) {
         sessionStartedRef.current = true
-        setSessionStatus(result.data)
-        if (result.data?.status) {
-          setProcessStatus(result.data.status)
-        }
+        console.log('[LiveInspection] Model selected successfully')
+        setProcessStatus('READY')
         return true
       } else {
+        // Check if error is "model not found" (simulation mode - skip it)
+        if (result.error?.toLowerCase().includes('not found')) {
+          console.log('[LiveInspection] ⚠️ Model not found (simulation mode) - skipping model selection')
+          sessionStartedRef.current = true
+          setConnectionError(null)
+          setProcessStatus('READY')
+          return true
+        }
+
         // Check if error is "session already active"
-        if (result.error?.toLowerCase().includes('already active') || 
+        if (result.error?.toLowerCase().includes('already active') ||
             result.error?.toLowerCase().includes('session active')) {
           console.log('[LiveInspection] Session already active, resuming...')
           sessionStartedRef.current = true
           setConnectionError(null) // Clear error - this is OK
-          
-          // Try to get current session status
-          const statusResult = await getSessionStatus()
-          if (statusResult.success) {
-            setSessionStatus(statusResult.data)
-            if (statusResult.data?.status) {
-              setProcessStatus(statusResult.data.status)
-            }
-          }
+          setProcessStatus('READY')
           return true
         }
-        
+
         console.error('[LiveInspection] Failed to start session:', result.error)
         setConnectionError(result.error)
         return false
@@ -253,47 +246,106 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
 
   const handleRunningStatus = useCallback((data) => {
     console.log('[LiveInspection] Running status:', data)
-    
-    const stageName = data.stage_name || 'idle'
-    const message = STAGE_MESSAGES[stageName] || 'Processing...'
-    
-    // Use ref to get latest stageDefinitions (avoid closure issue)
-    const stages = stageDefinitionsRef.current
-    
-    // Find stage index from stageDefinitions
-    const stageIndex = stages.findIndex(s => s.name === stageName) + 1
-    const currentTotalStages = stages.length
-    
-    // Find stage icon from definitions
-    const stageDef = stages.find(s => s.name === stageName)
-    const icon = stageDef?.icon || 'cpu'
-    
-    // Determine status based on stage name
-    let status = 'idle'
-    if (stageName === 'done') {
-      status = 'ready'
-    } else if (stageName === 'idle') {
-      status = 'idle'
+
+    // Auto Inspect Edge sends: {stage_id, stage, side, position_index, position}
+    // stage values: STARTING, MOVING, FLIPPING, DONE
+    // Map to UI stage name that matches stageDefinitions
+    const backendStage = data.stage || data.stage_name || 'idle'
+    const side = data.side
+    const posIndex = data.position_index
+
+    let stageName = 'idle'
+    let message = 'Processing...'
+    let icon = 'cpu'
+
+    if (backendStage === 'STARTING') {
+      stageName = 'board_incoming'
+      message = side === 'bottom' ? 'Starting bottom side...' : 'Board incoming...'
+      icon = 'box'
+    } else if (backendStage === 'MOVING') {
+      stageName = `position_${posIndex + 1}`
+      message = `Position ${data.position || posIndex + 1} (${(side || '').toUpperCase()})...`
+      icon = 'camera'
+    } else if (backendStage === 'FLIPPING') {
+      stageName = 'pcb_flipping'
+      message = 'Flipping PCB...'
+      icon = 'rotate-ccw'
+    } else if (backendStage === 'DONE') {
+      stageName = 'done'
+      message = 'Motion complete'
+      icon = 'check'
     } else {
-      // All other stages (start, position_1, position_2, flip, etc) are processing
-      status = 'processing'
+      // Fallback for legacy format (stage_name field)
+      stageName = backendStage.toLowerCase()
+      message = STAGE_MESSAGES[stageName] || 'Processing...'
     }
-    
-    // Guard: Ignore duplicate done events to prevent stuck animation
+
+    const stages = stageDefinitionsRef.current
+    const currentTotalStages = stages.length
+
+    let status = 'processing'
+    if (stageName === 'done') status = 'ready'
+    else if (stageName === 'idle') status = 'idle'
+
+    // Use backend stage_id for progress (1-based sequential)
+    const stageIndex = data.stage_id || 0
+
     setInspectionStage(prev => {
       if (stageName === 'done' && prev.status === 'ready' && prev.stageName === 'done') {
-        // Already in ready/done state, skip update to prevent re-render loop
         return prev
       }
-      
+
       return {
         status,
         stageName,
         message,
-        stageIndex: stageIndex > 0 ? stageIndex : 0,
+        stageIndex: Math.min(stageIndex, currentTotalStages),
         totalStages: currentTotalStages,
         icon
       }
+    })
+  }, []) // No dependencies - uses ref
+
+  const handleVisionStatus = useCallback((data) => {
+    console.log('[LiveInspection] Vision status:', data)
+
+    // Auto Inspect Edge vision_stages: {stage_id, stage, side, position_index}
+    // stage values: CAPTURING, PROCESSING, DONE
+    const backendStage = data.stage || 'idle'
+    const side = data.side
+    const posIndex = data.position_index
+
+    let stageName = 'processing'
+    let message = 'Processing...'
+    let icon = 'cpu'
+    let status = 'processing'
+
+    if (backendStage === 'CAPTURING') {
+      stageName = `position_${posIndex + 1}`
+      message = `Capturing ${(side || '').toUpperCase()} pos ${posIndex + 1}...`
+      icon = 'camera'
+      status = 'capturing'
+    } else if (backendStage === 'PROCESSING') {
+      stageName = `position_${posIndex + 1}`
+      message = `AI processing ${(side || '').toUpperCase()} pos ${posIndex + 1}...`
+      icon = 'cpu'
+      status = 'processing'
+    } else if (backendStage === 'DONE') {
+      // Vision done - inspection result will arrive via inspection stream
+      return
+    }
+
+    const stages = stageDefinitionsRef.current
+    const currentTotalStages = stages.length
+    const stageIndex = data.stage_id || 0
+
+    setInspectionStage({
+      status,
+      stageName,
+      message,
+      stageIndex: Math.min(stageIndex, currentTotalStages),
+      totalStages: currentTotalStages,
+      icon
     })
   }, []) // No dependencies - uses ref
 
@@ -303,37 +355,51 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
     console.log('[LiveInspection] 🎯 inspection_id:', data.inspection_id)
     console.log('[LiveInspection] 🎯 decision:', data.decision)
     console.log('[LiveInspection] 🎯 ========================================')
-    
-    // Get results - handle nested structure from dev.py
-    const resultsData = data.results?.results || data.results
-    
-    // Transform to UI format - top/bottom are arrays of frames
-    const transformFrames = (frames, side) => {
-      if (!frames) return []
-      // Ensure it's an array
-      const frameArray = Array.isArray(frames) ? frames : [frames]
-      return frameArray.map(frame => ({
-        image_url: frame.image_url,
-        objects: (frame.objects || []).map(obj => ({
-          name: obj.name,
-          box: obj.box,
-          score: obj.score,
-          label: obj.label,
-          crop_url: obj.crop_url,
-          side
-        }))
-      })).filter(f => f.image_url) // Only include frames with images
+
+    // Auto Inspect Edge sends results as a flat list with `side` field per item.
+    // Transform each frame to UI format.
+    const transformFrame = (frame) => ({
+      image_url: frame.url || frame.image_url,
+      image_raw_url: frame.raw_url || frame.image_raw_url,
+      side: (frame.side || 'top').toUpperCase(),
+      position: frame.position,
+      position_id: frame.position_id,
+      frame_id: frame.frame_id,
+      objects: (frame.objects || []).map(obj => ({
+        name: obj.name,
+        box: obj.box,
+        score: obj.score,
+        label: obj.label,
+        crop_url: obj.crop_url,
+        side: (frame.side || 'top').toUpperCase()
+      }))
+    })
+
+    // Handle both flat list (Auto Inspect Edge) and nested {top, bottom} (mock server)
+    const rawResults = data.results?.results || data.results
+    let topFrames = []
+    let bottomFrames = []
+
+    if (Array.isArray(rawResults)) {
+      // Flat list from Auto Inspect Edge - split by side
+      const frames = rawResults.map(transformFrame)
+      topFrames = frames.filter(f => f.side === 'TOP')
+      bottomFrames = frames.filter(f => f.side === 'BOTTOM')
+    } else if (rawResults && typeof rawResults === 'object') {
+      // Nested {top, bottom} from mock server
+      topFrames = (rawResults.top || []).map(transformFrame)
+      bottomFrames = (rawResults.bottom || []).map(transformFrame)
     }
-    
+
     const inspection = {
       inspectionId: data.inspection_id,
       modelId: data.model_id,
       modelName: data.model_name,
       results: {
-        top: transformFrames(resultsData?.top, 'TOP'),
-        bottom: transformFrames(resultsData?.bottom, 'BOTTOM')
+        top: topFrames.filter(f => f.image_url),
+        bottom: bottomFrames.filter(f => f.image_url)
       },
-      decision: data.decision, // 'PASS' or 'FAIL'
+      decision: data.decision,
       timestamp: data.timestamp
     }
     
@@ -423,19 +489,22 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
       }
     }
 
-    // Create service if not exists
-    if (!serviceRef.current) {
-      serviceRef.current = createAiBackendService(lineId)
+    // Disconnect old service to prevent duplicate listeners
+    if (serviceRef.current) {
+      serviceRef.current.disconnect()
     }
 
+    // Create fresh service instance
+    serviceRef.current = createAiBackendService(lineId)
     const service = serviceRef.current
 
-    // Register event listeners
+    // Register event listeners (once per service instance)
     service.on('connected', handleConnected)
     service.on('error', handleError)
     service.on('reconnecting', handleReconnecting)
-    service.on('hardware_status', handleHardwareStatus)
-    service.on('running_status', handleRunningStatus)
+    service.on('device_status', handleHardwareStatus)
+    service.on('motion_stages', handleRunningStatus)
+    service.on('vision_stages', handleVisionStatus)
     service.on('inspection', handleInspection)
     service.on('confirmed', handleConfirmed)
     service.on('session_update', handleSessionUpdate)
@@ -451,8 +520,9 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
     handleConnected, 
     handleError, 
     handleReconnecting,
-    handleHardwareStatus, 
-    handleRunningStatus, 
+    handleHardwareStatus,
+    handleRunningStatus,
+    handleVisionStatus,
     handleInspection,
     handleConfirmed, 
     handleSessionUpdate
@@ -486,38 +556,35 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
 
   const runProcess = useCallback(async () => {
     if (isControlling) return { success: false, error: 'Operation in progress' }
-    
+
     setIsControlling(true)
     try {
-      // TODO: Uncomment when AI Backend endpoint ready
-      // const result = await runSession()
-      
-      // Stub response for now
-      const result = { success: true, data: { status: 'RUNNING' } }
-      console.log('[LiveInspection] runSession (stub) - endpoint not ready')
-      
+      // Auto Inspect Edge: Start inspection
+      console.log('[LiveInspection] Calling POST /api/inspection/start...')
+      const result = await startInspection()
+
       if (result.success) {
         setProcessStatus('RUNNING')
         setSessionStatus(result.data)
-        
-        // Reconnect SSE if disconnected
-        if (serviceRef.current && !serviceRef.current.isConnected()) {
-          console.log('[LiveInspection] 🔌 Reconnecting SSE (RUN)')
-          await serviceRef.current.connect()
-          setIsConnected(true)
-        }
-        
+
         // Hardware goes ONLINE when process runs
         setHardwareStatus(prev => ({
           ...prev,
-          cameras: prev.cameras.length > 0 
+          cameras: prev.cameras.length > 0
             ? prev.cameras.map(c => ({ ...c, status: 'ONLINE' }))
             : [{ id: 'cam-01', name: 'Inspection Camera', status: 'ONLINE' }],
           plcs: prev.plcs.length > 0
             ? prev.plcs.map(p => ({ ...p, status: 'ONLINE' }))
             : [{ id: 'plc-01', name: 'Conveyor PLC', status: 'ONLINE' }]
         }))
-        console.log('[LiveInspection] Process started, SSE connected, hardware ONLINE')
+        console.log('[LiveInspection] Process started, hardware ONLINE')
+
+        // In simulation mode, trigger first board arrival (PLC READY signal)
+        // In production, PLC sends READY automatically when a board arrives
+        setTimeout(() => {
+          console.log('[LiveInspection] Triggering first board (sim READY)...')
+          triggerSimReady()
+        }, 1500)
       } else {
         console.error('[LiveInspection] Failed to start process:', result.error)
       }
@@ -532,28 +599,17 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
 
   const pauseProcess = useCallback(async () => {
     if (isControlling) return { success: false, error: 'Operation in progress' }
-    
+
     setIsControlling(true)
     try {
-      // TODO: Uncomment when AI Backend endpoint ready
-      // const result = await pauseSession()
-      
-      // Stub response for now
-      const result = { success: true, data: { status: 'PAUSED' } }
-      console.log('[LiveInspection] pauseSession (stub) - endpoint not ready')
-      
+      // Auto Inspect Edge: Pause inspection
+      console.log('[LiveInspection] Calling POST /api/inspection/pause...')
+      const result = await pauseInspection()
+
       if (result.success) {
         setProcessStatus('PAUSED')
         setSessionStatus(result.data)
-        
-        // Disconnect SSE when paused
-        if (serviceRef.current) {
-          console.log('[LiveInspection] 🔌 Disconnecting SSE (PAUSED)')
-          serviceRef.current.disconnect()
-          setIsConnected(false)
-        }
-        
-        console.log('[LiveInspection] Process paused, SSE disconnected')
+        console.log('[LiveInspection] Process paused (SSE stays connected)')
       } else {
         console.error('[LiveInspection] Failed to pause process:', result.error)
       }
@@ -568,31 +624,21 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
 
   const stopProcess = useCallback(async () => {
     if (isControlling) return { success: false, error: 'Operation in progress' }
-    
+
     setIsControlling(true)
     try {
-      // TODO: Uncomment when AI Backend endpoint ready
-      // const result = await stopSession()
-      
-      // Stub response for now
-      const result = { success: true, data: { status: 'STOPPED' } }
-      console.log('[LiveInspection] stopSession (stub) - endpoint not ready')
+      // Auto Inspect Edge: Stop inspection
+      console.log('[LiveInspection] Calling POST /api/inspection/stop...')
+      const result = await stopInspection()
       
       if (result.success) {
         setProcessStatus('STOPPED')
         setSessionStatus(result.data)
         sessionStartedRef.current = false
-        
-        // Disconnect SSE when stopped
-        if (serviceRef.current) {
-          console.log('[LiveInspection] 🔌 Disconnecting SSE (STOPPED)')
-          serviceRef.current.disconnect()
-          setIsConnected(false)
-        }
-        
+
         // Clear current inspection
         setCurrentInspection(null)
-        
+
         // Reset stage to idle
         setInspectionStage({
           status: 'idle',
@@ -602,15 +648,15 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
           totalStages: stageDefinitions.length,
           icon: 'hourglass'
         })
-        
+
         // Hardware goes OFFLINE when process stops
         setHardwareStatus(prev => ({
           ...prev,
           cameras: prev.cameras.map(c => ({ ...c, status: 'OFFLINE' })),
           plcs: prev.plcs.map(p => ({ ...p, status: 'OFFLINE' }))
         }))
-        
-        console.log('[LiveInspection] Process stopped, SSE disconnected, hardware OFFLINE')
+
+        console.log('[LiveInspection] Process stopped, hardware OFFLINE (SSE stays connected)')
       } else {
         console.error('[LiveInspection] Failed to stop process:', result.error)
       }
@@ -627,7 +673,7 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
   // Confirm Inspection (Operator Decision)
   // ============================================
 
-  const confirmInspection = useCallback(async (operatorDecision, options = {}) => {
+  const confirmInspection = useCallback(async (operatorDecision) => {
     if (!currentInspection) {
       console.warn('[LiveInspection] ⚠️ confirmInspection called but no currentInspection!')
       return { success: false, error: 'No active inspection' }
@@ -642,43 +688,36 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
     setIsConfirming(true)
 
     try {
-      const result = await postConfirm(
-        currentInspection.inspectionId,
+      const isFalseCall = calculateFalseCall(currentInspection.decision, operatorDecision)
+
+      // Auto Inspect Edge does not have a /confirm endpoint.
+      // Confirmation is handled locally and persisted to DB via Next.js API routes.
+      console.log('[LiveInspection] ✅ Confirm - resetting for next inspection')
+
+      setLastConfirmation({
+        inspectionId: currentInspection.inspectionId,
         operatorDecision,
-        currentInspection.decision,
-        {
-          falseCallReason: options.falseCallReason,
-          comment: options.comment
-        }
-      )
+        aiDecision: currentInspection.decision,
+        is_false_call: isFalseCall,
+        timestamp: new Date().toISOString()
+      })
 
-      console.log('[LiveInspection] 📬 Confirm result:', result)
+      // Reset for next inspection
+      setCurrentInspection(null)
+      setInspectionStage(prev => ({
+        status: 'idle',
+        stageName: 'idle',
+        message: 'Waiting for board...',
+        stageIndex: 0,
+        totalStages: prev.totalStages,
+        icon: 'hourglass'
+      }))
 
-      if (result.success) {
-        console.log('[LiveInspection] ✅ Confirm SUCCESS - resetting for next inspection')
-        
-        setLastConfirmation({
-          ...result.data,
-          operatorDecision,
-          aiDecision: currentInspection.decision,
-          timestamp: new Date().toISOString()
-        })
+      // Trigger next inspection cycle (simulation mode: sends PLC READY signal)
+      // In production, PLC sends READY automatically when a new board arrives.
+      triggerSimReady()
 
-        // Reset for next inspection
-        setCurrentInspection(null)
-        setInspectionStage(prev => ({
-          status: 'idle',
-          stageName: 'idle',
-          message: 'Waiting for board...',
-          stageIndex: 0,
-          totalStages: prev.totalStages,
-          icon: 'hourglass'
-        }))
-      } else {
-        console.error('[LiveInspection] ❌ Confirm FAILED:', result.error)
-      }
-
-      return result
+      return { success: true, data: { operatorDecision, isFalseCall } }
     } catch (error) {
       console.error('[LiveInspection] ❌ Confirm error:', error)
       return { success: false, error: error.message }
@@ -726,20 +765,20 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
         const status = serviceRef.current.getStreamStatus?.()
         if (status) {
           const inspectionOk = status.inspection?.isOpen
-          const runningOk = status.running_status?.isOpen
-          
+          const motionOk = status.motion_stages?.isOpen
+
           if (!inspectionOk) {
             console.warn('[LiveInspection] ⚠️ HEALTH CHECK: Inspection stream DOWN! Results will not arrive.')
           }
-          if (!runningOk) {
-            console.warn('[LiveInspection] ⚠️ HEALTH CHECK: Running status stream DOWN!')
+          if (!motionOk) {
+            console.warn('[LiveInspection] ⚠️ HEALTH CHECK: Motion stages stream DOWN!')
           }
-          
+
           // Log status every check
           console.log('[LiveInspection] 📊 Stream health:', {
             inspection: status.inspection?.status || 'MISSING',
-            running_status: status.running_status?.status || 'MISSING',
-            hardware_status: status.hardware_status?.status || 'MISSING'
+            motion_stages: status.motion_stages?.status || 'MISSING',
+            device_status: status.device_status?.status || 'MISSING'
           })
         }
       }

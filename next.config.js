@@ -24,9 +24,9 @@ const nextConfig = {
               "default-src 'self'",
               "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com",
               "style-src 'self' 'unsafe-inline' https://unpkg.com",
-              "img-src 'self' data: blob: https:",
+              "img-src 'self' data: blob: https: http://localhost:* http://127.0.0.1:*",
               "font-src 'self' data: https:",
-              "connect-src 'self' http://localhost:*",
+              "connect-src 'self' http://localhost:* http://127.0.0.1:*",
               "frame-ancestors 'self'"
             ].join('; ')
           }
@@ -70,9 +70,9 @@ const nextConfig = {
               "default-src 'self'",
               "script-src 'self' 'unsafe-eval' 'unsafe-inline'",
               "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-              "img-src 'self' data: blob: https: http://localhost:*",
+              "img-src 'self' data: blob: https: http://localhost:* http://127.0.0.1:*",
               "font-src 'self' data: https://fonts.gstatic.com",
-              "connect-src 'self' https://*.supabase.co wss://*.supabase.co http://localhost:* ws://localhost:*",
+              "connect-src 'self' https://*.supabase.co wss://*.supabase.co http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:*",
               "frame-ancestors 'self'",
               "form-action 'self'",
               "base-uri 'self'"

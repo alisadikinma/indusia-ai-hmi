@@ -211,7 +211,7 @@ export default function LoginPage() {
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="operator@indusia.io"
+                    placeholder="operator@indusia.com"
                     className="w-full px-4 py-3 bg-terminal border border-surface-border text-text-primary font-mono text-sm placeholder:text-text-tertiary focus:border-phosphor-amber focus:shadow-glow-amber transition-all"
                     disabled={isLoading}
                     autoComplete="email"

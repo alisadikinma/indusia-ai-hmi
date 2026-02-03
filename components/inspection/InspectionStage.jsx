@@ -53,6 +53,44 @@ const DEFAULT_STAGES = [
   { stage_id: 'stage-03', name: 'done', label: 'Done', icon: 'check' }
 ]
 
+// Phase configuration for grouped display
+const PHASE_CONFIG = {
+  top:       { label: 'TOP',    icon: 'camera', colorClass: 'border-indusia-primary/40' },
+  flip:      { label: 'FLIP',   icon: 'rotate', colorClass: 'border-indusia-warning/40' },
+  bottom:    { label: 'BTM',    icon: 'camera', colorClass: 'border-indusia-primary/40' },
+  ai_top:    { label: 'AI TOP', icon: 'cpu',    colorClass: 'border-purple-500/40' },
+  ai_bottom: { label: 'AI BTM', icon: 'cpu',    colorClass: 'border-purple-500/40' },
+}
+
+/**
+ * Group backend stages into logical phases.
+ * Returns null if stages don't have the `type` field (legacy format).
+ */
+function groupStagesByPhase(stages) {
+  if (!stages?.length || !stages[0]?.type) return null
+
+  const groups = []
+  let currentGroup = null
+
+  for (const stage of stages) {
+    let phaseKey
+    if (stage.type === 'motion') {
+      if (stage.stage === 'FLIPPING') phaseKey = 'flip'
+      else if (stage.side === 'top') phaseKey = 'top'
+      else phaseKey = 'bottom'
+    } else if (stage.type === 'vision') {
+      if (stage.side === 'top') phaseKey = 'ai_top'
+      else phaseKey = 'ai_bottom'
+    }
+    if (!currentGroup || currentGroup.key !== phaseKey) {
+      currentGroup = { key: phaseKey, stages: [] }
+      groups.push(currentGroup)
+    }
+    currentGroup.stages.push(stage)
+  }
+  return groups
+}
+
 export function InspectionStage({ stage, stageDefinitions, processStatus, onResume, isOperator = true, className }) {
   const { t } = useI18n()
   const { status, stageName, message, stageIndex } = stage
@@ -254,34 +292,50 @@ export function InspectionStage({ stage, stageDefinitions, processStatus, onResu
         </p>
 
         {/* Stage dots with labels (all inactive) */}
-        <div className={cn("flex mt-8", isCompact ? "gap-3" : "gap-4")}>
-          {stages.map((s) => {
-            const StageIcon = getIcon(s.icon)
+        {(() => {
+          const phaseGroups = groupStagesByPhase(stages)
+          if (!phaseGroups) {
             return (
-              <div key={s.stage_id} className="flex flex-col items-center group">
-                <div
-                  className={cn(
-                    "rounded-full bg-terminal border-2 border-surface-border flex items-center justify-center",
-                    "transition-all duration-300 group-hover:border-text-tertiary/50",
-                    isCompact ? "w-9 h-9" : "w-11 h-11"
-                  )}
-                  title={s.label}
-                >
-                  <StageIcon className={cn(
-                    "text-text-tertiary transition-colors group-hover:text-text-secondary",
-                    isCompact ? "w-4 h-4" : "w-5 h-5"
-                  )} />
-                </div>
-                <span className={cn(
-                  "font-mono text-text-tertiary mt-1.5 transition-colors group-hover:text-text-secondary",
-                  isCompact ? "text-[10px]" : "text-xs"
-                )}>
-                  {s.label}
-                </span>
+              <div className="flex mt-8 gap-4">
+                {stages.map((s) => {
+                  const StageIcon = getIcon(s.icon)
+                  return (
+                    <div key={s.stage_id} className="flex flex-col items-center group">
+                      <div className={cn("w-10 h-10 rounded-full bg-terminal border-2 border-surface-border flex items-center justify-center transition-all group-hover:border-text-tertiary/50")} title={s.label}>
+                        <StageIcon className="w-4 h-4 text-text-tertiary group-hover:text-text-secondary" />
+                      </div>
+                      <span className="font-mono text-[10px] text-text-tertiary mt-1.5">{s.label}</span>
+                    </div>
+                  )
+                })}
               </div>
             )
-          })}
-        </div>
+          }
+          return (
+            <div className="flex mt-8 items-start gap-4">
+              {phaseGroups.map((group) => {
+                const config = PHASE_CONFIG[group.key] || { label: group.key, icon: 'default', colorClass: 'border-surface-border' }
+                const PhaseIcon = getIcon(config.icon)
+                return (
+                  <div key={group.key} className="flex flex-col items-center">
+                    <div className="flex items-center gap-1.5 mb-2 px-2 py-0.5 rounded text-[10px] font-mono font-bold tracking-wider text-text-tertiary bg-surface-border/20">
+                      <PhaseIcon className="w-3 h-3" />
+                      {config.label}
+                    </div>
+                    <div className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg border border-surface-border/40 bg-terminal/30">
+                      {group.stages.map((s) => (
+                        <div key={s.stage_id} className="w-6 h-6 rounded-full bg-terminal/60 border border-surface-border/60 flex items-center justify-center">
+                          <Circle className="w-2.5 h-2.5 text-text-tertiary/40" />
+                        </div>
+                      ))}
+                    </div>
+                    <span className="font-mono text-[9px] mt-1 text-text-tertiary/40">{group.stages.length}</span>
+                  </div>
+                )
+              })}
+            </div>
+          )
+        })()}
       </div>
     )
   }
@@ -423,73 +477,118 @@ export function InspectionStage({ stage, stageDefinitions, processStatus, onResu
         Stage {stageIndex} / {actualTotalStages}
       </p>
 
-      {/* Enhanced Stage Progress indicators */}
-      <div className={cn("flex items-end", isCompact ? "gap-3" : "gap-5")}>
-        {stages.map((s, index) => {
-          const stageNum = index + 1
-          const isActive = stageNum === stageIndex
-          const isPast = stageNum < stageIndex
-          const StageIcon = getIcon(s.icon)
-          
+      {/* Grouped Stage Progress indicators */}
+      {(() => {
+        const phaseGroups = groupStagesByPhase(stages)
+
+        // Fallback: legacy flat dots if stages lack `type` field
+        if (!phaseGroups) {
           return (
-            <div
-              key={s.stage_id}
-              className="flex flex-col items-center"
-            >
-              {/* Enhanced Icon/Dot container */}
-              <div className="relative">
-                {/* Active glow ring */}
-                {isActive && (
-                  <div className="absolute inset-[-4px] rounded-full bg-phosphor-amber/20 animate-stage-dot-pulse" />
-                )}
-                
-                {/* Completed shimmer ring */}
-                {isPast && (
-                  <div className="absolute inset-[-2px] rounded-full bg-gradient-to-r from-phosphor-green/0 via-phosphor-green/30 to-phosphor-green/0 animate-stage-shimmer" />
-                )}
-                
-                <div
-                  className={cn(
-                    "rounded-full flex items-center justify-center transition-all duration-300 border-2 relative",
-                    isCompact ? "w-9 h-9" : "w-11 h-11",
-                    isActive && "bg-phosphor-amber/20 border-phosphor-amber scale-110 shadow-lg shadow-phosphor-amber/30",
-                    isPast && "bg-phosphor-green/20 border-phosphor-green shadow-md shadow-phosphor-green/20",
-                    !isActive && !isPast && "bg-terminal/80 border-surface-border hover:border-text-tertiary/50"
-                  )}
-                  title={s.label}
-                >
-                  {isPast ? (
-                    <CheckCircle className={cn(
-                      isCompact ? "w-5 h-5" : "w-6 h-6",
-                      "text-phosphor-green drop-shadow-[0_0_4px_rgba(16,185,129,0.5)]"
-                    )} />
-                  ) : (
-                    <StageIcon className={cn(
-                      isCompact ? "w-4 h-4" : "w-5 h-5",
-                      isActive ? "text-phosphor-amber drop-shadow-[0_0_4px_rgba(245,158,11,0.5)]" : "text-text-tertiary",
-                      isActive && s.name === 'flip' && "animate-spin",
-                      isActive && s.icon === 'camera' && "animate-pulse"
-                    )} />
-                  )}
-                </div>
-              </div>
-              
-              {/* Label with enhanced styling */}
-              <span
-                className={cn(
-                  "font-mono mt-2 whitespace-nowrap transition-all duration-300",
-                  isCompact ? "text-[10px]" : "text-xs",
-                  isActive && "text-phosphor-amber font-bold scale-105",
-                  isPast && "text-phosphor-green font-medium",
-                  !isActive && !isPast && "text-text-tertiary"
-                )}
-              >
-                {s.label}
-              </span>
+            <div className="flex items-end gap-4">
+              {stages.map((s, index) => {
+                const stageNum = index + 1
+                const isActive = stageNum === stageIndex
+                const isPast = stageNum < stageIndex
+                const StageIcon = getIcon(s.icon)
+                return (
+                  <div key={s.stage_id} className="flex flex-col items-center">
+                    <div className="relative">
+                      {isActive && <div className="absolute inset-[-4px] rounded-full bg-phosphor-amber/20 animate-stage-dot-pulse" />}
+                      <div className={cn(
+                        "w-10 h-10 rounded-full flex items-center justify-center border-2 transition-all duration-300",
+                        isActive && "bg-phosphor-amber/20 border-phosphor-amber scale-110 shadow-lg shadow-phosphor-amber/30",
+                        isPast && "bg-phosphor-green/20 border-phosphor-green",
+                        !isActive && !isPast && "bg-terminal/80 border-surface-border"
+                      )} title={s.label}>
+                        {isPast ? <CheckCircle className="w-5 h-5 text-phosphor-green" /> : <StageIcon className={cn("w-4 h-4", isActive ? "text-phosphor-amber" : "text-text-tertiary")} />}
+                      </div>
+                    </div>
+                    <span className={cn("font-mono text-[10px] mt-1.5", isActive && "text-phosphor-amber font-bold", isPast && "text-phosphor-green", !isActive && !isPast && "text-text-tertiary")}>{s.label}</span>
+                  </div>
+                )
+              })}
             </div>
           )
-        })}
-      </div>
+        }
+
+        // Grouped phase layout
+        return (
+          <div className="flex items-start gap-4">
+            {phaseGroups.map((group, gi) => {
+              const config = PHASE_CONFIG[group.key] || { label: group.key, icon: 'default', colorClass: 'border-surface-border' }
+              const PhaseIcon = getIcon(config.icon)
+
+              // Determine phase status
+              const firstIdx = group.stages[0].stage_id + 1
+              const lastIdx = group.stages[group.stages.length - 1].stage_id + 1
+              const phaseCompleted = stageIndex > lastIdx
+              const phaseActive = stageIndex >= firstIdx && stageIndex <= lastIdx
+              const phaseFuture = stageIndex < firstIdx
+
+              return (
+                <div key={group.key} className="flex flex-col items-center">
+                  {/* Phase label */}
+                  <div className={cn(
+                    "flex items-center gap-1.5 mb-2 px-2 py-0.5 rounded text-[10px] font-mono font-bold tracking-wider transition-all",
+                    phaseCompleted && "text-phosphor-green bg-phosphor-green/10",
+                    phaseActive && "text-phosphor-amber bg-phosphor-amber/10",
+                    phaseFuture && "text-text-tertiary bg-surface-border/20"
+                  )}>
+                    <PhaseIcon className="w-3 h-3" />
+                    {config.label}
+                  </div>
+
+                  {/* Phase dots container */}
+                  <div className={cn(
+                    "flex items-center gap-1.5 px-2 py-1.5 rounded-lg border transition-all",
+                    phaseCompleted && "border-phosphor-green/30 bg-phosphor-green/5",
+                    phaseActive && "border-phosphor-amber/30 bg-phosphor-amber/5",
+                    phaseFuture && "border-surface-border/40 bg-terminal/30"
+                  )}>
+                    {group.stages.map((s) => {
+                      const stageNum = s.stage_id + 1
+                      const dotActive = stageNum === stageIndex
+                      const dotPast = stageNum < stageIndex
+
+                      return (
+                        <div key={s.stage_id} className="relative">
+                          {dotActive && (
+                            <div className="absolute inset-[-3px] rounded-full bg-phosphor-amber/30 animate-stage-dot-pulse" />
+                          )}
+                          <div className={cn(
+                            "w-6 h-6 rounded-full flex items-center justify-center border transition-all duration-300",
+                            dotActive && "bg-phosphor-amber/30 border-phosphor-amber scale-125 shadow-md shadow-phosphor-amber/30",
+                            dotPast && "bg-phosphor-green/20 border-phosphor-green/60",
+                            !dotActive && !dotPast && "bg-terminal/60 border-surface-border/60"
+                          )}>
+                            {dotPast ? (
+                              <CheckCircle className="w-3.5 h-3.5 text-phosphor-green" />
+                            ) : dotActive ? (
+                              <CircleDot className="w-3.5 h-3.5 text-phosphor-amber" />
+                            ) : (
+                              <Circle className="w-2.5 h-2.5 text-text-tertiary/40" />
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+
+                  {/* Phase count */}
+                  <span className={cn(
+                    "font-mono text-[9px] mt-1 transition-all",
+                    phaseCompleted && "text-phosphor-green/60",
+                    phaseActive && "text-phosphor-amber/60",
+                    phaseFuture && "text-text-tertiary/40"
+                  )}>
+                    {group.stages.length}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+        )
+      })()}
     </div>
   )
 }

@@ -43,6 +43,45 @@ npm run test:e2e:headed       # Run with visible browser for debugging
 npm run test:e2e:ui           # Interactive Playwright UI mode
 ```
 
+## Quick Start
+
+### Test Credentials
+
+```
+Email: operator@indusia.com
+Password: operator123
+
+Other accounts: manager@indusia.com, engineer@indusia.com, admin@indusia.com
+All passwords: {role}123
+```
+
+### Multi-Service Startup (Correct Order)
+
+The HMI requires three services running in this order:
+
+```bash
+# Terminal 1 - PostgREST (Database API)
+cd "D:/Projects/Tools/postgrest"
+./postgrest.exe postgrest.conf
+
+# Terminal 2 - Auto Inspect Edge (AI Backend)
+cd "D:/Projects/indusia-ai-backend"
+python -m auto_inspect_edge.main
+
+# Terminal 3 - Next.js HMI (Frontend)
+cd "D:/Projects/indusia-ai-hmi"
+npm run dev
+```
+
+**Health Checks:**
+```bash
+curl http://localhost:3001/           # PostgREST
+curl http://localhost:8002/health     # Auto Inspect Edge
+curl http://localhost:3000            # Next.js HMI
+```
+
+**Access:** http://localhost:3000/login
+
 ## Architecture
 
 ### Next.js App Router Structure
@@ -140,20 +179,44 @@ Hooks (hooks/) → API Routes (app/api/) → Repositories (lib/repos/) → Supab
 
 ### AI Backend Communication Architecture
 
-The system consists of two separate services that communicate via HTTP and Server-Sent Events (SSE):
+**Integration Status (2026-02-04):** Fully migrated to Auto Inspect Edge API. Mock Server is deprecated and no longer used.
+
+The system uses Auto Inspect Edge as the primary AI Backend. AI Engine (port 8001) is available as an additional service:
+
+#### 1. Auto Inspect Edge (Production API - Port 8002)
+
+**Python-based AI inference server:**
+- Deep learning models for PCB defect detection
+- 4 separate SSE streams for real-time updates:
+  - `/api/model/events/inspection` - Final inspection results
+  - `/api/model/events/motion_stages` - Conveyor movement stages
+  - `/api/model/events/vision_stages` - Camera capture & AI processing
+  - `/api/model/events/device_status` - Hardware status (cameras, PLCs)
+- Model management: `/api/model/list`, `/api/model/select/{model_name}`
+- Stages endpoint: `/api/model/stages`
+- Runs on port 8002
+
+**Dummy Camera for Testing:**
+- Auto Inspect Edge can run without physical Hikrobot cameras using dummy camera mode
+- Set `AI_EDGE_DEBUG_CAMERA=true` in `D:/Projects/indusia-ai-backend/.env`
+- Creates virtual camera with generated test images
+- Patched files: `auto_inspect_edge/core/hardware_manager.py`, `auto_inspect_edge/services/camera/dummy_camera.py`
+
+#### 2. AI Engine (Port 8001)
+
+**FastAPI AI Engine server:**
+- Simpler API format for rapid prototyping
+- Single SSE endpoint: `/sse/{line_id}`
+- Events: `inspection`, `hardware_status`, `running_status`, `session_update`
+- Session-based control: `/session/start`, `/session/run`
+- Runs on port 8001
 
 **Next.js HMI (this repository):**
 - Frontend UI (React components)
 - API routes (`app/api/`) for auth, CRUD operations, business logic
-- SSE consumer in `lib/services/aiBackendService.js`
+- SSE consumer in `lib/services/aiBackendService.js` (Auto Inspect Edge format)
+- Legacy backup: `lib/services/aiBackendService.js.backup-mock` (deprecated Mock Server format)
 - Proxy endpoints in `/app/api/ai/*` that forward to AI Backend
-
-**AI Backend (separate FastAPI repository):**
-- Python-based AI inference server
-- Deep learning models for PCB defect detection
-- Model training and retraining pipeline
-- SSE event stream (`/sse` endpoint) for real-time inspection updates
-- Runs independently on port 8000 (configurable via `NEXT_PUBLIC_AI_BACKEND_URL`)
 
 **Communication Flow:**
 ```
@@ -165,8 +228,8 @@ The system consists of two separate services that communicate via HTTP and Serve
 
 [Next.js API Routes] (/api/ai/*)
     ↕ HTTP + API Key Auth
-[AI Backend (FastAPI)] :8000
-    ↕ SSE Stream
+[Auto Inspect Edge] :8002
+    ↕ 4 SSE Streams
 [Live Inspection Updates]
     ↓
 [AI Models / Training Pipeline]
@@ -174,13 +237,13 @@ The system consists of two separate services that communicate via HTTP and Serve
 
 **Key Integration Points:**
 - Authentication: Next.js API routes use `AI_BACKEND_API_KEY` to authenticate with AI Backend
-- Live inspection: AI Backend publishes SSE events, Next.js consumes and displays in real-time
+- Live inspection: Auto Inspect Edge publishes 4 SSE streams, Next.js consumes in real-time
 - Model training: False call overrides are synced to cloud, AI Backend retrains models
 - API proxy: `/app/api/ai/*` routes forward requests to AI Backend with authentication
 
 **Environment Configuration:**
-- `NEXT_PUBLIC_AI_BACKEND_URL` - AI Backend base URL (http://localhost:8000)
-- `NEXT_PUBLIC_AI_BACKEND_SSE_URL` - SSE endpoint URL (http://localhost:8000/sse)
+- `NEXT_PUBLIC_AI_BACKEND_URL` - AI Backend base URL (http://localhost:8002 for Auto Inspect Edge)
+- `NEXT_PUBLIC_AI_BACKEND_SSE_URL` - SSE endpoint URL (http://localhost:8002)
 - `AI_BACKEND_API_KEY` - Server-side API key for authenticating with AI Backend
 
 ### System Health Monitoring
@@ -314,6 +377,23 @@ npx kill-port 3000
 PORT=3001 npm run dev
 ```
 
+**"PostgREST vs Next.js port confusion"**
+
+If Next.js API routes return 500 errors after login:
+```bash
+# Check what's on each port
+netstat -ano | findstr ":3000"  # Should be Next.js
+netstat -ano | findstr ":3001"  # Should be PostgREST
+
+# If mixed up, kill all and restart in correct order:
+# 1. Start PostgREST first (port 3001)
+# 2. Then start Next.js (port 3000)
+```
+
+**Symptom:** Login works but master-data API calls fail with 500 errors.
+**Cause:** Next.js started on port 3001 (PostgREST's port), so API routes connect to themselves.
+**Fix:** Always start PostgREST before Next.js.
+
 **"Supabase connection failed"**
 - Check `.env.local` exists with correct `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 - Verify Supabase project is running
@@ -326,7 +406,7 @@ PORT=3001 npm run dev
 - CSRF validation is skipped in development mode
 
 **"AI Backend connection refused"**
-- Verify AI Backend is running: `curl http://localhost:8000/health`
+- Verify AI Backend is running: `curl http://localhost:8002/health`
 - Check `NEXT_PUBLIC_AI_BACKEND_URL` in `.env.local`
 - Ensure API key is configured: `AI_BACKEND_API_KEY`
 - AI Backend is a separate FastAPI service, must be started independently
@@ -356,20 +436,23 @@ PORT=3001 npm run dev
 Required environment variables (create `.env.local`):
 
 ```env
-# Supabase - Client (NEXT_PUBLIC_ prefix for browser access)
-NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+# Primary Database - Local PostgREST
+NEXT_PUBLIC_SUPABASE_URL=http://localhost:3001
+NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 
-# Supabase - Server (NEVER use NEXT_PUBLIC_ prefix - server-only secrets!)
+# AI Backend - Auto Inspect Edge (Production API)
+NEXT_PUBLIC_AI_BACKEND_URL=http://localhost:8002
+NEXT_PUBLIC_AI_BACKEND_SSE_URL=http://localhost:8002
+
+# AI Backend - AI Engine (uncomment to use)
+# NEXT_PUBLIC_AI_BACKEND_URL=http://localhost:8001
+# NEXT_PUBLIC_AI_BACKEND_SSE_URL=http://localhost:8001
+
+# Supabase - Server (NEVER use NEXT_PUBLIC_ prefix!)
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 
-# AI Backend Integration (server-side API key for /api/ai/* routes)
+# AI Backend Integration
 AI_BACKEND_API_KEY=your-secure-api-key-here
-
-# AI Backend URLs (external Python/FastAPI microservice)
-# Run: cd ../indusia-ai-backend && uvicorn app.main:app --port 8000
-NEXT_PUBLIC_AI_BACKEND_URL=http://localhost:8000
-NEXT_PUBLIC_AI_BACKEND_SSE_URL=http://localhost:8000/sse
 ```
 
 **⚠️ Security Warning:** Service role keys (`SUPABASE_SERVICE_ROLE_KEY`) have full database access. NEVER expose them to client-side code by using `NEXT_PUBLIC_` prefix. Only use `NEXT_PUBLIC_` for non-sensitive configuration like URLs and anonymous keys.
