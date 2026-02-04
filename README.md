@@ -97,10 +97,11 @@ INDUSIA AI HMI adalah sistem inspeksi visual berbasis AI untuk manufaktur PCB ya
 3. **Sistem mendeteksi false call** secara otomatis:
    - AI bilang PASS tapi Operator bilang NG → AI missed defect
    - AI bilang FAIL tapi Operator bilang GOOD → AI false positive
-4. **Image di-upload** ke Supabase Storage dengan annotation
-5. **Dataset dibuat** dari false call images
-6. **Model di-retrain** dengan data baru
-7. **Model baru di-deploy** → AI semakin akurat
+4. **Manager me-review** false call dan approve/reject (local DB only)
+5. **Saat sync to cloud**: approved override images di-upload ke Supabase Storage
+6. **Dataset dibuat** dari false call images di cloud
+7. **Model di-retrain** dengan data baru
+8. **Model baru di-deploy** → AI semakin akurat
 
 ### 📡 Offline-First with Cloud Sync
 
@@ -141,22 +142,31 @@ INDUSIA AI HMI adalah sistem inspeksi visual berbasis AI untuk manufaktur PCB ya
 | Component | Technology | Purpose |
 |-----------|------------|---------|
 | **Local Database** | PostgreSQL 16 + PostgREST | Full CRUD operations, offline capability |
-| **Sync Agent** | Node.js + Windows Task Scheduler | Background sync setiap 15 menit |
+| **Sync Trigger** | Manual via UI or API (`POST /api/sync/trigger`) | Background sync with lock management |
 | **Cloud Database** | Supabase PostgreSQL | Analytics, reporting, cross-factory data |
-| **Image Storage** | Supabase Storage | False call images untuk retraining |
+| **Image Storage** | Supabase Storage (`inspection-images` bucket) | Approved false call images untuk retraining |
+| **Timezone Handling** | `stripTimezoneOffsets()` | Strips `+07:00` so cloud stores local wall-clock time |
 
 **Data yang di-sync:**
 
 ```javascript
-// Sync priority order
+// Sync priority order (in syncToCloud.js)
 const SYNC_TABLES = [
   'inspection_results',    // Hasil inspeksi
   'inspection_defects',    // Detail defek dengan bbox
-  'work_orders',           // Update qty counters
-  'event_log',             // Audit trail
-  'override_submissions',  // False call dengan images
+  'overrides',             // False call submissions (approved + rejected)
+  'inspection_stats',      // Statistik inspeksi per shift
 ]
+// + work_orders (qty updates only, not full records)
+// + override images (approved only → Supabase Storage)
+// Note: event_log temporarily excluded (schema mismatch)
 ```
+
+**Sync Flow:**
+1. DB records synced per table (batch of 100)
+2. Work order qty counters updated
+3. Approved override images uploaded to Supabase Storage
+4. Sync session logged for audit trail
 
 ---
 
@@ -175,7 +185,7 @@ const SYNC_TABLES = [
 | **Cloud Storage** | Supabase Storage | Latest | Image storage untuk retraining |
 | **Real-time** | Server-Sent Events | - | AI Backend → UI streaming |
 | **Validation** | Zod | 3.25 | Runtime schema validation |
-| **AI Backend** | Python FastAPI | 0.100+ | Camera, inference, PLC |
+| **AI Backend** | Auto Inspect Edge (Python) | - | Camera, inference, PLC (port 8002) |
 | **PLC Communication** | Serial RS232 | - | Conveyor & reject gate control |
 
 ### Component Overview
@@ -278,20 +288,19 @@ inspection_results (
 )
 ```
 
-### SSE Event Flow
+### SSE Event Flow & Live Inspection Architecture
 
 ```
-AI Backend                         Next.js UI                    Database
+AI Backend                    Operator (LiveViewV3)              Database
     │                                  │                             │
-    │ ══ SSE: inspection ════════════▶ │                             │
-    │    {                             │                             │
-    │      inspection_id,              │ Display:                    │
-    │      decision: "FAIL",           │ • PCB image                 │
-    │      results: {                  │ • Bounding boxes            │
-    │        top: { image, objects },  │ • AI decision               │
-    │        bottom: { image, objects }│ • Confidence %              │
-    │      }                           │                             │
-    │    }                             │                             │
+    │ ══ 4 SSE Streams ═════════════▶ │                             │
+    │    • inspection (results)        │ Display:                    │
+    │    • motion_stages (conveyor)    │ • PCB image + BBox overlay  │
+    │    • vision_stages (camera/AI)   │ • AI decision + confidence  │
+    │    • device_status (hardware)    │ • 20-stage progress bar     │
+    │                                  │                             │
+    │                                  │═══ PUT /line-state/{id} ══▶│ In-memory
+    │                                  │    (push state on change)   │ + file backup
     │                                  │                             │
     │                                  │◀═══ Operator clicks ════════│
     │                                  │     GOOD or NG              │
@@ -299,17 +308,25 @@ AI Backend                         Next.js UI                    Database
     │ ◀═══ POST /confirm ══════════════│                             │
     │      { decision: "GOOD" }        │                             │
     │                                  │                             │
-    │ ══ PLC Signal ══▶ Conveyor       │                             │
-    │    PASS/REJECT                   │                             │
-    │                                  │                             │
-    │                                  │═══ Save to DB ═════════════▶│
-    │                                  │    inspection_results       │
+    │ ══ PLC Signal ══▶ Conveyor       │═══ Save to DB ═════════════▶│
+    │    PASS/REJECT                   │    inspection_results       │
     │                                  │    + WO counter update      │
     │                                  │                             │
-    │                                  │     If false_call:          │
-    │                                  │═══ Upload image ═══════════▶│
-    │                                  │    Supabase Storage         │
+
+Manager (LiveViewV3, view-only)        Line State API
+    │                                       │
+    │ ══ GET /line-state/{id} ═══════════▶ │ (polls every 500ms)
+    │    stage, inspection, hardware         │ reads from memory
+    │                                       │
+    │ ══ GET /work-orders/active/{id} ═══▶ │ (polls every 5s)
+    │    WO counters, yield stats           │ reads from database
 ```
+
+**Key design decisions:**
+- Operator receives real-time SSE from AI Backend and pushes state to Line State API
+- Manager polls the Line State API (no direct SSE connection, simpler and read-only)
+- Line State API uses in-memory cache for sub-millisecond reads, async file backup
+- Work order refresh is separated to 5-second interval (DB queries are expensive)
 
 ---
 
@@ -509,14 +526,14 @@ indusia-ai-hmi/
 
 ---
 
-## 🚀 Getting Started
+## Getting Started
 
 ### Prerequisites
 
 - Node.js 18+
-- PostgreSQL 16 (local)
-- PostgREST 12 (optional, for direct DB API)
-- AI Backend running (Python/FastAPI)
+- PostgreSQL 16 (local, running as Windows service or manual)
+- PostgREST 12 (REST API over PostgreSQL)
+- Auto Inspect Edge (Python AI Backend)
 
 ### Installation
 
@@ -528,40 +545,103 @@ cd indusia-ai-hmi
 # Install dependencies
 npm install
 
-# Setup environment
-cp .env.example .env
-# Edit .env with your configuration
+# Setup Swagger UI (one-time)
+npm run setup:swagger
 
-# Run development server
+# Setup environment
+cp .env.example .env.local
+# Edit .env.local with your configuration
+```
+
+### Starting the System
+
+The system consists of 3 services that must be started in order:
+
+```bash
+# ═══════════════════════════════════════════════════════════════
+# STEP 1: PostgREST (Database API) - MUST start first
+# ═══════════════════════════════════════════════════════════════
+cd "D:/Projects/Tools/postgrest"
+./postgrest.exe postgrest.conf
+# → Runs on http://localhost:3001
+# → Provides REST API over local PostgreSQL database
+
+# ═══════════════════════════════════════════════════════════════
+# STEP 2: Auto Inspect Edge (AI Backend)
+# ═══════════════════════════════════════════════════════════════
+cd "D:/Projects/indusia-ai-backend"
+python -m auto_inspect_edge.main
+# → Runs on http://localhost:8002
+# → AI inference, camera control, PLC, SSE event streams
+#
+# For testing without physical cameras:
+#   Set AI_EDGE_DEBUG_CAMERA=true in .env
+
+# ═══════════════════════════════════════════════════════════════
+# STEP 3: Next.js HMI (Frontend) - MUST start last
+# ═══════════════════════════════════════════════════════════════
+cd "D:/Projects/indusia-ai-hmi"
 npm run dev
+# → Runs on http://localhost:3000
+# → Web UI for all roles (operator, manager, engineer, admin)
+```
+
+### Stopping the System
+
+Stop services in reverse order:
+
+```bash
+# Press Ctrl+C in each terminal (reverse order):
+# 1. Stop Next.js HMI (Terminal 3)
+# 2. Stop Auto Inspect Edge (Terminal 2)
+# 3. Stop PostgREST (Terminal 1)
+
+# If a process didn't exit cleanly, force kill by port:
+npx kill-port 3000          # Next.js HMI
+npx kill-port 8002          # AI Backend
+npx kill-port 3001          # PostgREST
+
+# Windows alternative - find PID and kill:
+netstat -ano | findstr ":3000"
+taskkill /PID <pid> /F
+```
+
+### Health Checks
+
+```bash
+curl http://localhost:3001/           # PostgREST → JSON schema
+curl http://localhost:8002/health     # AI Backend → {"status":"ok"}
+curl http://localhost:3000            # Next.js → HTML page
 ```
 
 ### Environment Variables
 
 ```env
-# Local Database (PostgreSQL + PostgREST)
-DATABASE_URL=postgresql://user:pass@localhost:5432/indusia
-POSTGREST_URL=http://localhost:3001
+# Primary Database - Local PostgREST
+NEXT_PUBLIC_SUPABASE_URL=http://localhost:3001
+NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 
-# Supabase Cloud (for sync & storage)
-NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
-SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+# AI Backend - Auto Inspect Edge
+NEXT_PUBLIC_AI_BACKEND_URL=http://localhost:8002
+NEXT_PUBLIC_AI_BACKEND_SSE_URL=http://localhost:8002
 
-# AI Backend
+# Supabase Cloud (for sync & image storage)
+SUPABASE_CLOUD_URL=https://your-project.supabase.co
+SUPABASE_SERVICE_KEY=your-service-role-key
+# ⚠️ NEVER use NEXT_PUBLIC_ prefix for service keys!
+
+# AI Backend Integration
 AI_BACKEND_API_KEY=your-secure-api-key
-NEXT_PUBLIC_AI_BACKEND_URL=http://localhost:8001
-NEXT_PUBLIC_AI_BACKEND_SSE_URL=http://localhost:8001/sse
 ```
 
 ### Demo Credentials
 
 | Role | Email | Password |
 |------|-------|----------|
-| Super Admin | admin@indusia.ai | admin123 |
-| Manager | manager@indusia.ai | manager123 |
-| Engineer | engineer@indusia.ai | engineer123 |
-| Operator | operator@indusia.ai | operator123 |
+| Operator | operator@indusia.com | operator123 |
+| Manager | manager@indusia.com | manager123 |
+| Engineer | engineer@indusia.com | engineer123 |
+| Super Admin | admin@indusia.com | admin123 |
 
 ---
 

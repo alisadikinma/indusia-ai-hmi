@@ -55,29 +55,63 @@ Other accounts: manager@indusia.com, engineer@indusia.com, admin@indusia.com
 All passwords: {role}123
 ```
 
-### Multi-Service Startup (Correct Order)
+### Multi-Service Startup & Shutdown
 
-The HMI requires three services running in this order:
+The HMI requires three services. Start them in this order (dependencies first):
+
+#### Starting Services
 
 ```bash
-# Terminal 1 - PostgREST (Database API)
+# Terminal 1 - PostgREST (Database API) - MUST start first
 cd "D:/Projects/Tools/postgrest"
 ./postgrest.exe postgrest.conf
+# Runs on port 3001 - provides REST API over local PostgreSQL
 
 # Terminal 2 - Auto Inspect Edge (AI Backend)
 cd "D:/Projects/indusia-ai-backend"
 python -m auto_inspect_edge.main
+# Runs on port 8002 - AI inference, camera, PLC, SSE streams
 
-# Terminal 3 - Next.js HMI (Frontend)
+# Terminal 3 - Next.js HMI (Frontend) - MUST start last
 cd "D:/Projects/indusia-ai-hmi"
 npm run dev
+# Runs on port 3000 - web UI for operator/manager/engineer
 ```
 
-**Health Checks:**
+#### Stopping Services
+
 ```bash
-curl http://localhost:3001/           # PostgREST
-curl http://localhost:8002/health     # Auto Inspect Edge
-curl http://localhost:3000            # Next.js HMI
+# Stop in reverse order (frontend first, database last)
+
+# Terminal 3 - Next.js: Press Ctrl+C in the terminal
+# Terminal 2 - Auto Inspect Edge: Press Ctrl+C in the terminal
+# Terminal 1 - PostgREST: Press Ctrl+C in the terminal
+
+# If a port is stuck (process didn't exit cleanly):
+npx kill-port 3000          # Kill Next.js
+npx kill-port 8002          # Kill AI Backend
+npx kill-port 3001          # Kill PostgREST
+
+# Windows: Find and kill by port
+netstat -ano | findstr ":3000"    # Find PID
+taskkill /PID <pid> /F            # Force kill
+```
+
+#### Health Checks
+
+```bash
+curl http://localhost:3001/           # PostgREST - should return JSON schema
+curl http://localhost:8002/health     # Auto Inspect Edge - should return {"status":"ok"}
+curl http://localhost:3000            # Next.js HMI - should return HTML
+```
+
+#### Quick Restart (All Services)
+
+```bash
+# Kill all three ports and restart
+npx kill-port 3000 3001 8002
+
+# Then start again in order: PostgREST → AI Backend → Next.js
 ```
 
 **Access:** http://localhost:3000/login
@@ -246,6 +280,36 @@ The system uses Auto Inspect Edge as the primary AI Backend. AI Engine (port 800
 - `NEXT_PUBLIC_AI_BACKEND_SSE_URL` - SSE endpoint URL (http://localhost:8002)
 - `AI_BACKEND_API_KEY` - Server-side API key for authenticating with AI Backend
 
+### Live Inspection Architecture
+
+The live inspection view (`LiveViewV3.jsx`) uses different data flow patterns for operator vs manager:
+
+**Operator (real-time via SSE):**
+```
+AI Backend → 4 SSE streams → useLiveInspection hook → LiveViewV3 (operator)
+                                                         ↓
+                                              PUT /api/inspection/line-state/{lineId}
+                                              (pushes state on every change)
+```
+
+**Manager (polling via API):**
+```
+GET /api/inspection/line-state/{lineId} ← Manager polls every 500ms
+GET /api/work-orders/active/{lineId}    ← Manager polls every 5s (slow, DB query)
+```
+
+**Line State API** (`app/api/inspection/line-state/[lineId]/route.js`):
+- In-memory `Map` cache for fast reads (loaded from `.line-state.json` once on startup)
+- `PUT` writes to memory + async file backup (non-blocking)
+- `GET` reads from memory only (no file I/O)
+- Stores: processStatus, stage, hardware, currentInspection, autoNgEnabled
+
+**Stage Definitions:**
+- Fetched from AI Backend via `GET /api/model/stages` (returns 20 stages)
+- `useLiveInspection` hook fetches stages on mount for ALL roles (operator + manager)
+- `InspectionStage.jsx` groups 20 stages into 5 phases: TOP, FLIP, BTM, AI TOP, AI BTM
+- Grouping logic in `groupStagesByPhase()` uses the `type` field from stage definitions
+
 ### System Health Monitoring
 
 `SystemHealthContext` provides real-time system status monitoring with these components:
@@ -297,7 +361,8 @@ The cloud sync system enables uploading inspection data from edge PostgreSQL to 
 - `supabaseAdmin.js` - Admin client for cloud operations
 - `syncLock.js` - Lock management to prevent concurrent syncs
 - `onlineCheck.js` - Cloud connectivity checks
-- `syncToCloud.js` - Main sync logic with batch processing
+- `syncToCloud.js` - Main sync logic with batch processing + image upload
+- `cloudImageUpload.js` - Upload override images to Supabase Storage
 - `index.js` - Module exports
 
 **Sync Repository** (`lib/repos/syncRepo.js`):
@@ -314,9 +379,29 @@ The cloud sync system enables uploading inspection data from edge PostgreSQL to 
 - `POST /api/sync/force-release` - Admin: release stuck lock
 - `GET /api/sync/history` - Recent sync sessions
 
-**Synced Tables**: inspection_results, inspection_defects, overrides, event_log, inspection_stats, work_orders (qty updates only)
+**Sync Flow (executed in `syncToCloud.js`):**
+1. Acquire sync lock
+2. Sync DB table records (inspection_results → inspection_defects → overrides → inspection_stats)
+3. Sync work order qty updates
+4. Upload override images to Supabase Storage (approved overrides only)
+5. Log sync session
+6. Release lock
 
-**Configuration**: Set `NEXT_PUBLIC_SUPABASE_CLOUD_URL` and `SUPABASE_CLOUD_SERVICE_ROLE_KEY` for cloud sync. ⚠️ **CRITICAL:** Never use `NEXT_PUBLIC_` prefix for service role keys - they are server-only secrets and must not be exposed to client-side code. Lock expires after 10 minutes, processes 100 records per batch by default.
+**Synced Tables**: inspection_results, inspection_defects, overrides, inspection_stats, work_orders (qty updates only)
+- `event_log` is temporarily excluded due to schema mismatch with cloud
+
+**Override Image Upload:**
+- Images are uploaded during the sync process, NOT during manager approval
+- Manager approval (`PATCH /api/overrides/:id`) only updates local DB status
+- `syncOverrideImages()` in `syncToCloud.js` finds approved overrides with empty `cloud_image_paths`, reads local files from `storage/false-calls/`, and uploads to Supabase Storage bucket `inspection-images`
+- Both local DB and cloud DB are updated with the resulting cloud URLs
+
+**Timezone Handling:**
+- Local PostgREST returns timestamps with timezone offset (e.g., `+07:00`)
+- `stripTimezoneOffsets()` in `syncToCloud.js` removes the offset before uploading to cloud
+- This ensures cloud stores the same wall-clock time as local (important for single-timezone factory)
+
+**Configuration**: Set `SUPABASE_CLOUD_URL` and `SUPABASE_SERVICE_KEY` in `.env.local`. Lock expires after 10 minutes, processes 100 records per batch by default.
 
 ### Import Aliases
 
@@ -538,10 +623,14 @@ The app implements defense-in-depth with multiple security layers:
 ### Override Workflow
 
 False call overrides follow this flow:
-1. Operator submits override via `FalseCallOverrideModal` (status: `pending`)
+1. Operator submits override via `FalseCallOverrideModal` (status: `pending`, images saved to local `storage/false-calls/`)
 2. Manager reviews in `/inspection/overrides` using `OverrideReviewModal`
-3. Manager approves or rejects (status: `approved` or `rejected`)
+3. Manager approves or rejects (status: `approved` or `rejected`) - **local DB only, no image upload**
 4. System creates event log entry and notification
+5. During cloud sync: approved overrides with local images are uploaded to Supabase Storage
+6. Both approved and rejected overrides are synced as DB records, but only approved ones get images uploaded
+
+**Important:** Image upload intentionally does NOT happen during approval. The approval PATCH handler only updates status in the local database. Images are uploaded during `syncToCloud()` which runs in the background with no API timeout constraints.
 
 ### Modal Patterns
 
