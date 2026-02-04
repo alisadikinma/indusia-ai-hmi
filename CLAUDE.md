@@ -64,7 +64,7 @@ The HMI requires three services. Start them in this order (dependencies first):
 ```bash
 # Terminal 1 - PostgREST (Database API) - MUST start first
 cd "D:/Projects/Tools/postgrest"
-./postgrest.exe postgrest.conf
+postgrest.exe postgrest.conf
 # Runs on port 3001 - provides REST API over local PostgreSQL
 
 # Terminal 2 - Auto Inspect Edge (AI Backend)
