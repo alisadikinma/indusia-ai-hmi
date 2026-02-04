@@ -1,52 +1,61 @@
 /**
  * Line State API
- * 
+ *
  * Stores shared state per line so all clients see the same state.
  * Includes: process status, auto-ng, stage info, and current inspection.
- * 
- * GET: Fetch current state
- * PUT: Update state (operator only)
- * 
- * Uses file-based storage to persist across Next.js workers in dev mode.
+ *
+ * GET: Fetch current state (from memory - fast)
+ * PUT: Update state (operator only, writes to memory + async file backup)
+ *
+ * Uses in-memory Map for fast reads, with file backup for persistence.
  */
 
 import { NextResponse } from 'next/server'
 import fs from 'fs'
 import path from 'path'
 
-// File-based store for line state (persists across Next.js workers)
+// File path for persistence (backup only - not read on every request)
 const STATE_FILE = path.join(process.cwd(), '.line-state.json')
 
-// Read state from file
-function readStateStore() {
+// In-memory cache - loaded from file once at startup
+let lineStateCache = null
+
+// Load cache from file (called once on first access)
+function ensureCache() {
+  if (lineStateCache !== null) return lineStateCache
+
   try {
     if (fs.existsSync(STATE_FILE)) {
       const data = fs.readFileSync(STATE_FILE, 'utf-8')
-      return new Map(JSON.parse(data))
+      lineStateCache = new Map(JSON.parse(data))
     }
   } catch (err) {
     console.warn('[LineState] Failed to read state file:', err.message)
   }
-  return new Map()
+
+  if (!lineStateCache) {
+    lineStateCache = new Map()
+  }
+
+  return lineStateCache
 }
 
-// Write state to file
-function writeStateStore(store) {
+// Persist cache to file (async - doesn't block response)
+function persistToFile() {
   try {
-    const data = JSON.stringify([...store.entries()])
-    fs.writeFileSync(STATE_FILE, data, 'utf-8')
+    const data = JSON.stringify([...lineStateCache.entries()])
+    fs.writeFile(STATE_FILE, data, 'utf-8', (err) => {
+      if (err) console.warn('[LineState] Failed to persist state file:', err.message)
+    })
   } catch (err) {
-    console.warn('[LineState] Failed to write state file:', err.message)
+    console.warn('[LineState] Failed to serialize state:', err.message)
   }
 }
 
 // Default state for a line
 const getDefaultState = () => ({
-  // Process control
   autoNgEnabled: true,
-  processStatus: 'IDLE', // IDLE, RUNNING, PAUSED, STOPPED
-  
-  // Stage info (7 stages for dual-side PCB inspection)
+  processStatus: 'IDLE',
   stage: {
     status: 'idle',
     stageName: 'idle',
@@ -54,47 +63,20 @@ const getDefaultState = () => ({
     stageIndex: 0,
     totalStages: 7
   },
-  
-  // Hardware status
   hardware: {
     cameras: [],
     plcs: []
   },
-  
-  // Current inspection (null if none)
   currentInspection: null,
-  
-  // Metadata
   updatedAt: new Date().toISOString(),
   updatedBy: null
 })
-
-// Validate and fix state if it has incorrect values
-const validateState = (state) => {
-  const fixedState = { ...state }
-  
-  // Fix totalStages if incorrect (must be 7 for dual-side PCB)
-  if (fixedState.stage && fixedState.stage.totalStages !== 7) {
-    console.log('[LineState API] Fixing totalStages:', fixedState.stage.totalStages, '→ 7')
-    fixedState.stage = {
-      ...fixedState.stage,
-      totalStages: 7
-    }
-  }
-  
-  // Ensure autoNgEnabled is boolean
-  if (typeof fixedState.autoNgEnabled !== 'boolean') {
-    fixedState.autoNgEnabled = true
-  }
-  
-  return fixedState
-}
 
 // GET /api/inspection/line-state/[lineId]
 export async function GET(request, { params }) {
   try {
     const { lineId } = await params
-    
+
     if (!lineId) {
       return NextResponse.json(
         { success: false, error: 'Line ID required' },
@@ -102,29 +84,16 @@ export async function GET(request, { params }) {
       )
     }
 
-    // Read from file
-    const lineStateStore = readStateStore()
+    const cache = ensureCache()
 
     // Get or create default state
-    if (!lineStateStore.has(lineId)) {
+    if (!cache.has(lineId)) {
       const defaultState = getDefaultState()
-      lineStateStore.set(lineId, defaultState)
-      writeStateStore(lineStateStore)
+      cache.set(lineId, defaultState)
+      persistToFile()
     }
 
-    let state = lineStateStore.get(lineId)
-    
-    // Validate and fix state if needed
-    const validatedState = validateState(state)
-    if (JSON.stringify(state) !== JSON.stringify(validatedState)) {
-      // State was fixed, save it
-      lineStateStore.set(lineId, validatedState)
-      writeStateStore(lineStateStore)
-      state = validatedState
-    }
-    
-    // DEBUG log disabled - uncomment for troubleshooting
-    // console.log(`[LineState API] GET line ${lineId} autoNgEnabled:`, state.autoNgEnabled)
+    const state = cache.get(lineId)
 
     return NextResponse.json({
       success: true,
@@ -144,15 +113,7 @@ export async function PUT(request, { params }) {
   try {
     const { lineId } = await params
     const body = await request.json()
-    
-    // DEBUG log disabled - uncomment for troubleshooting
-    // console.log(`[LineState API] PUT line ${lineId}:`, {
-    //   autoNgEnabled: body.autoNgEnabled,
-    //   hasProcessStatus: body.processStatus !== undefined,
-    //   hasStage: body.stage !== undefined,
-    //   updatedBy: body.updatedBy
-    // })
-    
+
     if (!lineId) {
       return NextResponse.json(
         { success: false, error: 'Line ID required' },
@@ -160,16 +121,15 @@ export async function PUT(request, { params }) {
       )
     }
 
-    // Read current store from file
-    const lineStateStore = readStateStore()
+    const cache = ensureCache()
 
     // Get current state or default
-    const currentState = lineStateStore.get(lineId) || getDefaultState()
+    const currentState = cache.get(lineId) || getDefaultState()
 
-    // Update only provided fields
-    let updatedState = {
+    // Update only provided fields (pass-through stage as-is from operator)
+    const updatedState = {
       ...currentState,
-      ...(body.autoNgEnabled !== undefined && { autoNgEnabled: body.autoNgEnabled }),
+      ...(body.autoNgEnabled !== undefined && { autoNgEnabled: Boolean(body.autoNgEnabled) }),
       ...(body.processStatus !== undefined && { processStatus: body.processStatus }),
       ...(body.stage !== undefined && { stage: body.stage }),
       ...(body.hardware !== undefined && { hardware: body.hardware }),
@@ -177,16 +137,10 @@ export async function PUT(request, { params }) {
       updatedAt: new Date().toISOString(),
       updatedBy: body.updatedBy || null
     }
-    
-    // Validate state before saving
-    updatedState = validateState(updatedState)
 
-    // Save to store and persist to file
-    lineStateStore.set(lineId, updatedState)
-    writeStateStore(lineStateStore)
-
-    // DEBUG log disabled - uncomment for troubleshooting
-    // console.log(`[LineState API] Saved line ${lineId} autoNgEnabled:`, updatedState.autoNgEnabled)
+    // Save to memory (instant) + persist to file (async)
+    cache.set(lineId, updatedState)
+    persistToFile()
 
     return NextResponse.json({
       success: true,

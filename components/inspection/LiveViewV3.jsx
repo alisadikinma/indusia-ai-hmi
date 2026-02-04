@@ -252,13 +252,17 @@ export function LiveViewV3({
     }
     
     // Compare with last synced to avoid unnecessary API calls
+    // Include all stage fields to catch status/message/totalStages changes
     const stateKey = JSON.stringify({
       processStatus,
       stageName: inspectionStage?.stageName,
       stageIndex: inspectionStage?.stageIndex,
+      stageStatus: inspectionStage?.status,
+      totalStages: inspectionStage?.totalStages,
       hasInspection: !!currentInspection,
       inspectionId: currentInspection?.inspection_id || currentInspection?.inspectionId,
-      autoNgEnabled: autoNgEnabled  // Include in comparison key
+      verdict: currentInspection?.verdict || currentInspection?.result,
+      autoNgEnabled
     })
     
     // Skip if no change (unless autoNg specifically changed - force sync)
@@ -345,19 +349,24 @@ export function LiveViewV3({
     return () => clearInterval(interval)
   }, [])
 
-  // VIEW ONLY mode: Periodic sync for WO data + line state
-  // This ensures Manager sees updated stats and ALL state from Operator
+  // VIEW ONLY mode: Fast polling for line state (500ms) + slow polling for WO data (5s)
+  // Line state needs fast refresh for real-time stage/inspection updates
+  // Work order data changes rarely - polling every 5s is sufficient
   useEffect(() => {
     if (!isOperator && workOrder && lineId) {
       // Initial fetch immediately
       fetchLineState()
-      
-      const refreshInterval = setInterval(() => {
-        refreshWO()
-        fetchLineState()
-      }, 500) // Refresh every 500ms for faster real-time sync
-      
-      return () => clearInterval(refreshInterval)
+
+      // Fast interval: line state only (500ms)
+      const stateInterval = setInterval(fetchLineState, 500)
+
+      // Slow interval: work order refresh (5s)
+      const woInterval = setInterval(refreshWO, 5000)
+
+      return () => {
+        clearInterval(stateInterval)
+        clearInterval(woInterval)
+      }
     }
   }, [isOperator, workOrder, lineId, refreshWO, fetchLineState])
 

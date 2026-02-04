@@ -727,7 +727,17 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
   }, [currentInspection])
 
   // ============================================
-  // Auto-connect and Auto-run on mount
+  // Fetch stage definitions on mount (all roles)
+  // ============================================
+
+  useEffect(() => {
+    if (lineId) {
+      fetchStages()
+    }
+  }, [lineId, fetchStages])
+
+  // ============================================
+  // Auto-connect and Auto-run on mount (operator only)
   // ============================================
 
   useEffect(() => {
