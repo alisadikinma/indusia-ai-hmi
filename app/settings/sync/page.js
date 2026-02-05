@@ -7,7 +7,7 @@ import { useI18n } from '@/context/I18nContext';
 import { useToast } from '@/hooks/useToast';
 import SectionHeader from '@/components/common/SectionHeader';
 import SyncProgressModal from '@/components/sync/SyncProgressModal';
-import { Clock, RefreshCw, AlertCircle, Cloud, Database, CheckCircle, ChevronRight, ChevronLeft, X, Table, Image, ExternalLink } from 'lucide-react';
+import { Clock, RefreshCw, AlertCircle, Cloud, CloudOff, Database, CheckCircle, ChevronRight, ChevronLeft, X, Table, Image, ExternalLink, WifiOff } from 'lucide-react';
 
 const AUTO_SYNC_INTERVAL = 15 * 60 * 1000; // 15 minutes
 const HISTORY_PAGE_SIZE = 10;
@@ -87,10 +87,38 @@ export default function SyncPage() {
   const [totalHistoryCount, setTotalHistoryCount] = useState(0);
   const [loadingHistory, setLoadingHistory] = useState(false);
   
+  // Cloud connectivity state (default to browser's online status)
+  const [isCloudOnline, setIsCloudOnline] = useState(() => {
+    if (typeof navigator !== 'undefined') return navigator.onLine;
+    return true;
+  });
+  const [checkingOnline, setCheckingOnline] = useState(false);
+
   // Detail Modal state
   const [selectedHistory, setSelectedHistory] = useState(null);
   const [uploadedImages, setUploadedImages] = useState([]);
   const [loadingImages, setLoadingImages] = useState(false);
+
+  const checkCloudOnline = useCallback(async () => {
+    // Quick browser-level check first
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      setIsCloudOnline(false);
+      return false;
+    }
+    setCheckingOnline(true);
+    try {
+      const res = await fetch('/api/sync/check-online');
+      const result = await res.json();
+      const online = result.data?.online ?? false;
+      setIsCloudOnline(online);
+      return online;
+    } catch {
+      setIsCloudOnline(false);
+      return false;
+    } finally {
+      setCheckingOnline(false);
+    }
+  }, []);
 
   const loadPendingCounts = useCallback(async (showLoading = true) => {
     try {
@@ -191,7 +219,14 @@ export default function SyncPage() {
   // Execute sync
   const executeSync = useCallback(async (isAuto = false) => {
     if (isSyncing) return;
-    
+
+    // Pre-sync online check
+    const online = await checkCloudOnline();
+    if (!online) {
+      if (!isAuto) showToast(t('sync.cloudOffline'), 'error');
+      return;
+    }
+
     const response = await fetch('/api/sync-queue');
     const result = await response.json();
     const currentPending = result.count || 0;
@@ -269,7 +304,7 @@ export default function SyncPage() {
       }
       setIsSyncing(false);
     }
-  }, [isSyncing, user?.id, loadPendingCounts, loadSyncHistory, showToast, t]);
+  }, [isSyncing, user?.id, loadPendingCounts, loadSyncHistory, showToast, t, checkCloudOnline]);
 
   // Auto sync effect
   useEffect(() => {
@@ -305,6 +340,8 @@ export default function SyncPage() {
 
   // Initial load - use cache first
   useEffect(() => {
+    checkCloudOnline();
+
     // Load from cache first
     const cachedPending = getCache('indusia_sync_pending');
     const cachedHistory = getCache('indusia_sync_history');
@@ -343,7 +380,25 @@ export default function SyncPage() {
     } else {
       loadSyncHistory(1, true);
     }
-  }, [loadPendingCounts, loadSyncHistory]);
+  }, [loadPendingCounts, loadSyncHistory, checkCloudOnline]);
+
+  // Periodic online check + browser online/offline events
+  useEffect(() => {
+    const handleOffline = () => setIsCloudOnline(false);
+    const handleOnline = () => checkCloudOnline();
+
+    window.addEventListener('offline', handleOffline);
+    window.addEventListener('online', handleOnline);
+
+    // Re-check every 30 seconds
+    const interval = setInterval(checkCloudOnline, 30000);
+
+    return () => {
+      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('online', handleOnline);
+      clearInterval(interval);
+    };
+  }, [checkCloudOnline]);
 
   // Load history when tab changes or page changes
   useEffect(() => {
@@ -469,11 +524,12 @@ export default function SyncPage() {
                 <span className="font-medium text-indusia-text">{t('sync.cloudSyncStatus')}</span>
               </div>
               <span className={`text-xs px-2.5 py-1 rounded-full ${
+                !isCloudOnline ? 'bg-red-500/20 text-red-400' :
                 lastSyncStatus === 'success' || lastSyncStatus === 'completed' ? 'bg-green-500/20 text-green-400' :
                 lastSyncStatus === 'completed_with_errors' ? 'bg-yellow-500/20 text-yellow-400' :
                 lastSyncStatus === 'never' ? 'bg-gray-500/20 text-gray-400' : 'bg-red-500/20 text-red-400'
               }`}>
-                {getStatusLabel(lastSyncStatus)}
+                {!isCloudOnline ? t('status.offline') : getStatusLabel(lastSyncStatus)}
               </span>
             </div>
 
@@ -502,13 +558,24 @@ export default function SyncPage() {
               <span className="text-indusia-text">{lastSyncTime || t('time.never')}</span>
             </div>
 
+            {/* Offline Banner */}
+            {!isCloudOnline && (
+              <div className="mb-3 p-3 bg-red-500/10 border border-red-500/30 rounded-lg flex items-center gap-2">
+                <WifiOff className="w-4 h-4 text-red-400 flex-shrink-0" />
+                <div>
+                  <p className="text-sm font-medium text-red-400">{t('sync.cloudOffline')}</p>
+                  <p className="text-xs text-red-400/70">{t('sync.cloudOfflineDesc')}</p>
+                </div>
+              </div>
+            )}
+
             <button
               onClick={() => executeSync(false)}
-              disabled={isSyncing || totalPending === 0}
+              disabled={isSyncing || totalPending === 0 || !isCloudOnline}
               className="w-full py-3 bg-indusia-primary text-white rounded-lg font-medium hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-opacity"
             >
-              {isSyncing ? <RefreshCw className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-              {isSyncing ? t('sync.syncing') : t('sync.syncNow')}
+              {isSyncing ? <RefreshCw className="w-4 h-4 animate-spin" /> : !isCloudOnline ? <CloudOff className="w-4 h-4" /> : <RefreshCw className="w-4 h-4" />}
+              {isSyncing ? t('sync.syncing') : !isCloudOnline ? t('sync.cloudOffline') : t('sync.syncNow')}
             </button>
 
             <div className="mt-4 pt-4 border-t border-indusia-border">

@@ -18,12 +18,12 @@ import { useAuth } from '@/context/AuthContext';
 import { useSidebar } from '@/context/SidebarContext';
 import { useI18n } from '@/context/I18nContext';
 import { authFetch } from '@/lib/utils/authFetch';
-import { 
-  Radio, Activity, ChevronRight, Factory, 
+import {
+  Radio, Activity, ChevronRight, Factory,
   Users, Clock, AlertTriangle, CheckCircle2,
   Cpu, Zap, Settings, Lock, Eye, Menu, LogOut, ChevronDown,
   Package, TrendingUp, XCircle, Building2, RefreshCw,
-  Pause, Square, Timer
+  Pause, Square, Timer, Brain
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { HeaderInfoBar } from '@/components/inspection/HeaderInfoBar';
@@ -53,7 +53,7 @@ function formatDuration(startTime, t) {
   }
 }
 
-function LineCard({ line, section, isSelected, onSelect, currentUserId, isOperator, t }) {
+function LineCard({ line, section, isSelected, onSelect, currentUserId, isOperator, t, models, selectedModel, onModelSelect, activeModelName }) {
   const statusConfig = {
     running: { 
       label: t('lineStatus.running'), 
@@ -260,6 +260,60 @@ function LineCard({ line, section, isSelected, onSelect, currentUserId, isOperat
         </div>
       )}
 
+      {/* Board Selection - Operators only */}
+      {isOperator && (
+        <div className="mb-3 px-3 py-2 bg-terminal border border-surface-border">
+          <div className="flex items-center gap-2 mb-1.5">
+            <Brain size={14} className="text-purple-400" />
+            <span className="font-mono text-xxs text-text-tertiary uppercase tracking-wider">
+              {t('line.aiModel') || 'Board'}
+            </span>
+          </div>
+          {models?.length > 0 ? (
+            <select
+              value={selectedModel?.name || ''}
+              onChange={(e) => {
+                e.stopPropagation();
+                const board = models.find(m => m.name === e.target.value);
+                onModelSelect(line.id, board || null);
+              }}
+              onClick={(e) => e.stopPropagation()}
+              className={cn(
+                "w-full bg-void border px-3 py-2 font-mono text-sm text-text-primary",
+                "focus:outline-none focus:border-purple-400",
+                selectedModel ? "border-purple-400/50" : "border-surface-border"
+              )}
+            >
+              <option value="">{t('line.selectModel') || '-- Select Board --'}</option>
+              {models.map(board => (
+                <option key={board.id} value={board.name}>
+                  {board.name}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <div className="px-3 py-2 border border-phosphor-amber/30 bg-phosphor-amber/5 font-mono text-xs text-phosphor-amber">
+              {t('line.noModelsAvailable') || 'No boards registered. Add boards via Master Data.'}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Active Model - View-only for non-operators */}
+      {!isOperator && activeModelName && (
+        <div className="mb-3 px-3 py-2 bg-terminal border border-surface-border">
+          <div className="flex items-center gap-2">
+            <Brain size={14} className="text-purple-400" />
+            <span className="font-mono text-xxs text-text-tertiary uppercase tracking-wider">
+              {t('line.aiModel') || 'Board'}
+            </span>
+            <span className="font-mono text-sm text-purple-400 font-medium ml-auto">
+              {activeModelName}
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* Bottom Info */}
       <div className="flex items-center justify-between pt-3 border-t border-surface-border">
         <div className="flex items-center gap-4">
@@ -322,23 +376,85 @@ export default function SelectLinePage() {
   // Data from API
   const [sections, setSections] = useState([]);
   const [lines, setLines] = useState([]);
+  const [models, setModels] = useState([]);
+  const [selectedModels, setSelectedModels] = useState({});
   const [dataLoading, setDataLoading] = useState(true);
+
+  // Load saved model selections from localStorage
+  const loadSavedModels = useCallback((modelList) => {
+    const saved = {};
+    for (const model of modelList) {
+      // Check if any line had this model saved
+    }
+    // Scan localStorage for saved model per line
+    try {
+      const keys = Object.keys(localStorage).filter(k => k.startsWith('indusia_line_model_'));
+      for (const key of keys) {
+        const lineId = key.replace('indusia_line_model_', '');
+        const data = JSON.parse(localStorage.getItem(key));
+        if (data?.modelName) {
+          const matchingModel = modelList.find(m => m.name === data.modelName);
+          if (matchingModel) {
+            saved[lineId] = matchingModel;
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to load saved model selections:', e);
+    }
+    return saved;
+  }, []);
+
+  // Handle model selection for a line
+  const handleModelSelect = useCallback((lineId, model) => {
+    setSelectedModels(prev => {
+      const next = { ...prev };
+      if (model) {
+        next[lineId] = model;
+        try {
+          localStorage.setItem(`indusia_line_model_${lineId}`, JSON.stringify({
+            modelName: model.name,
+            modelId: model.id,
+            selectedAt: new Date().toISOString()
+          }));
+        } catch (e) { /* ignore */ }
+      } else {
+        delete next[lineId];
+        try { localStorage.removeItem(`indusia_line_model_${lineId}`); } catch (e) { /* ignore */ }
+      }
+      return next;
+    });
+  }, []);
 
   // Fetch sections, lines, and active WO data
   const fetchData = useCallback(async () => {
     setDataLoading(true);
     try {
-      // Fetch sections and lines
-      const [sectionsRes, linesRes] = await Promise.all([
+      // Fetch sections, lines, and boards
+      const [sectionsRes, linesRes, boardsRes] = await Promise.all([
         authFetch('/api/master-data/sections'),
-        authFetch('/api/master-data/lines')
+        authFetch('/api/master-data/lines'),
+        authFetch('/api/master-data/boards')
       ]);
-      
+
       const sectionsData = await sectionsRes.json();
       const linesData = await linesRes.json();
-      
+      const boardsData = await boardsRes.json();
+
       if (sectionsData.success) {
         setSections(sectionsData.data || []);
+      }
+
+      if (boardsData.success) {
+        const boardList = boardsData.data || [];
+        setModels(boardList);
+        // Restore saved selections (only on first load)
+        setSelectedModels(prev => {
+          if (Object.keys(prev).length === 0) {
+            return loadSavedModels(boardList);
+          }
+          return prev;
+        });
       }
       
       if (linesData.success) {
@@ -420,7 +536,7 @@ export default function SelectLinePage() {
               
               if (lineStateData.success && lineStateData.data) {
                 const processStatus = lineStateData.data.processStatus || 'IDLE';
-                
+
                 const statusMap = {
                   'RUNNING': 'running',
                   'PAUSED': 'paused',
@@ -428,11 +544,24 @@ export default function SelectLinePage() {
                   'IDLE': 'idle',
                   'READY': 'idle'
                 };
-                
+
                 lineData.status = statusMap[processStatus] || 'idle';
-                
+
                 if (lineStateData.data.updatedBy) {
                   lineData.operatorName = lineStateData.data.updatedBy;
+                }
+                // Model name: prefer line-state, fall back to currentInspection, then localStorage
+                const stateModel = lineStateData.data.modelName
+                  || lineStateData.data.currentInspection?.modelName
+                  || lineStateData.data.currentInspection?.model_name
+                  || null;
+                if (stateModel) {
+                  lineData.activeModelName = stateModel;
+                } else {
+                  try {
+                    const saved = JSON.parse(localStorage.getItem(`indusia_line_model_${line.id}`));
+                    if (saved?.modelName) lineData.activeModelName = saved.modelName;
+                  } catch (e) { /* ignore */ }
                 }
               } else if (lineData.woNumber) {
                 lineData.status = 'idle';
@@ -503,7 +632,15 @@ export default function SelectLinePage() {
 
   useEffect(() => {
     if (isOperator && hasActiveLine && activeLineId) {
-      router.push(`/inspection/live/${activeLineId}`);
+      // Restore model from localStorage so the live page knows which model to use
+      let modelParam = '';
+      try {
+        const saved = JSON.parse(localStorage.getItem(`indusia_line_model_${activeLineId}`));
+        if (saved?.modelName) {
+          modelParam = `?model=${encodeURIComponent(saved.modelName)}`;
+        }
+      } catch (e) { /* ignore */ }
+      router.push(`/inspection/live/${activeLineId}${modelParam}`);
     }
   }, [isOperator, hasActiveLine, activeLineId, router]);
 
@@ -514,15 +651,19 @@ export default function SelectLinePage() {
 
   const getSection = (sectionId) => sections.find(s => s.id === sectionId);
 
+  const selectedLineModel = selectedLine ? selectedModels[selectedLine.id] : null;
+
   const handleStartInspection = () => {
     if (!selectedLine) return;
+    if (isOperator && !selectedLineModel) return;
     setIsLoading(true);
-    
+
     if (isOperator) {
       setActiveLine(selectedLine.id, selectedLine.name);
     }
-    
-    router.push(`/inspection/live/${selectedLine.id}`);
+
+    const modelParam = selectedLineModel ? `?model=${encodeURIComponent(selectedLineModel.name)}` : '';
+    router.push(`/inspection/live/${selectedLine.id}${modelParam}`);
   };
 
   if (!user) {
@@ -729,6 +870,10 @@ export default function SelectLinePage() {
                 currentUserId={user?.id}
                 isOperator={isOperator}
                 t={t}
+                models={models}
+                selectedModel={selectedModels[line.id] || null}
+                onModelSelect={handleModelSelect}
+                activeModelName={line.activeModelName}
               />
             ))
           )}
@@ -747,6 +892,12 @@ export default function SelectLinePage() {
                   <p className="font-mono text-xs text-text-tertiary">
                     {getSection(selectedLine.sectionId)?.name}
                     {selectedLine.customerName && ` • ${selectedLine.customerName}${selectedLine.customerCode ? ` (${selectedLine.customerCode})` : ''}`}
+                    {selectedLineModel && (
+                      <span className="text-purple-400"> • {selectedLineModel.name} v{selectedLineModel.version}</span>
+                    )}
+                    {isOperator && !selectedLineModel && (
+                      <span className="text-phosphor-amber"> • {t('line.selectModelRequired') || 'Select AI model to continue'}</span>
+                    )}
                     {!isOperator && ` • ${t('line.viewOnlyMode', { role: '' }).trim()}`}
                   </p>
                 </div>
@@ -768,11 +919,11 @@ export default function SelectLinePage() {
 
           <button
             onClick={handleStartInspection}
-            disabled={!selectedLine || isLoading}
+            disabled={!selectedLine || isLoading || (isOperator && !selectedLineModel)}
             className={cn(
               "h-14 px-8 font-display text-lg font-bold tracking-wider flex items-center gap-3 transition-all",
-              selectedLine
-                ? isOperator 
+              selectedLine && (!isOperator || selectedLineModel)
+                ? isOperator
                   ? "bg-phosphor-green text-void hover:shadow-glow-green"
                   : "bg-phosphor-cyan text-void hover:shadow-glow-cyan"
                 : "bg-surface-border text-text-tertiary cursor-not-allowed"

@@ -16,7 +16,7 @@
  */
 
 import { useEffect, useState } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/context/AuthContext'
 import { authFetch } from '@/lib/utils/authFetch'
 import { LiveViewV3 } from '@/components/inspection/LiveViewV3'
@@ -24,7 +24,9 @@ import { LiveViewV3 } from '@/components/inspection/LiveViewV3'
 export default function LiveInspectionPage() {
   const params = useParams()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { lineId } = params
+  const modelName = searchParams.get('model') || null
   const { user, isOperator, setActiveLine, clearActiveLine, activeLineId, hasMenuAccess } = useAuth()
   
   // State for line details
@@ -111,6 +113,7 @@ export default function LiveInspectionPage() {
       sectionId={sectionId}
       customerId={customerId}
       customerName={customerName}
+      modelName={modelName}
       user={user}
       onExit={handleExit}
       isOperator={isOperator}

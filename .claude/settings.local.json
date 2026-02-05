@@ -54,7 +54,8 @@
       "Bash(if exist \"d:\\\\Projects\\\\indusia-ai-hmi\\\\app\\\\api\\\\sync\\\\test\\\\route.js\" del \"d:\\\\Projects\\\\indusia-ai-hmi\\\\app\\\\api\\\\sync\\\\test\\\\route.js\")",
       "Bash(git diff:*)",
       "Bash(pip show:*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(python:*)"
     ],
     "deny": [],
     "ask": []

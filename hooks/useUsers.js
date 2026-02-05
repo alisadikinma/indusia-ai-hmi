@@ -6,13 +6,14 @@
 import { useState, useEffect, useCallback } from 'react';
 import { authFetch } from '@/lib/utils/authFetch';
 
-export function useUsers() {
+export function useUsers({ enabled = true } = {}) {
   const [users, setUsers] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(enabled);
   const [error, setError] = useState(null);
 
   // Fetch users from API
   const fetchUsers = useCallback(async () => {
+    if (!enabled) return;
     setLoading(true);
     setError(null);
     try {
@@ -28,11 +29,12 @@ export function useUsers() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [enabled]);
 
   useEffect(() => {
-    fetchUsers();
-  }, [fetchUsers]);
+    if (enabled) fetchUsers();
+    else setLoading(false);
+  }, [fetchUsers, enabled]);
 
   const list = () => users;
 

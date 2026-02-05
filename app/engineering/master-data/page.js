@@ -29,12 +29,14 @@ export default function MasterDataPage() {
     refreshMasterData 
   } = useMasterData();
 
-  const { 
-    users, 
-    loading: usersLoading, 
+  // Only fetch users if role has permission (superadmin, manager)
+  const canManageUsers = ['superadmin', 'manager'].includes(user?.roleId || user?.role_id || user?.role);
+  const {
+    users,
+    loading: usersLoading,
     error: usersError,
-    refreshUsers 
-  } = useUsers();
+    refreshUsers
+  } = useUsers({ enabled: canManageUsers });
   
   const { roles, loading: rolesLoading } = useRoles();
 
@@ -92,8 +94,8 @@ export default function MasterDataPage() {
     { id: 'customers', label: 'Customers' },
     { id: 'sections', label: 'Sections' },
     { id: 'lines', label: 'Production Lines' },
-    { id: 'boards', label: 'Boards / Models' },
-    { id: 'users', label: 'Users' },
+    { id: 'boards', label: 'Boards' },
+    ...(canManageUsers ? [{ id: 'users', label: 'Users' }] : []),
   ];
 
   // Customer CRUD
@@ -343,8 +345,8 @@ export default function MasterDataPage() {
     return role === userFilter;
   });
 
-  const isLoading = masterLoading || usersLoading || rolesLoading;
-  const hasError = masterError || usersError;
+  const isLoading = masterLoading || (canManageUsers && usersLoading) || rolesLoading;
+  const hasError = masterError || (canManageUsers && usersError);
 
   return (
     <div>
@@ -358,10 +360,10 @@ export default function MasterDataPage() {
         <div className="bg-red-500/10 border border-red-500/30 rounded-lg px-4 py-3 mb-6 flex items-center gap-3">
           <AlertCircle className="w-5 h-5 text-red-400" />
           <p className="text-sm text-red-400 flex-1">
-            Error loading data: {masterError || usersError}
+            Error loading data: {masterError || (canManageUsers ? usersError : null)}
           </p>
           <button
-            onClick={() => { refreshMasterData(); refreshUsers(); }}
+            onClick={() => { refreshMasterData(); if (canManageUsers) refreshUsers(); }}
             className="text-sm text-red-400 hover:text-red-300 underline flex items-center gap-1"
           >
             <RefreshCw className="w-4 h-4" /> Retry

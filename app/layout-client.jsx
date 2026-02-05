@@ -11,7 +11,6 @@ import SideNav from '@/components/layout/SideNav';
 import TopNav from '@/components/layout/TopNav';
 import HelpOverlay from '@/components/help/HelpOverlay';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
-import { OfflineBanner } from '@/components/OfflineBanner';
 import { useEffect } from 'react';
 import { cn } from '@/lib/utils';
 
@@ -85,7 +84,7 @@ function LayoutContent({ children }) {
           <HelpOverlayProvider defaultContext={getContextFromPath()}>
             <NotificationProvider userId={user?.id}>
               <SystemHealthProvider>
-                <OfflineBanner />
+
                 <div className="h-screen bg-void relative">
                   {/* Main content - always full screen */}
                   <ErrorBoundary>
@@ -133,7 +132,6 @@ function LayoutContent({ children }) {
         <HelpOverlayProvider defaultContext={getContextFromPath()}>
           <NotificationProvider userId={user?.id}>
             <SystemHealthProvider>
-              <OfflineBanner />
               <div className="flex h-screen bg-void">
                 <SideNav />
 

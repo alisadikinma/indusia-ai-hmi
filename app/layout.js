@@ -1,9 +1,13 @@
 import './globals.css';
-import { Inter } from 'next/font/google';
+import localFont from 'next/font/local';
 import LayoutClient from './layout-client';
 import { ToastProvider } from '@/hooks/useToast';
 
-const inter = Inter({ subsets: ['latin'] });
+const inter = localFont({
+  src: '../public/fonts/inter/Inter-Variable.woff2',
+  weight: '400 700',
+  display: 'swap',
+});
 
 export const metadata = {
   title: 'INDUSIA AI - Visual Inspection HMI',

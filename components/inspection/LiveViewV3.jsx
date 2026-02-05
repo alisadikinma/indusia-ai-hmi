@@ -36,7 +36,8 @@ import {
   CheckCircle2, XCircle, AlertTriangle, AlertCircle,
   Square, FlaskConical, Menu, LogOut, ChevronDown,
   Layers, RefreshCw, Settings, Camera, Cpu, RotateCcw,
-  Loader2, Activity, CircleDot, FileText, ToggleLeft, ToggleRight
+  Loader2, Activity, CircleDot, FileText, ToggleLeft, ToggleRight,
+  Brain
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useSidebar } from '@/context/SidebarContext'
@@ -65,8 +66,8 @@ const DEV_MODE = process.env.NODE_ENV === 'development'
 const BYPASS_WO_CHECK = true // TEMPORARY: Bypass WO check for testing
 const BYPASS_OPERATOR_CHECK = true // TEMPORARY: Bypass operator role check for testing
 
-// Mock WO for testing when Supabase not configured
-const MOCK_WORK_ORDER = {
+// Initial mock WO values for testing when Supabase not configured
+const MOCK_WO_INITIAL = {
   id: 'mock-wo-001',
   woNumber: 'WO-DEV-001',
   lotSize: 100,
@@ -84,6 +85,7 @@ export function LiveViewV3({
   customerId,
   customerName,
   customerCode,
+  modelName,
   user,
   onExit,
   isOperator = false,
@@ -97,9 +99,22 @@ export function LiveViewV3({
   const { workOrder: fetchedWO, hasActiveWO: fetchedHasWO, loading: woLoading, refresh: refreshWO } = useActiveWorkOrder(lineId)
   const { updateCounters } = useWorkOrderMutations()
 
+  // Mock WO state (mutable, so counters update in real-time)
+  const [mockWorkOrder, setMockWorkOrder] = useState(MOCK_WO_INITIAL)
+
   // Use mock WO if bypass enabled and no real WO
-  const workOrder = (BYPASS_WO_CHECK && !fetchedWO) ? MOCK_WORK_ORDER : fetchedWO
+  const workOrder = (BYPASS_WO_CHECK && !fetchedWO) ? mockWorkOrder : fetchedWO
   const hasActiveWO = BYPASS_WO_CHECK || fetchedHasWO
+
+  // Model selector state (fallback to localStorage if prop is empty)
+  // Must be defined BEFORE useLiveInspection so the resolved model name is available
+  const [currentModel, setCurrentModel] = useState(() => {
+    if (modelName) return modelName
+    try {
+      const saved = JSON.parse(localStorage.getItem(`indusia_line_model_${lineId}`))
+      return saved?.modelName || ''
+    } catch { return '' }
+  })
 
   // Live Inspection hook (SSE connection) - ONLY for Operator
   const {
@@ -123,9 +138,11 @@ export function LiveViewV3({
     checkAiBackend,
     runProcess,
     pauseProcess,
-    stopProcess
+    stopProcess,
+    switchModel
   } = useLiveInspection(lineId, workOrder, {
     autoConnect: isOperator, // Only Operator connects to SSE
+    modelName: currentModel || modelName,
     onError: (err) => console.error('[LiveView] SSE Error:', err)
   })
 
@@ -148,6 +165,11 @@ export function LiveViewV3({
   
   // Auto-NG toggle state (synced via API for all clients)
   const [autoNgEnabled, setAutoNgEnabled] = useState(true)
+
+  const [availableModels, setAvailableModels] = useState([])
+  const [isModelSwitching, setIsModelSwitching] = useState(false)
+  const [showModelDropdown, setShowModelDropdown] = useState(false)
+  const modelDropdownRef = useRef(null)
   
   // Synced state from API (for VIEW ONLY mode)
   const [syncedState, setSyncedState] = useState({
@@ -248,7 +270,8 @@ export function LiveViewV3({
       stage: inspectionStage,
       hardware: hardwareStatus,
       currentInspection: currentInspection,
-      autoNgEnabled: autoNgEnabled  // Always include for sync consistency
+      autoNgEnabled: autoNgEnabled,  // Always include for sync consistency
+      modelName: currentModel || modelName || null
     }
     
     // Compare with last synced to avoid unnecessary API calls
@@ -262,7 +285,8 @@ export function LiveViewV3({
       hasInspection: !!currentInspection,
       inspectionId: currentInspection?.inspection_id || currentInspection?.inspectionId,
       verdict: currentInspection?.verdict || currentInspection?.result,
-      autoNgEnabled
+      autoNgEnabled,
+      modelName: currentModel || modelName || null
     })
     
     // Skip if no change (unless autoNg specifically changed - force sync)
@@ -386,6 +410,36 @@ export function LiveViewV3({
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [showUserMenu])
 
+  // Fetch available boards on mount (operator only)
+  useEffect(() => {
+    if (!isOperator) return
+    async function fetchBoards() {
+      try {
+        const response = await authFetch('/api/master-data/boards')
+        const result = await response.json()
+        if (result.success && result.data) {
+          setAvailableModels(result.data)
+        }
+      } catch (err) {
+        console.warn('[LiveView] Failed to fetch boards:', err)
+      }
+    }
+    fetchBoards()
+  }, [isOperator])
+
+  // Close model dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (modelDropdownRef.current && !modelDropdownRef.current.contains(e.target)) {
+        setShowModelDropdown(false)
+      }
+    }
+    if (showModelDropdown) {
+      document.addEventListener('mousedown', handleClickOutside)
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [showModelDropdown])
+
   // DEBUG: Log effective AUTO-NG state (disabled - uncomment for troubleshooting)
   // useEffect(() => {
   //   const effective = isOperator ? autoNgEnabled : syncedState.autoNgEnabled
@@ -446,6 +500,38 @@ export function LiveViewV3({
   // ============================================
   // Action Handlers
   // ============================================
+
+  /**
+   * Switch AI model on the backend
+   * Only allowed when machine is not RUNNING
+   */
+  const handleModelSwitch = useCallback(async (newModelName) => {
+    if (isModelSwitching || newModelName === currentModel) return
+    if (processStatus === 'RUNNING') return
+
+    setIsModelSwitching(true)
+    setShowModelDropdown(false)
+
+    try {
+      const result = await switchModel(newModelName)
+      if (result.success) {
+        setCurrentModel(newModelName)
+        // Persist last-used model per line
+        try {
+          localStorage.setItem(`indusia_line_model_${lineId}`, JSON.stringify({
+            modelName: newModelName,
+            selectedAt: new Date().toISOString()
+          }))
+        } catch (e) { /* localStorage unavailable */ }
+      } else {
+        console.error('[LiveView] Model switch failed:', result.error)
+      }
+    } catch (err) {
+      console.error('[LiveView] Model switch error:', err)
+    } finally {
+      setIsModelSwitching(false)
+    }
+  }, [isModelSwitching, currentModel, processStatus, switchModel, lineId])
 
   /**
    * Submit decision to AI Backend
@@ -523,8 +609,9 @@ export function LiveViewV3({
         }
       }
 
-      // 3. Save to database (skip if mock WO)
-      if (!BYPASS_WO_CHECK || fetchedWO) {
+      // 3. Save to database + update counters
+      if (fetchedWO) {
+        // Real WO: persist to database
         const inspectionData = {
           boardId: `${workOrder.woNumber}-${String(boardSequenceRef.current + 1).padStart(4, '0')}`,
           workOrderId: workOrder.id,
@@ -551,25 +638,37 @@ export function LiveViewV3({
           console.warn('[LiveView] Save inspection failed (Supabase not configured?):', dbError)
         }
 
-        // 4. Update WO counters
-        const counterUpdate = operatorDecision === 'GOOD' 
+        // 4. Update WO counters in DB
+        const counterUpdate = operatorDecision === 'GOOD'
           ? { goodQty: 1, completedQty: 1 }
           : { ngQty: 1, completedQty: 1 }
-        
+
         if (isFalseCall) {
           counterUpdate.falseCallQty = 1
         }
-        
+
         try {
-          await updateCounters(workOrder.id, counterUpdate)
+          const counterResult = await updateCounters(workOrder.id, counterUpdate)
+          console.log('[LiveView] Counter update:', counterResult?.success ? 'OK' : counterResult?.error)
         } catch (dbError) {
-          console.warn('[LiveView] Update counters failed (Supabase not configured?):', dbError)
+          console.warn('[LiveView] Update counters failed:', dbError)
         }
-        
-        // 6. Refresh WO data
-        refreshWO()
-      } else {
-        console.log('[LiveView] Skipping DB operations (BYPASS_WO_CHECK enabled)')
+
+        // 6. Refresh WO data from DB (await to ensure stats update in UI)
+        try {
+          await refreshWO()
+        } catch (refreshErr) {
+          console.warn('[LiveView] WO refresh failed:', refreshErr)
+        }
+      } else if (BYPASS_WO_CHECK) {
+        // Mock WO: update counters locally in state
+        setMockWorkOrder(prev => ({
+          ...prev,
+          completedQty: prev.completedQty + 1,
+          goodQty: operatorDecision === 'GOOD' ? prev.goodQty + 1 : prev.goodQty,
+          ngQty: operatorDecision === 'NG' ? prev.ngQty + 1 : prev.ngQty,
+          falseCallQty: isFalseCall ? prev.falseCallQty + 1 : prev.falseCallQty,
+        }))
       }
       
       // 5. Update local sequence
@@ -1121,53 +1220,93 @@ export function LiveViewV3({
           </button>
         </div>
 
-        {/* Center: Inspection Stage */}
-        <div className="flex items-center gap-4">
-          {/* Current Stage Detail */}
-          <div className={cn(
-            "flex items-center gap-2 px-3 py-1.5 border",
-            activeStage.status === 'idle' && "border-surface-border bg-surface-border/10",
-            activeStage.status === 'capturing' && "border-phosphor-cyan bg-phosphor-cyan/10",
-            activeStage.status === 'processing' && "border-phosphor-amber bg-phosphor-amber/10",
-            activeStage.status === 'ready' && "border-phosphor-green bg-phosphor-green/10"
-          )}>
-            {activeStage.status === 'idle' && <CircleDot className="w-4 h-4 text-text-tertiary" />}
-            {activeStage.status === 'capturing' && <Camera className="w-4 h-4 text-phosphor-cyan animate-pulse" />}
-            {activeStage.status === 'processing' && <Cpu className="w-4 h-4 text-phosphor-amber animate-pulse" />}
-            {activeStage.status === 'ready' && <CheckCircle2 className="w-4 h-4 text-phosphor-green" />}
-            
-            {activeStage.stageName?.includes('top') && (
-              <span className="font-mono text-xs font-bold text-phosphor-cyan">TOP</span>
-            )}
-            {activeStage.stageName?.includes('bottom') && (
-              <span className="font-mono text-xs font-bold text-phosphor-magenta">BOTTOM</span>
-            )}
-            {activeStage.stageName === 'pcb_flipping' && (
-              <RotateCcw className="w-4 h-4 text-phosphor-amber animate-spin" />
-            )}
-            <span className="font-mono text-xs text-text-secondary">
-              {activeStage.message}
-            </span>
-          </div>
+        {/* Center: spacer (stage indicator is in body InspectionStage component) */}
+        <div />
 
-          {/* Stage Progress Dots */}
-          <div className="flex items-center gap-1">
-            {Array.from({ length: activeStage.totalStages }).map((_, i) => (
-              <div
-                key={i}
-                className={cn(
-                  "w-2 h-2 rounded-full transition-colors",
-                  i < activeStage.stageIndex ? "bg-phosphor-green" :
-                  i === activeStage.stageIndex ? "bg-phosphor-amber animate-pulse" :
-                  "bg-surface-border"
-                )}
-              />
-            ))}
-          </div>
-        </div>
-
-        {/* Right: Hardware Status */}
+        {/* Right: Model + Hardware Status */}
         <div className="flex items-center gap-3">
+          {/* AI Model Selector (Operator only) */}
+          {isOperator && (
+            <div className="relative" ref={modelDropdownRef}>
+              <button
+                onClick={() => {
+                  if (processStatus === 'RUNNING') return
+                  setShowModelDropdown(prev => !prev)
+                }}
+                disabled={isModelSwitching}
+                className={cn(
+                  "flex items-center gap-2 px-3 py-1.5 border transition-all",
+                  processStatus === 'RUNNING'
+                    ? "border-surface-border bg-surface-border/10 cursor-not-allowed opacity-60"
+                    : "border-purple-500/50 bg-purple-500/5 hover:border-purple-400",
+                  isModelSwitching && "animate-pulse"
+                )}
+                title={processStatus === 'RUNNING' ? "Stop or pause to change model" : "Change AI model"}
+              >
+                {isModelSwitching ? (
+                  <Loader2 className="w-4 h-4 text-purple-400 animate-spin" />
+                ) : (
+                  <Brain className="w-4 h-4 text-purple-400" />
+                )}
+                <span className="font-mono text-xs font-bold text-purple-400 max-w-[120px] truncate">
+                  {currentModel || 'No Model'}
+                </span>
+                {processStatus !== 'RUNNING' && (
+                  <ChevronDown className={cn(
+                    "w-3 h-3 text-purple-400 transition-transform",
+                    showModelDropdown && "rotate-180"
+                  )} />
+                )}
+              </button>
+
+              {/* Model Dropdown */}
+              {showModelDropdown && (
+                <div className="absolute right-0 top-full mt-1 w-72 bg-panel border border-purple-500/50 shadow-lg z-50 max-h-64 overflow-y-auto">
+                  {availableModels.length === 0 ? (
+                    <div className="px-3 py-4 text-center">
+                      <span className="font-mono text-xs text-text-tertiary">No models available</span>
+                    </div>
+                  ) : (
+                    availableModels.map(model => (
+                      <button
+                        key={model.id}
+                        onClick={() => handleModelSwitch(model.name)}
+                        disabled={model.name === currentModel}
+                        className={cn(
+                          "w-full px-3 py-2.5 text-left flex items-center gap-3 transition-colors",
+                          model.name === currentModel
+                            ? "bg-purple-500/10 border-l-2 border-l-purple-400"
+                            : "hover:bg-surface-border/30 border-l-2 border-l-transparent"
+                        )}
+                      >
+                        <Brain className={cn(
+                          "w-4 h-4 flex-shrink-0",
+                          model.name === currentModel ? "text-purple-400" : "text-text-tertiary"
+                        )} />
+                        <div className="flex-1 min-w-0">
+                          <p className={cn(
+                            "font-mono text-sm font-bold truncate",
+                            model.name === currentModel ? "text-purple-400" : "text-text-primary"
+                          )}>
+                            {model.name}
+                          </p>
+                          {model.customer?.name && (
+                            <p className="font-mono text-[10px] text-text-tertiary">
+                              {model.customer.name}
+                            </p>
+                          )}
+                        </div>
+                        {model.name === currentModel && (
+                          <CheckCircle2 className="w-4 h-4 text-purple-400 flex-shrink-0" />
+                        )}
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Camera Status */}
           <div className={cn(
             "flex items-center gap-2 px-3 py-1.5 border",

@@ -68,6 +68,7 @@ const getDefaultState = () => ({
     plcs: []
   },
   currentInspection: null,
+  modelName: null,
   updatedAt: new Date().toISOString(),
   updatedBy: null
 })
@@ -134,6 +135,7 @@ export async function PUT(request, { params }) {
       ...(body.stage !== undefined && { stage: body.stage }),
       ...(body.hardware !== undefined && { hardware: body.hardware }),
       ...(body.currentInspection !== undefined && { currentInspection: body.currentInspection }),
+      ...(body.modelName !== undefined && { modelName: body.modelName }),
       updatedAt: new Date().toISOString(),
       updatedBy: body.updatedBy || null
     }

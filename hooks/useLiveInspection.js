@@ -21,10 +21,10 @@ import {
   resumeInspection,
   stopInspection,
   selectModel,
-  getCurrentModel,
   checkHealth,
   getStages,
   calculateFalseCall,
+  resetSimSerial,
   triggerSimReady
 } from '@/lib/services/aiBackendService'
 
@@ -64,10 +64,11 @@ const STAGE_MESSAGES = {
  * @returns {object} - Hook state and methods
  */
 export function useLiveInspection(lineId, workOrder, options = {}) {
-  const { 
+  const {
     autoConnect = true,
+    modelName,
     onInspectionComplete,
-    onError 
+    onError
   } = options
 
   // Connection state
@@ -95,6 +96,8 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
     stageName: 'idle',
     message: 'Waiting for board...',
     stageIndex: 0,
+    motionStageIndex: 0,  // Independent PLC motion track progress
+    visionStageIndex: 0,  // Independent AI vision track progress
     totalStages: DEFAULT_STAGES.length,
     icon: 'hourglass'
   })
@@ -115,6 +118,7 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
   const serviceRef = useRef(null)
   const sessionStartedRef = useRef(false)
   const stageDefinitionsRef = useRef(DEFAULT_STAGES) // Track latest stageDefinitions
+  const isRunningProcessRef = useRef(false) // Synchronous guard for runProcess (state is batched, refs are immediate)
 
   // Keep ref in sync with state
   useEffect(() => {
@@ -164,49 +168,13 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
   const initSession = useCallback(async () => {
     if (!workOrder || sessionStartedRef.current) return false
 
-    try {
-      // Auto Inspect Edge: Select model based on board
-      // TEMP FIX: Skip model selection in simulation mode (model files not available)
-      const modelName = 'pcb_1'
-
-      console.log('[LiveInspection] Attempting to select model:', modelName)
-      const result = await selectModel(modelName)
-
-      if (result.success) {
-        sessionStartedRef.current = true
-        console.log('[LiveInspection] Model selected successfully')
-        setProcessStatus('READY')
-        return true
-      } else {
-        // Check if error is "model not found" (simulation mode - skip it)
-        if (result.error?.toLowerCase().includes('not found')) {
-          console.log('[LiveInspection] ⚠️ Model not found (simulation mode) - skipping model selection')
-          sessionStartedRef.current = true
-          setConnectionError(null)
-          setProcessStatus('READY')
-          return true
-        }
-
-        // Check if error is "session already active"
-        if (result.error?.toLowerCase().includes('already active') ||
-            result.error?.toLowerCase().includes('session active')) {
-          console.log('[LiveInspection] Session already active, resuming...')
-          sessionStartedRef.current = true
-          setConnectionError(null) // Clear error - this is OK
-          setProcessStatus('READY')
-          return true
-        }
-
-        console.error('[LiveInspection] Failed to start session:', result.error)
-        setConnectionError(result.error)
-        return false
-      }
-    } catch (error) {
-      console.error('[LiveInspection] Session init error:', error)
-      setConnectionError(error.message)
-      return false
-    }
-  }, [workOrder, lineId])
+    // Model selection is handled by startInspection() which passes model_id
+    // to the AI Backend. No separate selectModel() call needed here.
+    console.log('[LiveInspection] Session ready, model:', modelName || '(auto)')
+    sessionStartedRef.current = true
+    setProcessStatus('READY')
+    return true
+  }, [workOrder, modelName])
 
   // ============================================
   // SSE Event Handlers
@@ -288,18 +256,21 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
     else if (stageName === 'idle') status = 'idle'
 
     // Use backend stage_id for progress (1-based sequential)
-    const stageIndex = data.stage_id || 0
+    const motionIdx = data.stage_id || 0
 
     setInspectionStage(prev => {
       if (stageName === 'done' && prev.status === 'ready' && prev.stageName === 'done') {
         return prev
       }
 
+      const newMotionIdx = Math.min(motionIdx, currentTotalStages)
       return {
+        ...prev,
         status,
         stageName,
         message,
-        stageIndex: Math.min(stageIndex, currentTotalStages),
+        motionStageIndex: newMotionIdx,
+        stageIndex: Math.max(newMotionIdx, prev.visionStageIndex),
         totalStages: currentTotalStages,
         icon
       }
@@ -337,15 +308,20 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
 
     const stages = stageDefinitionsRef.current
     const currentTotalStages = stages.length
-    const stageIndex = data.stage_id || 0
+    const visionIdx = data.stage_id || 0
 
-    setInspectionStage({
-      status,
-      stageName,
-      message,
-      stageIndex: Math.min(stageIndex, currentTotalStages),
-      totalStages: currentTotalStages,
-      icon
+    setInspectionStage(prev => {
+      const newVisionIdx = Math.min(visionIdx, currentTotalStages)
+      return {
+        ...prev,
+        status,
+        stageName,
+        message,
+        visionStageIndex: newVisionIdx,
+        stageIndex: Math.max(prev.motionStageIndex, newVisionIdx),
+        totalStages: currentTotalStages,
+        icon
+      }
     })
   }, []) // No dependencies - uses ref
 
@@ -405,10 +381,13 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
     
     setCurrentInspection(inspection)
     setInspectionStage(prev => ({
+      ...prev,
       status: 'ready',
       stageName: 'done',
       message: 'Ready for review',
       stageIndex: prev.totalStages,
+      motionStageIndex: prev.totalStages,
+      visionStageIndex: prev.totalStages,
       totalStages: prev.totalStages,
       icon: 'check'
     }))
@@ -419,7 +398,7 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
   const handleConfirmed = useCallback((data) => {
     console.log('[LiveInspection] Confirmed:', data)
     setLastConfirmation(data)
-    
+
     // Reset for next inspection
     setCurrentInspection(null)
     setInspectionStage(prev => ({
@@ -427,6 +406,8 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
       stageName: 'idle',
       message: 'Waiting for board...',
       stageIndex: 0,
+      motionStageIndex: 0,
+      visionStageIndex: 0,
       totalStages: prev.totalStages,
       icon: 'hourglass'
     }))
@@ -555,13 +536,20 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
   // ============================================
 
   const runProcess = useCallback(async () => {
-    if (isControlling) return { success: false, error: 'Operation in progress' }
+    // Use ref guard (synchronous) instead of state (batched by React).
+    // Without this, two concurrent calls both see isControlling=false and proceed.
+    if (isRunningProcessRef.current) return { success: false, error: 'Operation in progress' }
+    isRunningProcessRef.current = true
 
     setIsControlling(true)
     try {
-      // Auto Inspect Edge: Start inspection
-      console.log('[LiveInspection] Calling POST /api/inspection/start...')
-      const result = await startInspection()
+      // Reset simulation serial files to clear leftover PLC commands from previous sessions.
+      // Without this, stale READY/POS_CONFIRM signals cause rapid-fire processing loops.
+      await resetSimSerial()
+
+      // Start inspection with model_id — backend handles selectModel() internally
+      console.log('[LiveInspection] Calling POST /api/inspection/start with model_id:', modelName || '(none)')
+      const result = await startInspection({ model_id: modelName || undefined })
 
       if (result.success) {
         setProcessStatus('RUNNING')
@@ -579,12 +567,10 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
         }))
         console.log('[LiveInspection] Process started, hardware ONLINE')
 
-        // In simulation mode, trigger first board arrival (PLC READY signal)
-        // In production, PLC sends READY automatically when a board arrives
-        setTimeout(() => {
-          console.log('[LiveInspection] Triggering first board (sim READY)...')
-          triggerSimReady()
-        }, 1500)
+        // First board READY is handled by backend Patch 2 (auto-trigger _on_plc_ready).
+        // Do NOT send triggerSimReady here — double READY causes two concurrent board
+        // processings in DummySerial, leading to stuck at position movement.
+        // Subsequent boards are triggered by triggerSimReady() in confirmInspection().
       } else {
         console.error('[LiveInspection] Failed to start process:', result.error)
       }
@@ -593,6 +579,7 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
       console.error('[LiveInspection] Run process error:', error)
       return { success: false, error: error.message }
     } finally {
+      isRunningProcessRef.current = false
       setIsControlling(false)
     }
   }, [isControlling])
@@ -645,6 +632,8 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
           stageName: 'idle',
           message: 'Waiting for board...',
           stageIndex: 0,
+          motionStageIndex: 0,
+          visionStageIndex: 0,
           totalStages: stageDefinitions.length,
           icon: 'hourglass'
         })
@@ -668,6 +657,32 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
       setIsControlling(false)
     }
   }, [isControlling, stageDefinitions.length])
+
+  // ============================================
+  // Switch Model (during STOPPED/PAUSED/IDLE)
+  // ============================================
+
+  const switchModel = useCallback(async (newModelName) => {
+    if (isControlling) return { success: false, error: 'Operation in progress' }
+
+    setIsControlling(true)
+    try {
+      console.log('[LiveInspection] Switching model to:', newModelName)
+      const result = await selectModel(newModelName)
+
+      if (result.success) {
+        console.log('[LiveInspection] Model switched successfully to:', newModelName)
+      } else {
+        console.error('[LiveInspection] Failed to switch model:', result.error)
+      }
+      return result
+    } catch (error) {
+      console.error('[LiveInspection] Switch model error:', error)
+      return { success: false, error: error.message }
+    } finally {
+      setIsControlling(false)
+    }
+  }, [isControlling])
 
   // ============================================
   // Confirm Inspection (Operator Decision)
@@ -709,6 +724,8 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
         stageName: 'idle',
         message: 'Waiting for board...',
         stageIndex: 0,
+        motionStageIndex: 0,
+        visionStageIndex: 0,
         totalStages: prev.totalStages,
         icon: 'hourglass'
       }))
@@ -740,28 +757,42 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
   // Auto-connect and Auto-run on mount (operator only)
   // ============================================
 
+  // Guard: prevent double auto-start when workOrder changes from mock to real
+  const autoStartedRef = useRef(false)
+
   useEffect(() => {
-    if (autoConnect && lineId && workOrder) {
-      // Auto connect and auto run
+    let autoRunTimeout = null
+
+    if (autoConnect && lineId && workOrder && !autoStartedRef.current) {
+      autoStartedRef.current = true
+
       const autoStartSequence = async () => {
         await connect()
-        
-        // Wait a bit for connection to establish, then auto-run
-        setTimeout(async () => {
+
+        // Wait for SSE connections to establish, then auto-run
+        autoRunTimeout = setTimeout(async () => {
           if (serviceRef.current?.isConnected()) {
             console.log('[LiveInspection] Auto-starting process...')
             await runProcess()
+          } else {
+            console.warn('[LiveInspection] SSE not connected after timeout, allowing retry')
+            autoStartedRef.current = false
           }
-        }, 1000)
+        }, 1500)
       }
-      
+
       autoStartSequence()
     }
 
     return () => {
+      // Cancel pending auto-run timeout to prevent orphaned runProcess() calls
+      // (React Strict Mode runs effects twice: mount → cleanup → remount)
+      if (autoRunTimeout) clearTimeout(autoRunTimeout)
       disconnect()
+      autoStartedRef.current = false
     }
-  }, [autoConnect, lineId, workOrder?.id]) // Only reconnect if WO changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoConnect, lineId]) // Stable deps - don't reconnect when WO changes
 
   // ============================================
   // Periodic Stream Health Check
@@ -809,6 +840,8 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
       stageName: 'idle',
       message: 'Waiting for board...',
       stageIndex: 0,
+      motionStageIndex: 0,
+      visionStageIndex: 0,
       totalStages: prev.totalStages,
       icon: 'hourglass'
     }))
@@ -860,7 +893,8 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
     // Process Control Methods
     runProcess,
     pauseProcess,
-    stopProcess
+    stopProcess,
+    switchModel
   }
 }
 

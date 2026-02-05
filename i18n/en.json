@@ -217,6 +217,8 @@
     "items": "items",
     "autoSyncEnabled": "Auto sync enabled. Next sync in 15 minutes.",
     "noRecordsToSync": "No records ready to sync.",
+    "cloudOffline": "Cloud Unreachable",
+    "cloudOfflineDesc": "Cannot connect to cloud server. Sync is disabled until connection is restored.",
     "syncCompletedMsg": "Sync completed! {count} records uploaded.",
     "syncFailedMsg": "Sync failed: {error}",
     "viewFullImage": "View Full Image",
