@@ -9,7 +9,7 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabaseClient'
 import { supabaseAdmin, isCloudSyncConfigured } from '@/lib/sync/supabaseAdmin'
-import { ALLOWED_TABLES } from '../_shared/formatters'
+import { ALLOWED_TABLES } from '@/lib/sync/formatters'
 
 const BATCH_SIZE = 50
 

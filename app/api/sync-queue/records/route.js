@@ -8,7 +8,7 @@
 
 import { NextResponse } from 'next/server'
 import syncRepo from '@/lib/repos/syncRepo'
-import { ALLOWED_TABLES, formatRecord, tableColumns } from '../_shared/formatters'
+import { ALLOWED_TABLES, formatRecord, tableColumns } from '@/lib/sync/formatters'
 
 export async function GET(request) {
   try {

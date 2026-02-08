@@ -9,7 +9,7 @@
 
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabaseClient'
-import { ALLOWED_TABLES, formatRecord, tableColumns } from '../_shared/formatters'
+import { ALLOWED_TABLES, formatRecord, tableColumns } from '@/lib/sync/formatters'
 
 export async function GET(request) {
   try {
