@@ -54,7 +54,7 @@ export default function MasterDataPage() {
   const [savingLine, setSavingLine] = useState(false);
 
   const [editingBoard, setEditingBoard] = useState(null);
-  const [boardForm, setBoardForm] = useState({ id: '', name: '', customerId: '' });
+  const [boardForm, setBoardForm] = useState({ id: '', name: '', customerId: '', cavityCount: 1 });
   const [savingBoard, setSavingBoard] = useState(false);
 
   const [editingUser, setEditingUser] = useState(null);
@@ -248,16 +248,17 @@ export default function MasterDataPage() {
         method: editingBoard ? 'PATCH' : 'POST',
         body: JSON.stringify({
           name: boardForm.name,
-          customer_id: boardForm.customerId
+          customer_id: boardForm.customerId,
+          cavityCount: parseInt(boardForm.cavityCount) || 1
         })
       });
-      
+
       const json = await res.json();
       if (!json.success) throw new Error(json.error || 'Failed to save board');
-      
+
       showToast({ title: `Board ${editingBoard ? 'updated' : 'created'}`, variant: 'success' });
       await refreshMasterData();
-      setBoardForm({ id: '', name: '', customerId: '' });
+      setBoardForm({ id: '', name: '', customerId: '', cavityCount: 1 });
       setEditingBoard(null);
     } catch (err) {
       showToast({ title: 'Error', description: err.message, variant: 'error' });
@@ -644,8 +645,8 @@ export default function MasterDataPage() {
                 <thead className="border-b border-indusia-border">
                   <tr>
                     <th className="text-left px-4 py-3 text-xs font-semibold text-indusia-textMuted uppercase">Name</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-indusia-textMuted uppercase">ID</th>
                     <th className="text-left px-4 py-3 text-xs font-semibold text-indusia-textMuted uppercase">Customer</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-indusia-textMuted uppercase">Cavity</th>
                     <th className="text-left px-4 py-3 text-xs font-semibold text-indusia-textMuted uppercase">Actions</th>
                   </tr>
                 </thead>
@@ -655,11 +656,11 @@ export default function MasterDataPage() {
                     return (
                       <tr key={board.id} className="border-b border-indusia-border hover:bg-indusia-surfaceMuted">
                         <td className="px-4 py-3 text-sm text-indusia-text">{board.name}</td>
-                        <td className="px-4 py-3 text-sm text-indusia-textMuted font-mono">{board.id}</td>
                         <td className="px-4 py-3 text-sm text-indusia-textMuted">{customer?.name || '-'}</td>
+                        <td className="px-4 py-3 text-sm text-indusia-textMuted font-mono">{board.cavityCount || 1}</td>
                         <td className="px-4 py-3">
                           <div className="flex gap-2">
-                            <button onClick={() => { setEditingBoard(board); setBoardForm({ ...board }); }} className="p-1 text-indusia-primary hover:bg-indusia-primary/10 rounded">
+                            <button onClick={() => { setEditingBoard(board); setBoardForm({ ...board, cavityCount: board.cavityCount || 1 }); }} className="p-1 text-indusia-primary hover:bg-indusia-primary/10 rounded">
                               <Edit2 className="w-4 h-4" />
                             </button>
                             <button onClick={() => handleBoardDelete(board.id)} className="p-1 text-indusia-fail hover:bg-indusia-fail/10 rounded">
@@ -689,18 +690,30 @@ export default function MasterDataPage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-indusia-text mb-2">Customer</label>
-                <select 
-                  value={boardForm.customerId} 
-                  onChange={(e) => setBoardForm(prev => ({ ...prev, customerId: e.target.value }))} 
+                <select
+                  value={boardForm.customerId}
+                  onChange={(e) => setBoardForm(prev => ({ ...prev, customerId: e.target.value }))}
                   className="w-full px-4 py-2 bg-indusia-bg border border-indusia-border rounded-lg text-indusia-text focus:outline-none focus:ring-2 focus:ring-indusia-primary"
                 >
                   <option value="">Select customer...</option>
                   {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
               </div>
+              <div>
+                <label className="block text-sm font-medium text-indusia-text mb-2">Cavity Count</label>
+                <input
+                  type="number"
+                  min="1"
+                  value={boardForm.cavityCount}
+                  onChange={(e) => setBoardForm(prev => ({ ...prev, cavityCount: parseInt(e.target.value) || 1 }))}
+                  placeholder="Number of PCBs per panel"
+                  className="w-full px-4 py-2 bg-indusia-bg border border-indusia-border rounded-lg text-indusia-text focus:outline-none focus:ring-2 focus:ring-indusia-primary"
+                />
+                <p className="text-xs text-indusia-textMuted mt-1">Number of physical PCBs (cavities) per panel</p>
+              </div>
               <div className="flex gap-2">
-                <button 
-                  onClick={handleBoardSave} 
+                <button
+                  onClick={handleBoardSave}
                   disabled={savingBoard}
                   className="flex-1 px-4 py-2 bg-indusia-primary text-white rounded-lg font-medium hover:opacity-90 flex items-center justify-center gap-2 disabled:opacity-50"
                 >
@@ -708,7 +721,7 @@ export default function MasterDataPage() {
                   {editingBoard ? 'Update' : 'Add'}
                 </button>
                 {editingBoard && (
-                  <button onClick={() => { setEditingBoard(null); setBoardForm({ id: '', name: '', customerId: '' }); }} className="px-4 py-2 bg-indusia-surfaceMuted text-indusia-text rounded-lg font-medium hover:bg-indusia-border flex items-center gap-2">
+                  <button onClick={() => { setEditingBoard(null); setBoardForm({ id: '', name: '', customerId: '', cavityCount: 1 }); }} className="px-4 py-2 bg-indusia-surfaceMuted text-indusia-text rounded-lg font-medium hover:bg-indusia-border flex items-center gap-2">
                     <X className="w-4 h-4" /> Cancel
                   </button>
                 )}

@@ -207,6 +207,7 @@ CREATE TABLE boards (
   customer_id TEXT REFERENCES customers(id),
   description TEXT,
   side_count INTEGER DEFAULT 1 CHECK (side_count IN (1, 2)),
+  cavity_count INTEGER DEFAULT 1 CHECK (cavity_count >= 1),  -- PCBs per panel
   image_url TEXT,                    -- Reference image
   is_active BOOLEAN DEFAULT TRUE,
   created_at TIMESTAMPTZ DEFAULT NOW(),

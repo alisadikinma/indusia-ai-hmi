@@ -12,9 +12,10 @@ export async function GET(request, { params }) {
     const { data, error } = await supabase
       .from('boards')
       .select(`
-        id, 
-        name, 
+        id,
+        name,
         customer_id,
+        cavity_count,
         customers:customer_id (id, name, code)
       `)
       .eq('id', id)
@@ -35,6 +36,7 @@ export async function GET(request, { params }) {
       id: data.id,
       name: data.name,
       customerId: data.customer_id,
+      cavityCount: data.cavity_count || 1,
       customer: data.customers ? {
         id: data.customers.id,
         name: data.customers.name,
@@ -67,10 +69,13 @@ export async function PATCH(request, { params }) {
 
     const updateData = {};
     if (body.name !== undefined) updateData.name = body.name;
-    
+
     // Accept both camelCase and snake_case
     const customerId = body.customerId || body.customer_id;
     if (customerId !== undefined) updateData.customer_id = customerId;
+
+    const cavityCount = body.cavityCount ?? body.cavity_count;
+    if (cavityCount !== undefined) updateData.cavity_count = cavityCount;
 
     if (Object.keys(updateData).length === 0) {
       return NextResponse.json(
@@ -102,6 +107,7 @@ export async function PATCH(request, { params }) {
         id: data.id,
         name: data.name,
         customerId: data.customer_id,
+        cavityCount: data.cavity_count || 1,
       }
     });
 

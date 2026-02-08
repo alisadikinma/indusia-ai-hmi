@@ -51,6 +51,7 @@ import { useAudioFeedback } from '@/hooks/useAudioFeedback'
 import { InspectionStage } from './InspectionStage'
 import { InspectionResult } from './InspectionResult'
 import { FalseCallModal } from './FalseCallModal'
+import { CavityReviewOverlay } from './CavityReviewOverlay'
 import { VolumeControl } from './VolumeControl'
 import { HeaderInfoBar } from './HeaderInfoBar'
 
@@ -168,6 +169,8 @@ export function LiveViewV3({
     isConfirming,
     lastConfirmation,
     confirmInspection,
+    queueLength,
+    panelProgress,
     connect,
     disconnect,
     reconnect,
@@ -196,7 +199,9 @@ export function LiveViewV3({
   // UI State
   const [isPaused, setIsPaused] = useState(false)
   const [showFalseCallModal, setShowFalseCallModal] = useState(false)
+  const [showCavityOverlay, setShowCavityOverlay] = useState(false)
   const falseCallInspectionRef = useRef(null) // Capture inspection data when modal opens
+  const [falseCallReasons, setFalseCallReasons] = useState([])
   const [pendingDecision, setPendingDecision] = useState(null) // 'GOOD' or 'NG'
   const [showUserMenu, setShowUserMenu] = useState(false)
   const userMenuRef = useRef(null)
@@ -417,7 +422,11 @@ export function LiveViewV3({
     }
   }, [workOrder?.completedQty])
 
+  // Derive cavity count from selected board (must be before cycle time effect)
+  const activeCavityCount = availableModels.find(m => m.name === currentModel)?.cavityCount || 1
+
   // Cycle time tracking: start when stage begins, end when inspection result arrives
+  // For multi-cavity panels: CYCLE/PCB = panel_time / cavity_count
   useEffect(() => {
     if (!isOperator) return
     const stageIdx = inspectionStage?.stageIndex || 0
@@ -425,18 +434,19 @@ export function LiveViewV3({
     if (stageIdx === 1 && !cycleStartTimeRef.current) {
       cycleStartTimeRef.current = Date.now()
     }
-    // Complete timer when inspection result arrives
+    // Complete timer when first inspection result arrives (≈ panel time for rapid-fire events)
     if (currentInspection && cycleStartTimeRef.current) {
-      const elapsed = ((Date.now() - cycleStartTimeRef.current) / 1000).toFixed(1)
-      lastCycleTimeRef.current = parseFloat(elapsed)
-      setDisplayCycleTime(parseFloat(elapsed))
+      const panelElapsed = (Date.now() - cycleStartTimeRef.current) / 1000
+      const perPcb = parseFloat((panelElapsed / activeCavityCount).toFixed(1))
+      lastCycleTimeRef.current = perPcb
+      setDisplayCycleTime(perPcb)
       cycleStartTimeRef.current = null
     }
     // Reset start time when stage resets to idle (new cycle)
     if (stageIdx === 0 && !currentInspection) {
       cycleStartTimeRef.current = null
     }
-  }, [isOperator, inspectionStage?.stageIndex, currentInspection])
+  }, [isOperator, inspectionStage?.stageIndex, currentInspection, activeCavityCount])
 
   // Stale state detection: When SSE connects to a running process but misses the inspection event
   // (e.g., page reload during result review), stages show "ready" but currentInspection is null.
@@ -534,6 +544,44 @@ export function LiveViewV3({
     }
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [showUserMenu])
+
+  // Fetch false call reasons on mount (operator only)
+  useEffect(() => {
+    if (!isOperator) return
+    async function fetchReasons() {
+      try {
+        const response = await authFetch('/api/master-data/false-call-reasons')
+        const result = await response.json()
+        if (result.success && result.data) {
+          setFalseCallReasons(result.data)
+        }
+      } catch (err) {
+        console.warn('[LiveView] Failed to fetch false call reasons:', err)
+      }
+    }
+    fetchReasons()
+  }, [isOperator])
+
+  // Auto-show cavity overlay when NG PCB arrives from queue
+  useEffect(() => {
+    if (!isOperator || !currentInspection) return
+
+    // Check if this PCB has any NG frames (label=true at result level)
+    const allFrames = [
+      ...(currentInspection.results?.top || []),
+      ...(currentInspection.results?.bottom || [])
+    ]
+    const hasNGFrames = allFrames.some(f => f.label == true)
+    const aiNG = currentInspection.decision === 'FAIL'
+
+    if (hasNGFrames || aiNG) {
+      // NG PCB — show overlay for review
+      setShowCavityOverlay(true)
+    } else {
+      // GOOD PCB — auto-confirm and move to next in queue
+      setShowCavityOverlay(false)
+    }
+  }, [isOperator, currentInspection])
 
   // Fetch available boards on mount (operator only)
   useEffect(() => {
@@ -709,12 +757,14 @@ export function LiveViewV3({
                          (effectiveInspection.decision === 'FAIL' && operatorDecision === 'GOOD')
 
       // 2.1. Optimistic local counter update — instant UI feedback (real WO path)
+      // Multi-cavity panels: 1 board confirmation = N PCBs (cavity_count)
+      const qty = activeCavityCount
       if (fetchedWO) {
         setSessionCounters(prev => ({
-          completedQty: prev.completedQty + 1,
-          goodQty: operatorDecision === 'GOOD' ? prev.goodQty + 1 : prev.goodQty,
-          ngQty: operatorDecision === 'NG' ? prev.ngQty + 1 : prev.ngQty,
-          falseCallQty: isFalseCall ? prev.falseCallQty + 1 : prev.falseCallQty,
+          completedQty: prev.completedQty + qty,
+          goodQty: operatorDecision === 'GOOD' ? prev.goodQty + qty : prev.goodQty,
+          ngQty: operatorDecision === 'NG' ? prev.ngQty + qty : prev.ngQty,
+          falseCallQty: isFalseCall ? prev.falseCallQty + qty : prev.falseCallQty,
         }))
         console.log('[LiveView] Optimistic counter update applied:', operatorDecision)
       }
@@ -817,13 +867,13 @@ export function LiveViewV3({
           console.warn('[LiveView] Save inspection failed (Supabase not configured?):', dbError)
         }
 
-        // 4. Update WO counters in DB
+        // 4. Update WO counters in DB (cavity_count PCBs per board)
         const counterUpdate = operatorDecision === 'GOOD'
-          ? { goodQty: 1, completedQty: 1 }
-          : { ngQty: 1, completedQty: 1 }
+          ? { goodQty: qty, completedQty: qty }
+          : { ngQty: qty, completedQty: qty }
 
         if (isFalseCall) {
-          counterUpdate.falseCallQty = 1
+          counterUpdate.falseCallQty = qty
         }
 
         try {
@@ -840,13 +890,13 @@ export function LiveViewV3({
           console.warn('[LiveView] WO refresh failed:', refreshErr)
         }
       } else if (BYPASS_WO_CHECK) {
-        // Mock WO: update counters locally in state
+        // Mock WO: update counters locally in state (cavity_count PCBs per board)
         setMockWorkOrder(prev => ({
           ...prev,
-          completedQty: prev.completedQty + 1,
-          goodQty: operatorDecision === 'GOOD' ? prev.goodQty + 1 : prev.goodQty,
-          ngQty: operatorDecision === 'NG' ? prev.ngQty + 1 : prev.ngQty,
-          falseCallQty: isFalseCall ? prev.falseCallQty + 1 : prev.falseCallQty,
+          completedQty: prev.completedQty + qty,
+          goodQty: operatorDecision === 'GOOD' ? prev.goodQty + qty : prev.goodQty,
+          ngQty: operatorDecision === 'NG' ? prev.ngQty + qty : prev.ngQty,
+          falseCallQty: isFalseCall ? prev.falseCallQty + qty : prev.falseCallQty,
         }))
       }
       
@@ -871,8 +921,8 @@ export function LiveViewV3({
     } catch (error) {
       console.error('[LiveView] Submit decision error:', error)
     }
-  }, [activeInspection, workOrder, fetchedWO, currentInspection, confirmInspection, 
-      lineId, sectionId, customerId, user, updateCounters, refreshWO, devMockInspection])
+  }, [activeInspection, workOrder, fetchedWO, currentInspection, confirmInspection,
+      lineId, sectionId, customerId, user, updateCounters, refreshWO, devMockInspection, activeCavityCount])
 
   /**
    * Handle GOOD button click
@@ -941,6 +991,22 @@ export function LiveViewV3({
     setPendingDecision(null)
   }, [pendingDecision, submitDecision])
 
+  /**
+   * Handle cavity overlay NG confirmation (Real NG)
+   */
+  const handleCavityConfirmNG = useCallback(async () => {
+    setShowCavityOverlay(false)
+    await submitDecision('NG')
+  }, [submitDecision])
+
+  /**
+   * Handle cavity overlay GOOD confirmation (False Call)
+   */
+  const handleCavityConfirmGood = useCallback(async (reason) => {
+    setShowCavityOverlay(false)
+    await submitDecision('GOOD', { reason, notes: '' })
+  }, [submitDecision])
+
   // ============================================
   // Auto-proceed logic:
   // - AI GOOD (PASS): auto proceed immediately
@@ -978,13 +1044,17 @@ export function LiveViewV3({
         processedInspectionRef.current = inspectionId
         submitDecision('GOOD')
       }, PASS_DISPLAY_DELAY_MS)
-      
+
       return () => clearTimeout(timeoutId)
     } else if (aiResult === 'NG') {
+      // When CavityReviewOverlay is open, it handles its own per-frame
+      // auto-NG countdown. Don't run a competing timer here.
+      if (showCavityOverlay) return
+
       // AI says FAIL → start review countdown ONLY if Auto-NG is enabled
       if (autoNgEnabled) {
         setReviewCountdown(NG_REVIEW_TIMEOUT_SECONDS)
-        
+
         reviewTimerRef.current = setInterval(() => {
           setReviewCountdown(prev => {
             if (prev <= 1) {
@@ -1005,7 +1075,7 @@ export function LiveViewV3({
     return () => {
       if (reviewTimerRef.current) clearInterval(reviewTimerRef.current)
     }
-  }, [aiResult, isPaused, isOperator, activeInspection, submitDecision, autoNgEnabled])
+  }, [aiResult, isPaused, isOperator, activeInspection, submitDecision, autoNgEnabled, showCavityOverlay])
 
   // ============================================
   // Dev Mode: Simulate Inspection
@@ -1129,12 +1199,13 @@ export function LiveViewV3({
   }
 
   const getTotalDefects = (inspection) => {
-    // Handle array of frames structure
+    // Handle array of frames structure — only count objects with label=1 or label=true
+    const isDefect = (obj) => obj.label === 1 || obj.label === true
     const topFrames = inspection?.results?.top || []
     const bottomFrames = inspection?.results?.bottom || []
-    
-    const topCount = topFrames.reduce((sum, f) => sum + (f.objects?.length || 0), 0)
-    const bottomCount = bottomFrames.reduce((sum, f) => sum + (f.objects?.length || 0), 0)
+
+    const topCount = topFrames.reduce((sum, f) => sum + (f.objects || []).filter(isDefect).length, 0)
+    const bottomCount = bottomFrames.reduce((sum, f) => sum + (f.objects || []).filter(isDefect).length, 0)
     return topCount + bottomCount
   }
 
@@ -1664,9 +1735,22 @@ export function LiveViewV3({
                   <div className="w-px h-8 bg-surface-border" />
                   <div className="flex items-center gap-2">
                     <Clock className="w-4 h-4 text-phosphor-cyan" />
-                    <span className="font-mono text-xs text-text-tertiary">CYCLE</span>
+                    <span className="font-mono text-xs text-text-tertiary">CYCLE/PCB</span>
                     <span className="font-mono text-xl font-bold text-phosphor-cyan">
                       {effectiveCycleTime}s
+                    </span>
+                  </div>
+                </>
+              )}
+              {/* Panel Progress (multi-cavity) */}
+              {isOperator && activeCavityCount > 1 && panelProgress.total > 0 && (
+                <>
+                  <div className="w-px h-8 bg-surface-border" />
+                  <div className="flex items-center gap-2">
+                    <Layers className="w-4 h-4 text-purple-400" />
+                    <span className="font-mono text-xs text-text-tertiary">PANEL</span>
+                    <span className="font-mono text-xl font-bold text-purple-400">
+                      {panelProgress.confirmed}/{panelProgress.total}
                     </span>
                   </div>
                 </>
@@ -1747,9 +1831,23 @@ export function LiveViewV3({
         </div>
       </footer>
 
-      {/* ============ MODALS ============ */}
-      
-      {/* False Call Modal */}
+      {/* ============ MODALS & OVERLAYS ============ */}
+
+      {/* Cavity Review Overlay (multi-cavity per-PCB confirmation) */}
+      {showCavityOverlay && currentInspection && isOperator && (
+        <CavityReviewOverlay
+          inspection={currentInspection}
+          queuePosition={panelProgress.confirmed + 1}
+          queueTotal={panelProgress.total || panelProgress.confirmed + 1 + queueLength}
+          autoNgEnabled={autoNgEnabled}
+          onConfirmNG={handleCavityConfirmNG}
+          onConfirmGood={handleCavityConfirmGood}
+          onClose={() => setShowCavityOverlay(false)}
+          falseCallReasons={falseCallReasons}
+        />
+      )}
+
+      {/* False Call Modal (legacy single-board flow) */}
       <FalseCallModal
         isOpen={showFalseCallModal}
         onClose={() => {

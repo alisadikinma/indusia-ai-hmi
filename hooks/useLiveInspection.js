@@ -104,6 +104,21 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
 
   // Current inspection data (from SSE inspection event)
   const [currentInspection, setCurrentInspection] = useState(null)
+  // Ref mirrors state for stale-closure-safe reads inside SSE callbacks.
+  // Without this, handleInspection (registered once during connect()) always
+  // sees currentInspection=null from its initial closure, so every incoming
+  // event immediately dequeues instead of being queued.
+  const currentInspectionRef = useRef(null)
+
+  // Inspection queue for multi-cavity panels (rapid-fire SSE events)
+  const inspectionQueueRef = useRef([])
+  const [queueLength, setQueueLength] = useState(0)
+  const [panelProgress, setPanelProgress] = useState({
+    total: 0,       // total PCBs received in this panel cycle
+    confirmed: 0,   // PCBs already confirmed
+    good: 0,
+    ng: 0,
+  })
 
   // Session state
   const [sessionStatus, setSessionStatus] = useState(null)
@@ -120,10 +135,14 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
   const stageDefinitionsRef = useRef(DEFAULT_STAGES) // Track latest stageDefinitions
   const isRunningProcessRef = useRef(false) // Synchronous guard for runProcess (state is batched, refs are immediate)
 
-  // Keep ref in sync with state
+  // Keep refs in sync with state
   useEffect(() => {
     stageDefinitionsRef.current = stageDefinitions
   }, [stageDefinitions])
+
+  useEffect(() => {
+    currentInspectionRef.current = currentInspection
+  }, [currentInspection])
 
   // ============================================
   // Check AI Backend Health
@@ -341,12 +360,16 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
       position: frame.position,
       position_id: frame.position_id,
       frame_id: frame.frame_id,
+      serial_number: frame.serial_number || null,
+      user_confirmation: frame.user_confirmation ?? null,
+      label: frame.label,  // board-level: true=NG, false=GOOD
       objects: (frame.objects || []).map(obj => ({
         name: obj.name,
         box: obj.box,
         score: obj.score,
         label: obj.label,
         crop_url: obj.crop_url,
+        attrs: obj.attrs || null,
         side: (frame.side || 'top').toUpperCase()
       }))
     })
@@ -367,10 +390,15 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
       bottomFrames = (rawResults.bottom || []).map(transformFrame)
     }
 
+    // Extract serial number (same for all results in 1 inspection = 1 physical PCB)
+    const allFrames = [...topFrames, ...bottomFrames]
+    const serialNumber = allFrames.find(f => f.serial_number)?.serial_number || null
+
     const inspection = {
       inspectionId: data.inspection_id,
       modelId: data.model_id,
       modelName: data.model_name,
+      serialNumber,
       results: {
         top: topFrames.filter(f => f.image_url),
         bottom: bottomFrames.filter(f => f.image_url)
@@ -379,7 +407,24 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
       timestamp: data.timestamp
     }
     
-    setCurrentInspection(inspection)
+    // Push to queue for multi-cavity support
+    inspectionQueueRef.current.push(inspection)
+    setQueueLength(inspectionQueueRef.current.length)
+
+    // Update panel progress total
+    setPanelProgress(prev => ({ ...prev, total: prev.total + 1 }))
+
+    // If no active inspection, dequeue immediately.
+    // Uses ref (not state) to avoid stale closure — SSE listener is registered
+    // once during connect() and never re-registered, so the closure always sees
+    // the initial currentInspection=null. The ref gives us the live value.
+    if (!currentInspectionRef.current) {
+      const next = inspectionQueueRef.current.shift()
+      setQueueLength(inspectionQueueRef.current.length)
+      setCurrentInspection(next)
+      currentInspectionRef.current = next // Update ref immediately (don't wait for re-render)
+    }
+
     setInspectionStage(prev => ({
       ...prev,
       status: 'ready',
@@ -391,9 +436,9 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
       totalStages: prev.totalStages,
       icon: 'check'
     }))
-    
+
     onInspectionComplete?.(inspection)
-  }, [onInspectionComplete])
+  }, [onInspectionComplete]) // Removed currentInspection — uses ref now
 
   const handleConfirmed = useCallback((data) => {
     console.log('[LiveInspection] Confirmed:', data)
@@ -401,6 +446,7 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
 
     // Reset for next inspection
     setCurrentInspection(null)
+    currentInspectionRef.current = null
     setInspectionStage(prev => ({
       status: 'idle',
       stageName: 'idle',
@@ -625,6 +671,7 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
 
         // Clear current inspection
         setCurrentInspection(null)
+        currentInspectionRef.current = null
 
         // Reset stage to idle
         setInspectionStage({
@@ -707,7 +754,9 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
 
       // Auto Inspect Edge does not have a /confirm endpoint.
       // Confirmation is handled locally and persisted to DB via Next.js API routes.
-      console.log('[LiveInspection] ✅ Confirm - resetting for next inspection')
+      console.log('[LiveInspection] ✅ Confirm - checking queue for next PCB')
+
+      const isGood = operatorDecision === 'GOOD'
 
       setLastConfirmation({
         inspectionId: currentInspection.inspectionId,
@@ -717,22 +766,40 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
         timestamp: new Date().toISOString()
       })
 
-      // Reset for next inspection
-      setCurrentInspection(null)
-      setInspectionStage(prev => ({
-        status: 'idle',
-        stageName: 'idle',
-        message: 'Waiting for board...',
-        stageIndex: 0,
-        motionStageIndex: 0,
-        visionStageIndex: 0,
-        totalStages: prev.totalStages,
-        icon: 'hourglass'
+      // Update panel progress
+      setPanelProgress(prev => ({
+        ...prev,
+        confirmed: prev.confirmed + 1,
+        good: prev.good + (isGood ? 1 : 0),
+        ng: prev.ng + (isGood ? 0 : 1),
       }))
 
-      // Trigger next inspection cycle (simulation mode: sends PLC READY signal)
-      // In production, PLC sends READY automatically when a new board arrives.
-      triggerSimReady()
+      // Dequeue next PCB from queue, or reset to idle
+      const nextInspection = inspectionQueueRef.current.shift() || null
+      setQueueLength(inspectionQueueRef.current.length)
+      setCurrentInspection(nextInspection)
+      currentInspectionRef.current = nextInspection // Keep ref in sync immediately
+
+      if (!nextInspection) {
+        // Queue empty — reset stage to idle and trigger next panel cycle
+        setInspectionStage(prev => ({
+          status: 'idle',
+          stageName: 'idle',
+          message: 'Waiting for board...',
+          stageIndex: 0,
+          motionStageIndex: 0,
+          visionStageIndex: 0,
+          totalStages: prev.totalStages,
+          icon: 'hourglass'
+        }))
+
+        // Reset panel progress for next cycle
+        setPanelProgress({ total: 0, confirmed: 0, good: 0, ng: 0 })
+
+        // Trigger next inspection cycle (simulation mode: sends PLC READY signal)
+        // In production, PLC sends READY automatically when a new board arrives.
+        triggerSimReady()
+      }
 
       return { success: true, data: { operatorDecision, isFalseCall } }
     } catch (error) {
@@ -835,6 +902,7 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
   const clearInspection = useCallback(() => {
     console.log('[LiveInspection] Clearing inspection (VIEW ONLY sync)')
     setCurrentInspection(null)
+    currentInspectionRef.current = null
     setInspectionStage(prev => ({
       status: 'idle',
       stageName: 'idle',
@@ -869,6 +937,10 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
 
     // Current inspection (for display)
     currentInspection,
+
+    // Inspection queue (multi-cavity)
+    queueLength,
+    panelProgress,
 
     // Session & Process
     sessionStatus,

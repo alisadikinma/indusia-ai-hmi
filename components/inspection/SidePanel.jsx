@@ -44,11 +44,12 @@ export function SidePanel({ side, frames = [], className }) {
   const imageUrl = activeFrame?.image_url
   const objects = activeFrame?.objects || []
   
-  // Only count objects with label=1 as defects
-  const getDefectCount = (objs) => objs.filter(o => o.label === 1).length
-  const totalDefects = frames.reduce((sum, f) => sum + getDefectCount(f.objects || []), 0)
-  const activeFrameDefects = getDefectCount(objects)
-  const hasDefects = totalDefects > 0
+  // Use frame-level label (true=NG, false=GOOD) as the authoritative AI verdict.
+  // Object-level obj.label is unreliable — some backends set label=1 for ALL
+  // detected objects (components + defects), inflating the count.
+  // Use loose equality (== true) because backend may send label as boolean true OR integer 1
+  const ngFrameCount = frames.filter(f => f.label == true).length
+  const hasDefects = ngFrameCount > 0
   const frameCount = frames.length
 
   // Reset active frame when frames change
@@ -125,7 +126,7 @@ export function SidePanel({ side, frames = [], className }) {
               ? "bg-phosphor-red/20 text-phosphor-red"
               : "bg-phosphor-green/20 text-phosphor-green"
           )}>
-            {hasDefects ? `${totalDefects} defect(s)` : 'PASS'}
+            {hasDefects ? `${ngFrameCount} NG` : 'PASS'}
           </span>
           
           {/* Frame Indicator */}
@@ -200,10 +201,9 @@ export function SidePanel({ side, frames = [], className }) {
         <div className="px-3 py-2 bg-terminal border-t border-surface-border">
           <div className="flex items-center gap-2 overflow-x-auto pb-1">
             {frames.map((frame, index) => {
-              const frameDefectCount = getDefectCount(frame.objects || [])
-              const frameHasDefects = frameDefectCount > 0
+              const frameIsNG = frame.label == true
               const isActive = index === activeFrameIndex
-              
+
               return (
                 <button
                   key={index}
@@ -212,7 +212,7 @@ export function SidePanel({ side, frames = [], className }) {
                     "relative flex-shrink-0 w-16 h-12 rounded overflow-hidden border-2 transition-all",
                     isActive
                       ? "border-phosphor-amber ring-2 ring-phosphor-amber/30"
-                      : frameHasDefects
+                      : frameIsNG
                         ? "border-phosphor-red/50 hover:border-phosphor-red"
                         : "border-surface-border hover:border-phosphor-green/50"
                   )}
@@ -224,25 +224,18 @@ export function SidePanel({ side, frames = [], className }) {
                     alt={`Frame ${index + 1}`}
                     className="w-full h-full object-cover"
                   />
-                  
-                  {/* Defect Badge */}
+
+                  {/* NG/GOOD Badge (based on frame.label) */}
                   <div className={cn(
                     "absolute top-0.5 right-0.5 w-4 h-4 rounded-full flex items-center justify-center",
-                    frameHasDefects ? "bg-phosphor-red" : "bg-phosphor-green"
+                    frameIsNG ? "bg-phosphor-red" : "bg-phosphor-green"
                   )}>
-                    {frameHasDefects ? (
+                    {frameIsNG ? (
                       <AlertCircle className="w-3 h-3 text-white" />
                     ) : (
                       <CheckCircle2 className="w-3 h-3 text-white" />
                     )}
                   </div>
-                  
-                  {/* Defect Count Badge */}
-                  {frameHasDefects && (
-                    <div className="absolute bottom-0.5 left-0.5 bg-phosphor-red text-white text-xxs font-mono font-bold px-1 rounded">
-                      {frameDefectCount}
-                    </div>
-                  )}
                 </button>
               )
             })}

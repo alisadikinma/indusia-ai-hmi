@@ -25,6 +25,7 @@ async function handleGET(request) {
         name,
         part_number,
         customer_id,
+        cavity_count,
         customer:customers(id, name, code)
       `, { count: 'exact' })
 
@@ -52,6 +53,7 @@ async function handleGET(request) {
       name: row.name,
       partNumber: row.part_number,
       customerId: row.customer_id,
+      cavityCount: row.cavity_count || 1,
       customer: row.customer
     }))
 

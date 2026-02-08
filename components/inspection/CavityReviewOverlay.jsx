@@ -1,0 +1,398 @@
+'use client'
+
+/**
+ * CavityReviewOverlay V2
+ * Full-screen overlay for reviewing NG frames one by one.
+ *
+ * Flow:
+ * 1. Collect all NG frames (label=true) from TOP + BOTTOM sides
+ * 2. Show one NG frame at a time with GOOD/NG buttons
+ * 3. GOOD = false call (needs reason) → user_confirmation = "<reason>"
+ * 4. NG = real NG (confirm immediately) → user_confirmation = "REAL NG"
+ * 5. After all NG frames reviewed, determine board decision:
+ *    - Any REAL NG → board = NG
+ *    - All false calls → board = GOOD
+ * 6. Keyboard shortcuts: G = GOOD, N = NG
+ * 7. Auto-NG countdown resets per frame
+ */
+
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { cn } from '@/lib/utils'
+import { X, ZoomIn, ZoomOut, CheckCircle2, AlertCircle, Timer } from 'lucide-react'
+
+const AUTO_NG_DELAY_MS = 10000 // 10 seconds per frame
+
+export function CavityReviewOverlay({
+  inspection,
+  queuePosition,    // e.g. 3
+  queueTotal,       // e.g. 6
+  autoNgEnabled,
+  onConfirmNG,      // () => void — board-level: at least one REAL NG
+  onConfirmGood,    // (reason) => void — board-level: all NG frames were false calls
+  onClose,          // () => void — manual close (optional)
+  falseCallReasons = [],
+}) {
+  const serialNumber = inspection?.serialNumber || 'N/A'
+
+  // Collect all NG frames from both sides into a flat review list
+  // Use loose equality (== true) because backend may send label as boolean true OR integer 1
+  const ngFrames = useMemo(() => {
+    const topFrames = inspection?.results?.top || []
+    const bottomFrames = inspection?.results?.bottom || []
+    const frames = []
+    topFrames.forEach((f, idx) => {
+      if (f.label == true) frames.push({ ...f, side: 'TOP', frameIndex: idx })
+    })
+    bottomFrames.forEach((f, idx) => {
+      if (f.label == true) frames.push({ ...f, side: 'BOTTOM', frameIndex: idx })
+    })
+    return frames
+  }, [inspection])
+
+  const totalNGFrames = ngFrames.length
+
+  // Per-frame review state
+  const [reviewIndex, setReviewIndex] = useState(0)
+  const [decisions, setDecisions] = useState({}) // { 'TOP-0': 'REAL_NG', 'BOTTOM-1': 'some reason' }
+  const [showReasonInput, setShowReasonInput] = useState(false)
+  const [selectedReason, setSelectedReason] = useState('')
+  const [zoom, setZoom] = useState(1)
+
+  // Auto-NG countdown
+  const [countdown, setCountdown] = useState(AUTO_NG_DELAY_MS / 1000)
+  const countdownRef = useRef(null)
+
+  // Ref for the auto-NG handler (avoids stale closure in setInterval)
+  const handleFrameNGRef = useRef(null)
+
+  const currentFrame = ngFrames[reviewIndex]
+
+  // Reset review state when inspection changes
+  useEffect(() => {
+    setReviewIndex(0)
+    setDecisions({})
+    setShowReasonInput(false)
+    setSelectedReason('')
+    setZoom(1)
+  }, [inspection])
+
+  // Finalize board decision after all NG frames reviewed
+  const completeReview = useCallback((allDecisions) => {
+    const hasRealNG = Object.values(allDecisions).some(d => d === 'REAL_NG')
+    if (hasRealNG) {
+      onConfirmNG?.()
+    } else {
+      // All NG frames were marked as false calls → board is GOOD
+      const firstReason = Object.values(allDecisions).find(d => d !== 'REAL_NG') || ''
+      onConfirmGood?.(firstReason)
+    }
+  }, [onConfirmNG, onConfirmGood])
+
+  // Advance to next NG frame or finalize
+  const advanceOrComplete = useCallback((allDecisions, nextIndex) => {
+    if (nextIndex < ngFrames.length) {
+      setReviewIndex(nextIndex)
+      setZoom(1)
+    } else {
+      completeReview(allDecisions)
+    }
+  }, [ngFrames.length, completeReview])
+
+  // Confirm current frame as REAL NG
+  const handleFrameNG = useCallback(() => {
+    if (!currentFrame) return
+    if (countdownRef.current) clearInterval(countdownRef.current)
+
+    const key = `${currentFrame.side}-${currentFrame.frameIndex}`
+    const newDecisions = { ...decisions, [key]: 'REAL_NG' }
+    setDecisions(newDecisions)
+    setShowReasonInput(false)
+    setSelectedReason('')
+    advanceOrComplete(newDecisions, reviewIndex + 1)
+  }, [currentFrame, decisions, reviewIndex, advanceOrComplete])
+
+  // Keep ref in sync for auto-NG timer
+  useEffect(() => {
+    handleFrameNGRef.current = handleFrameNG
+  }, [handleFrameNG])
+
+  // Start false call flow (show reason input)
+  const handleFrameGood = useCallback(() => {
+    if (countdownRef.current) clearInterval(countdownRef.current)
+    setShowReasonInput(true)
+  }, [])
+
+  // Submit false call reason for current frame
+  const handleSubmitFalseCall = useCallback(() => {
+    if (!selectedReason.trim() || !currentFrame) return
+
+    const key = `${currentFrame.side}-${currentFrame.frameIndex}`
+    const newDecisions = { ...decisions, [key]: selectedReason.trim() }
+    setDecisions(newDecisions)
+    setShowReasonInput(false)
+    setSelectedReason('')
+    advanceOrComplete(newDecisions, reviewIndex + 1)
+  }, [currentFrame, decisions, reviewIndex, selectedReason, advanceOrComplete])
+
+  const handleCancelReason = useCallback(() => {
+    setShowReasonInput(false)
+    setSelectedReason('')
+  }, [])
+
+  // Per-frame auto-NG countdown (resets when reviewIndex changes)
+  useEffect(() => {
+    if (!autoNgEnabled || showReasonInput || !currentFrame) {
+      if (countdownRef.current) clearInterval(countdownRef.current)
+      return
+    }
+
+    setCountdown(AUTO_NG_DELAY_MS / 1000)
+
+    countdownRef.current = setInterval(() => {
+      setCountdown(prev => {
+        if (prev <= 1) {
+          clearInterval(countdownRef.current)
+          handleFrameNGRef.current?.()
+          return 0
+        }
+        return prev - 1
+      })
+    }, 1000)
+
+    return () => {
+      if (countdownRef.current) clearInterval(countdownRef.current)
+    }
+  }, [autoNgEnabled, showReasonInput, reviewIndex, currentFrame])
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (showReasonInput) return
+      const key = decisions[currentFrame ? `${currentFrame.side}-${currentFrame.frameIndex}` : '']
+      if (key != null) return // Already reviewed, don't intercept
+
+      if (e.key === 'n' || e.key === 'N') {
+        e.preventDefault()
+        handleFrameNGRef.current?.()
+      } else if (e.key === 'g' || e.key === 'G') {
+        e.preventDefault()
+        handleFrameGood()
+      } else if (e.key === 'Escape') {
+        e.preventDefault()
+        onClose?.()
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [showReasonInput, currentFrame, decisions, handleFrameGood, onClose])
+
+  if (!inspection || !currentFrame) return null
+
+  const currentKey = `${currentFrame.side}-${currentFrame.frameIndex}`
+  const isCurrentReviewed = decisions[currentKey] != null
+  const currentDecision = decisions[currentKey]
+  const reviewedCount = Object.keys(decisions).length
+
+  return (
+    <div className="fixed inset-0 z-[100] bg-void flex flex-col animate-fade-in">
+
+      {/* ============ Header ============ */}
+      <div className="h-14 px-6 flex items-center justify-between bg-terminal border-b border-surface-border shrink-0">
+        <div className="flex items-center gap-4">
+          {/* Queue indicator */}
+          <span className="font-display font-bold text-phosphor-amber text-lg">
+            PCB {queuePosition}/{queueTotal}
+          </span>
+          {/* Serial number */}
+          <span className="font-mono text-sm text-text-secondary">
+            SN: {serialNumber}
+          </span>
+          {/* AI decision */}
+          <span className="px-2 py-0.5 rounded bg-phosphor-red/20 text-phosphor-red font-mono text-sm font-bold">
+            AI: NG
+          </span>
+          {/* Per-frame progress */}
+          <span className="px-2 py-0.5 rounded bg-phosphor-amber/20 text-phosphor-amber font-mono text-sm font-bold">
+            NG Frame {reviewIndex + 1}/{totalNGFrames}
+          </span>
+          {/* Side indicator */}
+          <span className="px-2 py-0.5 rounded bg-purple-500/20 text-purple-400 font-mono text-sm">
+            {currentFrame.side}
+          </span>
+          {/* Reviewed progress */}
+          {reviewedCount > 0 && (
+            <span className="font-mono text-xs text-text-tertiary">
+              ({reviewedCount}/{totalNGFrames} reviewed)
+            </span>
+          )}
+        </div>
+
+        <div className="flex items-center gap-4">
+          {/* Auto-NG countdown */}
+          {autoNgEnabled && !showReasonInput && !isCurrentReviewed && (
+            <div className={cn(
+              "flex items-center gap-2 px-3 py-1 rounded font-mono text-sm",
+              countdown <= 5 ? "bg-phosphor-red/20 text-phosphor-red" : "bg-phosphor-amber/20 text-phosphor-amber"
+            )}>
+              <Timer className="w-4 h-4" />
+              Auto-NG: {countdown}s
+            </div>
+          )}
+
+          {/* Zoom controls */}
+          <div className="flex items-center gap-2">
+            <button onClick={() => setZoom(z => Math.max(0.5, z - 0.25))}
+              className="p-1 rounded bg-elevated border border-surface-border hover:border-phosphor-amber/50 transition-colors">
+              <ZoomOut className="w-4 h-4 text-text-tertiary" />
+            </button>
+            <span className="text-xs text-text-tertiary font-mono min-w-[40px] text-center">{Math.round(zoom * 100)}%</span>
+            <button onClick={() => setZoom(z => Math.min(3, z + 0.25))}
+              className="p-1 rounded bg-elevated border border-surface-border hover:border-phosphor-amber/50 transition-colors">
+              <ZoomIn className="w-4 h-4 text-text-tertiary" />
+            </button>
+          </div>
+
+          {/* Close button */}
+          {onClose && (
+            <button onClick={onClose}
+              className="p-2 rounded bg-elevated border border-surface-border hover:border-phosphor-amber/50 transition-colors">
+              <X className="w-5 h-5 text-text-tertiary" />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* ============ Main content: single NG frame image ============ */}
+      <div className="flex-1 relative bg-void overflow-hidden min-h-0">
+        {currentFrame.image_url ? (
+          <div className="absolute inset-0 flex items-center justify-center overflow-auto p-4"
+            style={{ cursor: zoom > 1 ? 'grab' : 'default' }}>
+            <div className="relative transition-transform duration-200"
+              style={{ transform: `scale(${zoom})`, transformOrigin: 'center' }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={currentFrame.image_url} alt={`${currentFrame.side} frame ${currentFrame.frameIndex + 1}`}
+                className="max-w-full max-h-[60vh] object-contain" />
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center justify-center h-full text-text-tertiary">
+            <p className="font-mono text-sm">No image available</p>
+          </div>
+        )}
+      </div>
+
+      {/* ============ NG Frame thumbnail strip ============ */}
+      {totalNGFrames > 1 && (
+        <div className="px-4 py-2 bg-terminal border-t border-surface-border shrink-0">
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 justify-center">
+            {ngFrames.map((frame, idx) => {
+              const key = `${frame.side}-${frame.frameIndex}`
+              const isActive = idx === reviewIndex
+              const isReviewed = decisions[key] != null
+              const wasNG = decisions[key] === 'REAL_NG'
+
+              return (
+                <button key={key}
+                  onClick={() => { setReviewIndex(idx); setZoom(1) }}
+                  className={cn(
+                    "relative flex-shrink-0 w-20 h-14 rounded overflow-hidden border-2 transition-all",
+                    isActive ? "border-phosphor-amber ring-2 ring-phosphor-amber/30"
+                      : isReviewed ? (wasNG ? "border-phosphor-red/80" : "border-phosphor-green/80")
+                      : "border-surface-border"
+                  )}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={frame.image_url} alt={`NG Frame ${idx + 1}`} className="w-full h-full object-cover" />
+                  {/* Side label */}
+                  <div className="absolute top-0.5 left-0.5 bg-void/80 text-text-primary text-xxs font-mono px-1 rounded">
+                    {frame.side}
+                  </div>
+                  {/* Decision badge */}
+                  {isReviewed && (
+                    <div className={cn(
+                      "absolute top-0.5 right-0.5 w-4 h-4 rounded-full flex items-center justify-center",
+                      wasNG ? "bg-phosphor-red" : "bg-phosphor-green"
+                    )}>
+                      {wasNG
+                        ? <AlertCircle className="w-3 h-3 text-white" />
+                        : <CheckCircle2 className="w-3 h-3 text-white" />}
+                    </div>
+                  )}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ============ Footer: Action buttons ============ */}
+      <div className="h-24 px-6 flex items-center justify-center gap-8 bg-terminal border-t border-surface-border shrink-0">
+        {showReasonInput ? (
+          /* False call reason input */
+          <div className="flex items-center gap-4 w-full max-w-2xl">
+            <select
+              value={selectedReason}
+              onChange={(e) => setSelectedReason(e.target.value)}
+              autoFocus
+              className="flex-1 h-14 px-4 bg-elevated border border-surface-border rounded-lg text-text-primary font-mono focus:outline-none focus:ring-2 focus:ring-phosphor-green"
+            >
+              <option value="">Select reason...</option>
+              {falseCallReasons.map(r => (
+                <option key={r.id || r} value={r.name || r}>{r.name || r}</option>
+              ))}
+              <option value="other">Other</option>
+            </select>
+            <button onClick={handleSubmitFalseCall} disabled={!selectedReason.trim()}
+              className="h-14 px-8 bg-phosphor-green text-void font-display font-bold text-lg rounded-lg hover:bg-phosphor-green-bright disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
+              SUBMIT
+            </button>
+            <button onClick={handleCancelReason}
+              className="h-14 px-6 bg-elevated border border-surface-border text-text-secondary font-display font-bold rounded-lg hover:border-phosphor-amber/50 transition-colors">
+              CANCEL
+            </button>
+          </div>
+        ) : isCurrentReviewed ? (
+          /* Already reviewed frame — show decision and navigation */
+          <div className="flex items-center gap-4">
+            <span className={cn(
+              "font-mono text-sm px-3 py-1 rounded",
+              currentDecision === 'REAL_NG' ? "bg-phosphor-red/20 text-phosphor-red" : "bg-phosphor-green/20 text-phosphor-green"
+            )}>
+              {currentDecision === 'REAL_NG' ? 'Confirmed NG' : `False Call: ${currentDecision}`}
+            </span>
+            {reviewIndex < totalNGFrames - 1 && (
+              <button onClick={() => { setReviewIndex(reviewIndex + 1); setZoom(1) }}
+                className="h-14 px-8 bg-phosphor-amber text-void font-display font-bold text-lg rounded-lg hover:bg-phosphor-amber-bright transition-colors">
+                NEXT FRAME
+              </button>
+            )}
+            {reviewedCount === totalNGFrames && (
+              <button onClick={() => completeReview(decisions)}
+                className="h-14 px-8 bg-phosphor-cyan text-void font-display font-bold text-lg rounded-lg hover:bg-phosphor-cyan/80 transition-colors">
+                CONFIRM BOARD
+              </button>
+            )}
+          </div>
+        ) : (
+          /* Main action buttons for current NG frame */
+          <>
+            <button onClick={handleFrameGood}
+              className="h-16 px-12 bg-phosphor-green/10 border-2 border-phosphor-green text-phosphor-green font-display font-bold text-xl rounded-lg hover:bg-phosphor-green/20 shadow-glow-green transition-all active:scale-95 flex items-center gap-3">
+              <CheckCircle2 className="w-7 h-7" />
+              GOOD
+              <span className="text-sm font-mono opacity-60">(G)</span>
+            </button>
+            <button onClick={() => handleFrameNGRef.current?.()}
+              className="h-16 px-12 bg-phosphor-red/10 border-2 border-phosphor-red text-phosphor-red font-display font-bold text-xl rounded-lg hover:bg-phosphor-red/20 shadow-glow-red transition-all active:scale-95 flex items-center gap-3">
+              <AlertCircle className="w-7 h-7" />
+              NG
+              <span className="text-sm font-mono opacity-60">(N)</span>
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+export default CavityReviewOverlay

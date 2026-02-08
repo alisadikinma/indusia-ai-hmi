@@ -13,9 +13,10 @@ export async function GET(request) {
     let query = supabase
       .from('boards')
       .select(`
-        id, 
-        name, 
+        id,
+        name,
         customer_id,
+        cavity_count,
         customers:customer_id (id, name, code)
       `)
       .order('name');
@@ -33,6 +34,7 @@ export async function GET(request) {
       id: item.id,
       name: item.name,
       customerId: item.customer_id,
+      cavityCount: item.cavity_count || 1,
       customer: item.customers ? {
         id: item.customers.id,
         name: item.customers.name,
@@ -81,12 +83,15 @@ export async function POST(request) {
     // Generate ID if not provided
     const boardId = body.id || `board_${Date.now()}`;
 
+    const cavityCount = body.cavityCount || body.cavity_count || 1;
+
     const { data, error } = await supabase
       .from('boards')
       .insert({
         id: boardId,
         name: body.name.trim(),
-        customer_id: customerId
+        customer_id: customerId,
+        cavity_count: cavityCount
       })
       .select()
       .single();
@@ -98,7 +103,8 @@ export async function POST(request) {
       data: {
         id: data.id,
         name: data.name,
-        customerId: data.customer_id
+        customerId: data.customer_id,
+        cavityCount: data.cavity_count || 1
       }
     }, { status: 201 });
 
