@@ -309,7 +309,7 @@ export default function SideNav() {
                   {/* Label - hide when collapsed */}
                   {!isCollapsed && (
                     <>
-                      <span className="font-display text-sm tracking-wide flex-1">
+                      <span className="font-display text-sm tracking-wide flex-1 truncate">
                         {t(item.labelKey)}
                       </span>
                       

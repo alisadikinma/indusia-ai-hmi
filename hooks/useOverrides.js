@@ -10,12 +10,13 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+
 import { authFetch } from '@/lib/utils/authFetch';
 
 const CACHE_KEY_OVERRIDES = 'indusia_overrides_cache';
 const CACHE_KEY_STATS = 'indusia_override_stats_cache';
-const CACHE_TTL = 15 * 60 * 1000; // 15 minutes
-const AUTO_REFRESH_INTERVAL = 15 * 60 * 1000; // 15 minutes
+const CACHE_TTL = 30 * 1000; // 30 seconds — overrides are created from LiveView, cache goes stale fast
+const AUTO_REFRESH_INTERVAL = 30 * 1000; // 30 seconds — manager approval queue needs near-real-time updates
 
 // Cache helpers
 const getCache = (key) => {
@@ -68,7 +69,7 @@ export function useOverrides(initialFilters = {}) {
   const fetchOverrides = useCallback(async (showLoading = true) => {
     if (showLoading) setLoading(true);
     setError(null);
-    
+
     try {
       const params = new URLSearchParams();
       // Only add server-side filters that reduce data
@@ -79,24 +80,28 @@ export function useOverrides(initialFilters = {}) {
       params.append('limit', '100'); // Get more for client-side filtering
 
       const res = await authFetch(`/api/overrides?${params.toString()}`);
-      if (!res.ok) throw new Error('Failed to fetch overrides');
-      
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        console.error('[useOverrides] Non-OK response:', res.status, text.substring(0, 200));
+        throw new Error(`Failed to fetch overrides (HTTP ${res.status})`);
+      }
+
       const json = await res.json();
       if (!json.success) throw new Error(json.error || 'Failed to fetch overrides');
-      
+
       const data = json.data || [];
       setOverrides(data);
       setCache(CACHE_KEY_OVERRIDES, data, filters);
       setIsStale(false);
       setLastUpdated(new Date());
-      
+
       return data;
     } catch (err) {
       console.error('[useOverrides] Fetch error:', err.message);
       setError(err.message);
       throw err;
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   }, [filters.sectionId, filters.customerId, filters.from, filters.to]);
 
@@ -120,40 +125,95 @@ export function useOverrides(initialFilters = {}) {
     }
   }, []);
 
-  // Initial load - use cache if available
+  // Initial load - use cache if available, retry on failure
+  const hasInitializedRef = useRef(false);
+  const retryTimerRef = useRef(null);
+
   useEffect(() => {
+    if (hasInitializedRef.current) return;
+    hasInitializedRef.current = true;
+
     const initLoad = async () => {
       // Try to load from cache first
       const cachedOverrides = getCache(CACHE_KEY_OVERRIDES);
       const cachedStats = getCache(CACHE_KEY_STATS);
-      
+
+      if (cachedStats?.data) {
+        setStats(cachedStats.data);
+      }
+
       if (cachedOverrides?.data) {
         setOverrides(cachedOverrides.data);
         setLastUpdated(new Date(cachedOverrides.timestamp));
         setLoading(false);
-        
+
+        // Always refresh in background on mount — overrides may be created
+        // from LiveView (bypasses useOverrides), so cache is often stale.
+        // Show cached data instantly for fast UI, fetch fresh data silently.
         if (cachedOverrides.isExpired) {
           setIsStale(true);
-          // Refresh in background
-          fetchOverrides(false).catch(() => {});
         }
-      } else {
-        // No cache, fetch fresh
-        await fetchOverrides(true).catch(() => {});
+        Promise.all([
+          fetchOverrides(false).catch(() => {}),
+          fetchStats().catch(() => {})
+        ]);
+        return;
       }
-      
-      if (cachedStats?.data) {
-        setStats(cachedStats.data);
-        if (cachedStats.isExpired) {
-          fetchStats().catch(() => {});
+
+      // No cache — ensure auth is ready, then fetch with retries
+      // Wait briefly for auth to be stored in localStorage (race with AuthContext)
+      if (typeof window !== 'undefined' && !localStorage.getItem('indusia_user_id')) {
+        console.log('[useOverrides] No user ID yet, waiting for auth...');
+        await new Promise(r => setTimeout(r, 500));
+      }
+
+      // Keep loading=true across all retries so UI shows spinner, not "No overrides"
+      setLoading(true);
+      let fetched = false;
+      for (let attempt = 0; attempt < 5 && !fetched; attempt++) {
+        if (attempt > 0) {
+          const delay = Math.min(1000 * attempt, 3000);
+          console.log(`[useOverrides] Retry attempt ${attempt + 1}/5 in ${delay}ms`);
+          await new Promise(r => setTimeout(r, delay));
         }
-      } else {
-        await fetchStats().catch(() => {});
+        try {
+          await fetchOverrides(false);
+          fetched = true;
+        } catch (err) {
+          console.warn(`[useOverrides] Attempt ${attempt + 1}/5 failed:`, err.message);
+        }
+      }
+      setLoading(false);
+
+      // Fetch stats (parallel-safe, non-blocking)
+      if (!cachedStats?.data || cachedStats?.isExpired) {
+        fetchStats().catch(() => {});
       }
     };
 
     initLoad();
-  }, []); // Only run once on mount
+
+    return () => {
+      if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+    };
+  }, [fetchOverrides, fetchStats]);
+
+  // Recovery: if loading finished but overrides empty while stats show data exists,
+  // retry once after a short delay (catches race conditions with auth)
+  const recoveryAttemptedRef = useRef(false);
+  useEffect(() => {
+    if (loading || !hasInitializedRef.current || recoveryAttemptedRef.current) return;
+    if (overrides.length === 0 && stats.total > 0) {
+      recoveryAttemptedRef.current = true;
+      console.log('[useOverrides] Recovery: empty list but stats.total =', stats.total, '— retrying');
+      retryTimerRef.current = setTimeout(() => {
+        fetchOverrides(true).catch(() => {});
+      }, 1500);
+    }
+    return () => {
+      if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+    };
+  }, [loading, overrides.length, stats.total, fetchOverrides]);
 
   // Auto-refresh interval
   useEffect(() => {

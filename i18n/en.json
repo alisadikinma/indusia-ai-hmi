@@ -5,7 +5,7 @@
   },
   "nav": {
     "dashboard": "Dashboard",
-    "hmi": "HMI Inspection",
+    "hmi": "Inspection",
     "managerQueue": "Override Queue",
     "engineering": "Engineering Console",
     "masterData": "Master Data",
@@ -223,7 +223,12 @@
     "syncFailedMsg": "Sync failed: {error}",
     "viewFullImage": "View Full Image",
     "side": "Side",
-    "recentlySyncedImages": "Most recently synced false call images"
+    "recentlySyncedImages": "Most recently synced false call images",
+    "showingFirst": "Showing first {count} of {total} records",
+    "noRecordsFound": "No records found",
+    "approved": "Approved",
+    "rejected": "Rejected",
+    "pendingReview": "Pending"
   },
   "syncTables": {
     "inspectionResults": "Inspection Results",

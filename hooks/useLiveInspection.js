@@ -375,7 +375,7 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
         top: topFrames.filter(f => f.image_url),
         bottom: bottomFrames.filter(f => f.image_url)
       },
-      decision: data.decision,
+      decision: data.decision ? String(data.decision).toUpperCase() : data.decision,
       timestamp: data.timestamp
     }
     

@@ -5,7 +5,7 @@
   },
   "nav": {
     "dashboard": "Dashboard",
-    "hmi": "HMI Inspeksi",
+    "hmi": "Inspeksi",
     "managerQueue": "Antrian Override",
     "engineering": "Konsol Engineer",
     "masterData": "Master Data",
@@ -222,7 +222,12 @@
     "syncCompletedMsg": "Sinkron selesai! {count} record terupload.",
     "syncFailedMsg": "Sinkron gagal: {error}",
     "viewFullImage": "Lihat Gambar Lengkap",
-    "side": "Sisi"
+    "side": "Sisi",
+    "showingFirst": "Menampilkan {count} pertama dari {total} record",
+    "noRecordsFound": "Tidak ada record ditemukan",
+    "approved": "Disetujui",
+    "rejected": "Ditolak",
+    "pendingReview": "Tertunda"
   },
   "syncTables": {
     "inspectionResults": "Hasil Inspeksi",

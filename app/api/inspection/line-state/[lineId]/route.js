@@ -54,7 +54,7 @@ function persistToFile() {
 
 // Default state for a line
 const getDefaultState = () => ({
-  autoNgEnabled: true,
+  autoNgEnabled: false,
   processStatus: 'IDLE',
   stage: {
     status: 'idle',
@@ -136,6 +136,8 @@ export async function PUT(request, { params }) {
       ...(body.hardware !== undefined && { hardware: body.hardware }),
       ...(body.currentInspection !== undefined && { currentInspection: body.currentInspection }),
       ...(body.modelName !== undefined && { modelName: body.modelName }),
+      ...(body.workOrderCounters !== undefined && { workOrderCounters: body.workOrderCounters }),
+      ...(body.cycleTime !== undefined && { cycleTime: body.cycleTime }),
       updatedAt: new Date().toISOString(),
       updatedBy: body.updatedBy || null
     }

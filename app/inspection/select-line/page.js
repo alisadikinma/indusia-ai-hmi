@@ -287,7 +287,7 @@ function LineCard({ line, section, isSelected, onSelect, currentUserId, isOperat
               <option value="">{t('line.selectModel') || '-- Select Board --'}</option>
               {models.map(board => (
                 <option key={board.id} value={board.name}>
-                  {board.name}
+                  {board.name}{line.woBoardName === board.name && line.woRemaining > 0 ? ` (${line.woRemaining.toLocaleString()} remaining)` : ''}
                 </option>
               ))}
             </select>
@@ -424,7 +424,12 @@ export default function SelectLinePage() {
       }
       return next;
     });
-  }, []);
+    // Auto-select the line when a model is chosen
+    if (model) {
+      const matchLine = lines.find(l => l.id === lineId);
+      if (matchLine) setSelectedLine(matchLine);
+    }
+  }, [lines]);
 
   // Fetch sections, lines, and active WO data
   const fetchData = useCallback(async () => {
@@ -448,13 +453,7 @@ export default function SelectLinePage() {
       if (boardsData.success) {
         const boardList = boardsData.data || [];
         setModels(boardList);
-        // Restore saved selections (only on first load)
-        setSelectedModels(prev => {
-          if (Object.keys(prev).length === 0) {
-            return loadSavedModels(boardList);
-          }
-          return prev;
-        });
+        // Don't pre-select models on load - operator must explicitly choose
       }
       
       if (linesData.success) {
@@ -483,41 +482,44 @@ export default function SelectLinePage() {
             };
 
             try {
-              // Fetch active work order for this line
-              const woRes = await authFetch(`/api/work-orders/active/${line.id}`);
-              const woData = await woRes.json();
-              
-              if (woData.success && woData.data) {
-                const wo = woData.data;
+              // Fetch all per-line data in parallel
+              const [woRes, statsRes, lineStateRes] = await Promise.all([
+                authFetch(`/api/work-orders/active/${line.id}`).then(r => r.json()).catch(() => ({})),
+                authFetch(`/api/inspection/stats/${line.id}`).then(r => r.json()).catch(() => ({})),
+                authFetch(`/api/inspection/line-state/${line.id}`).then(r => r.json()).catch(() => ({}))
+              ]);
+
+              // Apply work order data
+              if (woRes.success && woRes.data) {
+                const wo = woRes.data;
                 lineData.status = 'running';
                 lineData.customerName = wo.customer?.name || lineData.customerName;
                 lineData.customerCode = wo.customer?.code || lineData.customerCode;
                 lineData.woNumber = wo.woNumber;
                 lineData.lotSize = wo.lotSize || 0;
+                lineData.woBoardName = wo.board?.name || null;
+                lineData.woRemaining = (wo.lotSize || 0) - (wo.completedQty || 0);
                 lineData.startedAt = wo.startedAt || wo.started_at || wo.createdAt || wo.created_at;
                 lineData.inspected = wo.completedQty || 0;
                 lineData.goodQty = wo.goodQty || 0;
                 lineData.ngQty = wo.ngQty || 0;
-                lineData.yield = lineData.inspected > 0 
-                  ? ((lineData.goodQty / lineData.inspected) * 100) 
+                lineData.yield = lineData.inspected > 0
+                  ? ((lineData.goodQty / lineData.inspected) * 100)
                   : 0;
               }
 
-              // Optionally fetch today's stats (shift-based)
-              const statsRes = await authFetch(`/api/inspection/stats/${line.id}`);
-              const statsData = await statsRes.json();
-              
-              if (statsData.success && statsData.data) {
-                const data = statsData.data;
+              // Apply stats data (overrides WO counters if stats have data)
+              if (statsRes.success && statsRes.data) {
+                const data = statsRes.data;
                 const stats = data.stats || {};
                 const total = stats.total || 0;
-                
+
                 if (total > 0) {
                   lineData.inspected = total;
                   lineData.goodQty = stats.passed || 0;
                   lineData.ngQty = stats.failed || 0;
                   lineData.yield = parseFloat(stats.yield) || 0;
-                  
+
                   if (data.workOrder?.woNumber) {
                     lineData.woNumber = data.workOrder.woNumber;
                   }
@@ -529,13 +531,10 @@ export default function SelectLinePage() {
                   }
                 }
               }
-              
-              // Fetch line-state for ACTUAL machine status
-              const lineStateRes = await authFetch(`/api/inspection/line-state/${line.id}`);
-              const lineStateData = await lineStateRes.json();
-              
-              if (lineStateData.success && lineStateData.data) {
-                const processStatus = lineStateData.data.processStatus || 'IDLE';
+
+              // Apply line-state data
+              if (lineStateRes.success && lineStateRes.data) {
+                const processStatus = lineStateRes.data.processStatus || 'IDLE';
 
                 const statusMap = {
                   'RUNNING': 'running',
@@ -547,13 +546,13 @@ export default function SelectLinePage() {
 
                 lineData.status = statusMap[processStatus] || 'idle';
 
-                if (lineStateData.data.updatedBy) {
-                  lineData.operatorName = lineStateData.data.updatedBy;
+                if (lineStateRes.data.updatedBy) {
+                  lineData.operatorName = lineStateRes.data.updatedBy;
                 }
                 // Model name: prefer line-state, fall back to currentInspection, then localStorage
-                const stateModel = lineStateData.data.modelName
-                  || lineStateData.data.currentInspection?.modelName
-                  || lineStateData.data.currentInspection?.model_name
+                const stateModel = lineStateRes.data.modelName
+                  || lineStateRes.data.currentInspection?.modelName
+                  || lineStateRes.data.currentInspection?.model_name
                   || null;
                 if (stateModel) {
                   lineData.activeModelName = stateModel;

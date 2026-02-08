@@ -29,7 +29,8 @@ import {
   ScanLine,
   Brain,
   ClipboardCheck,
-  ArrowLeftFromLine
+  ArrowLeftFromLine,
+  Loader2
 } from 'lucide-react'
 
 // ============================================
@@ -299,6 +300,19 @@ export function InspectionStage({ stage, stageDefinitions, processStatus, onResu
         </>
       ) : (
         <>
+          {/* Processing / Complete icon */}
+          <div className="relative mb-4">
+            {isComplete ? (
+              <div className="w-16 h-16 rounded-full border-2 border-phosphor-green/50 flex items-center justify-center bg-phosphor-green/10">
+                <CheckCircle className="w-8 h-8 text-phosphor-green" />
+              </div>
+            ) : (
+              <div className="w-16 h-16 rounded-full border-2 border-phosphor-amber/40 flex items-center justify-center bg-phosphor-amber/10">
+                <Loader2 className="w-8 h-8 text-phosphor-amber animate-spin" />
+              </div>
+            )}
+          </div>
+
           <p className={cn(
             "text-xl font-display font-bold tracking-wider mb-1",
             isComplete ? "text-phosphor-green" : "text-text-primary"

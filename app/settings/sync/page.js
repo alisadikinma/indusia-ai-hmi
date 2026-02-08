@@ -7,7 +7,7 @@ import { useI18n } from '@/context/I18nContext';
 import { useToast } from '@/hooks/useToast';
 import SectionHeader from '@/components/common/SectionHeader';
 import SyncProgressModal from '@/components/sync/SyncProgressModal';
-import { Clock, RefreshCw, AlertCircle, Cloud, CloudOff, Database, CheckCircle, ChevronRight, ChevronLeft, X, Table, Image, ExternalLink, WifiOff } from 'lucide-react';
+import { Clock, RefreshCw, AlertCircle, Cloud, CloudOff, Database, CheckCircle, ChevronRight, ChevronLeft, ChevronDown, X, Table, Image, ExternalLink, WifiOff, Loader2 } from 'lucide-react';
 
 const AUTO_SYNC_INTERVAL = 15 * 60 * 1000; // 15 minutes
 const HISTORY_PAGE_SIZE = 10;
@@ -35,6 +35,49 @@ const setCache = (key, data) => {
     console.warn('[SyncPage] Cache save failed:', e);
   }
 };
+
+// Sub-component: Individual record row in the expanded table detail
+function SyncRecordRow({ record, table, t }) {
+  const overrideStatusColors = {
+    approved: 'bg-green-500/20 text-green-400',
+    rejected: 'bg-red-500/20 text-red-400',
+    pending: 'bg-yellow-500/20 text-yellow-400'
+  };
+
+  return (
+    <div className="flex items-center gap-2 px-2 py-1.5 bg-indusia-surface rounded border border-indusia-border/50 text-[11px]">
+      {/* Primary column */}
+      <span className="flex-1 min-w-0 truncate font-mono text-indusia-text">
+        {record.summary}
+      </span>
+      {/* Col1 */}
+      <span className="w-20 text-center text-indusia-textMuted truncate flex-shrink-0">
+        {record.col1}
+      </span>
+      {/* Col2 */}
+      <span className="w-20 text-center text-indusia-textMuted truncate flex-shrink-0">
+        {record.col2}
+      </span>
+      {/* Override status badge (for overrides table) */}
+      {table === 'overrides' && record.overrideStatus && (
+        <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium flex-shrink-0 ${
+          overrideStatusColors[record.overrideStatus] || 'bg-gray-500/20 text-gray-400'
+        }`}>
+          {record.overrideStatus === 'approved' ? t('sync.approved') :
+           record.overrideStatus === 'rejected' ? t('sync.rejected') :
+           t('sync.pendingReview')}
+        </span>
+      )}
+      {/* Sync status */}
+      <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium w-14 text-center flex-shrink-0 ${
+        record.syncStatus === 'failed' ? 'bg-red-500/20 text-red-400' :
+        'bg-indusia-primary/20 text-indusia-primary'
+      }`}>
+        {record.syncStatus === 'failed' ? t('sync.failed') : t('sync.pending')}
+      </span>
+    </div>
+  );
+}
 
 export default function SyncPage() {
   const router = useRouter();
@@ -99,6 +142,12 @@ export default function SyncPage() {
   const [uploadedImages, setUploadedImages] = useState([]);
   const [loadingImages, setLoadingImages] = useState(false);
 
+  // Expandable table detail state
+  const [expandedTable, setExpandedTable] = useState(null);
+  const [tableRecords, setTableRecords] = useState({});
+  const [tableColumns, setTableColumns] = useState({});
+  const [loadingTable, setLoadingTable] = useState(null);
+
   const checkCloudOnline = useCallback(async () => {
     // Quick browser-level check first
     if (typeof navigator !== 'undefined' && !navigator.onLine) {
@@ -132,6 +181,10 @@ export default function SyncPage() {
         setPendingTables(result.data || []);
         setTotalPending(result.count || 0);
         setCache('indusia_sync_pending', { tables: result.data, count: result.count });
+        // Clear cached detail records (data may have changed)
+        setTableRecords({});
+        setTableColumns({});
+        setExpandedTable(null);
       } else {
         setError(result.error || t('sync.syncFailed'));
       }
@@ -164,6 +217,37 @@ export default function SyncPage() {
       setLoadingImages(false);
     }
   }, []);
+
+  // Load detail records for a specific table (on-demand)
+  const loadTableRecords = useCallback(async (tableName) => {
+    // Toggle: collapse if already expanded
+    if (expandedTable === tableName) {
+      setExpandedTable(null);
+      return;
+    }
+
+    // Use cached data if available
+    if (tableRecords[tableName]) {
+      setExpandedTable(tableName);
+      return;
+    }
+
+    // Fetch on demand
+    setLoadingTable(tableName);
+    setExpandedTable(tableName);
+    try {
+      const response = await fetch(`/api/sync-queue/records?table=${tableName}&limit=20`);
+      const result = await response.json();
+      if (result.success) {
+        setTableRecords(prev => ({ ...prev, [tableName]: result.data }));
+        setTableColumns(prev => ({ ...prev, [tableName]: result.columns }));
+      }
+    } catch (err) {
+      console.error(`[SyncPage] Load records for ${tableName} error:`, err);
+    } finally {
+      setLoadingTable(null);
+    }
+  }, [expandedTable, tableRecords]);
 
   const loadSyncHistory = useCallback(async (page = 1, showLoading = true) => {
     try {
@@ -619,14 +703,71 @@ export default function SyncPage() {
             ) : (
               <div className="space-y-2">
                 {pendingTables.map((tb) => (
-                  <div key={tb.table} className="flex items-center justify-between p-3 bg-indusia-bg rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <Table className="w-4 h-4 text-indusia-textMuted" />
-                      <span className="text-sm text-indusia-text">{getTableDisplayName(tb.table)}</span>
-                    </div>
-                    <span className={`text-sm font-medium ${tb.count > 0 ? 'text-indusia-primary' : 'text-indusia-textMuted'}`}>
-                      {tb.count > 0 ? `${tb.count} ${t('sync.pending')}` : `0 ${t('sync.pending')}`}
-                    </span>
+                  <div key={tb.table}>
+                    {/* Clickable header row */}
+                    <button
+                      onClick={() => tb.count > 0 ? loadTableRecords(tb.table) : null}
+                      className={`w-full flex items-center justify-between p-3 bg-indusia-bg rounded-lg transition-colors ${
+                        tb.count > 0 ? 'cursor-pointer hover:bg-indusia-border' : 'cursor-default'
+                      } ${expandedTable === tb.table ? 'rounded-b-none' : ''}`}
+                    >
+                      <div className="flex items-center gap-3">
+                        {tb.count > 0 ? (
+                          <ChevronDown className={`w-3.5 h-3.5 text-indusia-textMuted transition-transform duration-200 ${
+                            expandedTable === tb.table ? 'rotate-180' : ''
+                          }`} />
+                        ) : (
+                          <div className="w-3.5" />
+                        )}
+                        <Table className="w-4 h-4 text-indusia-textMuted" />
+                        <span className="text-sm text-indusia-text">{getTableDisplayName(tb.table)}</span>
+                      </div>
+                      <span className={`text-sm font-medium ${tb.count > 0 ? 'text-indusia-primary' : 'text-indusia-textMuted'}`}>
+                        {tb.count > 0 ? `${tb.count} ${t('sync.pending')}` : `0 ${t('sync.pending')}`}
+                      </span>
+                    </button>
+
+                    {/* Expandable detail panel */}
+                    {expandedTable === tb.table && tb.count > 0 && (
+                      <div className="bg-indusia-bg rounded-b-lg border-t border-indusia-border/50 px-3 pb-3 pt-2">
+                        {loadingTable === tb.table ? (
+                          <div className="py-4 flex justify-center">
+                            <Loader2 className="w-4 h-4 text-indusia-primary animate-spin" />
+                          </div>
+                        ) : tableRecords[tb.table]?.length > 0 ? (
+                          <>
+                            {/* Column headers */}
+                            {tableColumns[tb.table] && (
+                              <div className="flex items-center gap-2 px-2 py-1.5 text-[10px] font-semibold text-indusia-textMuted uppercase tracking-wide">
+                                {tableColumns[tb.table].map((col, i) => (
+                                  <span key={i} className={i === 0 ? 'flex-1 min-w-0' : 'w-20 text-center flex-shrink-0'}>
+                                    {col}
+                                  </span>
+                                ))}
+                                {tb.table === 'overrides' && (
+                                  <span className="w-16 text-center flex-shrink-0">Status</span>
+                                )}
+                                <span className="w-14 text-center flex-shrink-0">Sync</span>
+                              </div>
+                            )}
+                            <div className="space-y-1 max-h-[240px] overflow-y-auto">
+                              {tableRecords[tb.table].map((record) => (
+                                <SyncRecordRow key={record.id} record={record} table={tb.table} t={t} />
+                              ))}
+                            </div>
+                            {tb.count > 20 && (
+                              <p className="text-[10px] text-indusia-textMuted text-center pt-2">
+                                {t('sync.showingFirst').replace('{count}', '20').replace('{total}', String(tb.count))}
+                              </p>
+                            )}
+                          </>
+                        ) : (
+                          <p className="text-xs text-indusia-textMuted py-3 text-center">
+                            {t('sync.noRecordsFound')}
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ))}
 

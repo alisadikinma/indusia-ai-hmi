@@ -106,6 +106,42 @@ export function LiveViewV3({
   const workOrder = (BYPASS_WO_CHECK && !fetchedWO) ? mockWorkOrder : fetchedWO
   const hasActiveWO = BYPASS_WO_CHECK || fetchedHasWO
 
+  // Optimistic counter tracking — updates UI instantly on each decision
+  // without waiting for DB round-trip (real WO path only)
+  const [sessionCounters, setSessionCounters] = useState({
+    completedQty: 0, goodQty: 0, ngQty: 0, falseCallQty: 0
+  })
+  const lastKnownServerRef = useRef(null)
+
+  // Reconcile session counters when server data catches up via refreshWO
+  useEffect(() => {
+    if (!fetchedWO) return
+    if (lastKnownServerRef.current) {
+      const prev = lastKnownServerRef.current
+      const serverDelta = {
+        completedQty: (fetchedWO.completedQty || 0) - (prev.completedQty || 0),
+        goodQty: (fetchedWO.goodQty || 0) - (prev.goodQty || 0),
+        ngQty: (fetchedWO.ngQty || 0) - (prev.ngQty || 0),
+        falseCallQty: (fetchedWO.falseCallQty || 0) - (prev.falseCallQty || 0),
+      }
+      // Server caught up — reduce local offsets to avoid double-counting
+      if (serverDelta.completedQty > 0 || serverDelta.goodQty > 0 || serverDelta.ngQty > 0 || serverDelta.falseCallQty > 0) {
+        setSessionCounters(prev => ({
+          completedQty: Math.max(0, prev.completedQty - serverDelta.completedQty),
+          goodQty: Math.max(0, prev.goodQty - serverDelta.goodQty),
+          ngQty: Math.max(0, prev.ngQty - serverDelta.ngQty),
+          falseCallQty: Math.max(0, prev.falseCallQty - serverDelta.falseCallQty),
+        }))
+      }
+    }
+    lastKnownServerRef.current = {
+      completedQty: fetchedWO.completedQty || 0,
+      goodQty: fetchedWO.goodQty || 0,
+      ngQty: fetchedWO.ngQty || 0,
+      falseCallQty: fetchedWO.falseCallQty || 0,
+    }
+  }, [fetchedWO])
+
   // Model selector state (fallback to localStorage if prop is empty)
   // Must be defined BEFORE useLiveInspection so the resolved model name is available
   const [currentModel, setCurrentModel] = useState(() => {
@@ -136,6 +172,7 @@ export function LiveViewV3({
     disconnect,
     reconnect,
     checkAiBackend,
+    clearInspection,
     runProcess,
     pauseProcess,
     stopProcess,
@@ -159,12 +196,13 @@ export function LiveViewV3({
   // UI State
   const [isPaused, setIsPaused] = useState(false)
   const [showFalseCallModal, setShowFalseCallModal] = useState(false)
+  const falseCallInspectionRef = useRef(null) // Capture inspection data when modal opens
   const [pendingDecision, setPendingDecision] = useState(null) // 'GOOD' or 'NG'
   const [showUserMenu, setShowUserMenu] = useState(false)
   const userMenuRef = useRef(null)
   
-  // Auto-NG toggle state (synced via API for all clients)
-  const [autoNgEnabled, setAutoNgEnabled] = useState(true)
+  // Auto-NG toggle state (synced via API for all clients) - default OFF
+  const [autoNgEnabled, setAutoNgEnabled] = useState(false)
 
   const [availableModels, setAvailableModels] = useState([])
   const [isModelSwitching, setIsModelSwitching] = useState(false)
@@ -183,7 +221,9 @@ export function LiveViewV3({
     },
     hardware: { cameras: [], plcs: [] },
     currentInspection: null,
-    autoNgEnabled: true  // Add autoNgEnabled to synced state
+    autoNgEnabled: false,
+    workOrderCounters: null,
+    cycleTime: null
   })
   const [syncLoaded, setSyncLoaded] = useState(false)
   
@@ -194,8 +234,8 @@ export function LiveViewV3({
       const result = await response.json()
       
       if (result.success && result.data) {
-        // Calculate new autoNgEnabled value
-        const newAutoNgEnabled = result.data.autoNgEnabled ?? true
+        // Calculate new autoNgEnabled value (default OFF)
+        const newAutoNgEnabled = result.data.autoNgEnabled ?? false
         
         // Only update local autoNgEnabled for Operator
         // Manager uses syncedState.autoNgEnabled exclusively
@@ -215,11 +255,20 @@ export function LiveViewV3({
           },
           hardware: result.data.hardware || { cameras: [], plcs: [] },
           currentInspection: result.data.currentInspection,
-          autoNgEnabled: newAutoNgEnabled
+          autoNgEnabled: newAutoNgEnabled,
+          workOrderCounters: result.data.workOrderCounters || null,
+          cycleTime: result.data.cycleTime || null
         }
         
         setSyncedState(newSyncedState)
         setSyncLoaded(true)
+
+        // Initialize cycle time from persisted state on first load (operator only)
+        // This ensures the cycle time indicator shows immediately after page reload
+        if (isOperator && newSyncedState.cycleTime != null && lastCycleTimeRef.current == null) {
+          lastCycleTimeRef.current = newSyncedState.cycleTime
+          setDisplayCycleTime(newSyncedState.cycleTime)
+        }
       }
     } catch (error) {
       console.warn('[LiveView] Failed to fetch line state:', error)
@@ -271,7 +320,16 @@ export function LiveViewV3({
       hardware: hardwareStatus,
       currentInspection: currentInspection,
       autoNgEnabled: autoNgEnabled,  // Always include for sync consistency
-      modelName: currentModel || modelName || null
+      modelName: currentModel || modelName || null,
+      workOrderCounters: workOrder ? {
+        completedQty: (workOrder.completedQty || 0) + sessionCounters.completedQty,
+        goodQty: (workOrder.goodQty || 0) + sessionCounters.goodQty,
+        ngQty: (workOrder.ngQty || 0) + sessionCounters.ngQty,
+        lotSize: workOrder.lotSize || 0,
+        woNumber: workOrder.woNumber || null,
+        falseCallQty: (workOrder.falseCallQty || 0) + sessionCounters.falseCallQty,
+      } : null,
+      cycleTime: lastCycleTimeRef.current
     }
     
     // Compare with last synced to avoid unnecessary API calls
@@ -286,9 +344,12 @@ export function LiveViewV3({
       inspectionId: currentInspection?.inspection_id || currentInspection?.inspectionId,
       verdict: currentInspection?.verdict || currentInspection?.result,
       autoNgEnabled,
-      modelName: currentModel || modelName || null
+      modelName: currentModel || modelName || null,
+      completedQty: (workOrder?.completedQty || 0) + sessionCounters.completedQty,
+      goodQty: (workOrder?.goodQty || 0) + sessionCounters.goodQty,
+      ngQty: (workOrder?.ngQty || 0) + sessionCounters.ngQty,
     })
-    
+
     // Skip if no change (unless autoNg specifically changed - force sync)
     if (lastSyncedRef.current === stateKey && !autoNgChanged) {
       return // No change, skip sync
@@ -305,7 +366,7 @@ export function LiveViewV3({
       })
     }).catch(err => console.warn('[LiveView] Sync failed:', err))
     
-  }, [isOperator, lineId, processStatus, inspectionStage, hardwareStatus, currentInspection, autoNgEnabled, user])
+  }, [isOperator, lineId, processStatus, inspectionStage, hardwareStatus, currentInspection, autoNgEnabled, user, workOrder, sessionCounters])
   
   // Toggle Auto-NG (operator only)
   // State change triggers push effect which syncs to API
@@ -339,6 +400,11 @@ export function LiveViewV3({
 
   // Board sequence (for local tracking)
   const boardSequenceRef = useRef(workOrder?.completedQty || 0)
+
+  // Cycle time tracking
+  const cycleStartTimeRef = useRef(null)
+  const lastCycleTimeRef = useRef(null)
+  const [displayCycleTime, setDisplayCycleTime] = useState(null)
   
   // Sync boardSequenceRef when workOrder changes (important for page refresh/reconnect)
   useEffect(() => {
@@ -350,6 +416,65 @@ export function LiveViewV3({
       }
     }
   }, [workOrder?.completedQty])
+
+  // Cycle time tracking: start when stage begins, end when inspection result arrives
+  useEffect(() => {
+    if (!isOperator) return
+    const stageIdx = inspectionStage?.stageIndex || 0
+    // Start timer when first stage begins
+    if (stageIdx === 1 && !cycleStartTimeRef.current) {
+      cycleStartTimeRef.current = Date.now()
+    }
+    // Complete timer when inspection result arrives
+    if (currentInspection && cycleStartTimeRef.current) {
+      const elapsed = ((Date.now() - cycleStartTimeRef.current) / 1000).toFixed(1)
+      lastCycleTimeRef.current = parseFloat(elapsed)
+      setDisplayCycleTime(parseFloat(elapsed))
+      cycleStartTimeRef.current = null
+    }
+    // Reset start time when stage resets to idle (new cycle)
+    if (stageIdx === 0 && !currentInspection) {
+      cycleStartTimeRef.current = null
+    }
+  }, [isOperator, inspectionStage?.stageIndex, currentInspection])
+
+  // Stale state detection: When SSE connects to a running process but misses the inspection event
+  // (e.g., page reload during result review), stages show "ready" but currentInspection is null.
+  // After 5 seconds in this state, auto-reset stages to idle so operator can proceed.
+  const staleTimerRef = useRef(null)
+  useEffect(() => {
+    if (!isOperator || !isConnected) {
+      if (staleTimerRef.current) clearTimeout(staleTimerRef.current)
+      return
+    }
+
+    const isStaleState = inspectionStage?.status === 'ready' && !currentInspection
+    if (isStaleState) {
+      // Start 5-second timer to confirm it's actually stale (not just momentary)
+      if (!staleTimerRef.current) {
+        staleTimerRef.current = setTimeout(() => {
+          // Still stale after 5 seconds — reset stages to idle so operator isn't stuck.
+          // processStatus is NOT touched — the backend process may still be running.
+          console.warn('[LiveView] Stale inspection state detected (stages=ready, no inspection data). Resetting stages to idle.')
+          clearInspection()
+          staleTimerRef.current = null
+        }, 5000)
+      }
+    } else {
+      // State resolved — clear timer
+      if (staleTimerRef.current) {
+        clearTimeout(staleTimerRef.current)
+        staleTimerRef.current = null
+      }
+    }
+
+    return () => {
+      if (staleTimerRef.current) {
+        clearTimeout(staleTimerRef.current)
+        staleTimerRef.current = null
+      }
+    }
+  }, [isOperator, isConnected, inspectionStage?.status, currentInspection, clearInspection])
 
   // Dev mode: Mock inspection state
   const [devMockInspection, setDevMockInspection] = useState(null)
@@ -452,10 +577,24 @@ export function LiveViewV3({
   //   })
   // }, [isOperator, autoNgEnabled, syncedState.autoNgEnabled])
 
-  // Calculate yield from WO data
-  const yieldPercent = workOrder?.completedQty > 0 
-    ? ((workOrder.goodQty / workOrder.completedQty) * 100).toFixed(1) 
+  // Effective counters: operator uses workOrder + optimistic session offsets, manager uses synced counters
+  const effectiveCounters = isOperator
+    ? (workOrder ? {
+        ...workOrder,
+        completedQty: (workOrder.completedQty || 0) + sessionCounters.completedQty,
+        goodQty: (workOrder.goodQty || 0) + sessionCounters.goodQty,
+        ngQty: (workOrder.ngQty || 0) + sessionCounters.ngQty,
+        falseCallQty: (workOrder.falseCallQty || 0) + sessionCounters.falseCallQty,
+      } : null)
+    : (syncedState.workOrderCounters || workOrder)
+
+  // Calculate yield from effective counter data
+  const yieldPercent = effectiveCounters?.completedQty > 0
+    ? ((effectiveCounters.goodQty / effectiveCounters.completedQty) * 100).toFixed(1)
     : '0.0'
+
+  // Effective cycle time: operator uses local, manager uses synced
+  const effectiveCycleTime = isOperator ? displayCycleTime : syncedState.cycleTime
 
   // Determine active inspection data
   // Operator: use SSE currentInspection or dev mock
@@ -538,7 +677,19 @@ export function LiveViewV3({
    * (Defined first as other handlers depend on it)
    */
   const submitDecision = useCallback(async (operatorDecision, falseCallData = null) => {
-    if (!activeInspection || !workOrder) return
+    console.log('[LiveView] submitDecision called:', {
+      operatorDecision,
+      hasActiveInspection: !!activeInspection,
+      hasWorkOrder: !!workOrder,
+      hasFetchedWO: !!fetchedWO,
+      workOrderId: workOrder?.id
+    })
+    // Use captured inspection from modal as fallback (prevents stale closure when SSE clears currentInspection)
+    const effectiveInspection = activeInspection || falseCallInspectionRef.current
+    if (!effectiveInspection || !workOrder) {
+      console.warn('[LiveView] submitDecision bailed: activeInspection=', !!activeInspection, 'capturedInspection=', !!falseCallInspectionRef.current, 'workOrder=', !!workOrder)
+      return
+    }
 
     try {
       // 1. Send to AI Backend (triggers PLC)
@@ -553,60 +704,88 @@ export function LiveViewV3({
         }
       }
 
-      // 2. Calculate false call
-      const isFalseCall = (activeInspection.decision === 'PASS' && operatorDecision === 'NG') ||
-                         (activeInspection.decision === 'FAIL' && operatorDecision === 'GOOD')
+      // 2. Calculate false call (use effectiveInspection which includes captured data from modal)
+      const isFalseCall = (effectiveInspection.decision === 'PASS' && operatorDecision === 'NG') ||
+                         (effectiveInspection.decision === 'FAIL' && operatorDecision === 'GOOD')
+
+      // 2.1. Optimistic local counter update — instant UI feedback (real WO path)
+      if (fetchedWO) {
+        setSessionCounters(prev => ({
+          completedQty: prev.completedQty + 1,
+          goodQty: operatorDecision === 'GOOD' ? prev.goodQty + 1 : prev.goodQty,
+          ngQty: operatorDecision === 'NG' ? prev.ngQty + 1 : prev.ngQty,
+          falseCallQty: isFalseCall ? prev.falseCallQty + 1 : prev.falseCallQty,
+        }))
+        console.log('[LiveView] Optimistic counter update applied:', operatorDecision)
+      }
 
       // 2.5. If false call: save images locally + create Override for Manager review
-      if (isFalseCall && activeInspection.results) {
+      // Use captured inspection from modal open (falseCallInspectionRef) to prevent stale closure
+      const inspectionForOverride = falseCallInspectionRef.current || activeInspection
+      if (isFalseCall && inspectionForOverride) {
+        const boardId = `${workOrder.woNumber}-${String(boardSequenceRef.current + 1).padStart(4, '0')}`
+        const overrideType = inspectionForOverride.decision === 'PASS' ? 'MISSED_DEFECT' : 'FALSE_POSITIVE'
+
+        // Step 1: Save images to LOCAL storage (non-blocking — failure here must NOT prevent override creation)
+        let localPaths = {}
         try {
-          const boardId = `${workOrder.woNumber}-${String(boardSequenceRef.current + 1).padStart(4, '0')}`
-          const overrideType = activeInspection.decision === 'PASS' ? 'MISSED_DEFECT' : 'FALSE_POSITIVE'
-          
-          // Step 1: Save images to LOCAL storage
           const uploadResponse = await authFetch('/api/inspection/upload-false-call', {
             method: 'POST',
             body: JSON.stringify({
-              inspection: activeInspection,
+              inspection: inspectionForOverride,
               workOrder,
               customerName: workOrder?.customer?.name || workOrder?.customerName || 'UNKNOWN',
               boardSequence: String(boardSequenceRef.current + 1).padStart(4, '0'),
               falseCallReason: falseCallData?.reason || 'UNSPECIFIED'
             })
           })
-          
           const uploadResult = await uploadResponse.json()
-          const localPaths = uploadResult.success ? uploadResult.paths : {}
-          
-          // Step 2: Create Override record for Manager review
+          localPaths = uploadResult.success ? uploadResult.paths : {}
+          console.log('[LiveView] Image upload:', uploadResult.success ? 'OK' : uploadResult.error)
+        } catch (uploadErr) {
+          console.warn('[LiveView] Image upload failed (continuing with override):', uploadErr.message)
+        }
+
+        // Step 2: Create Override record for Manager review (MUST always run)
+        try {
           const overridePayload = {
             board_id: boardId,
-            section_id: sectionId,
-            line_id: lineId,
-            customer_id: customerId,
-            override_type: overrideType,
             defect_type: overrideType,
+            override_type: overrideType,
             reason: falseCallData?.reason || 'UNSPECIFIED',
             operator_notes: falseCallData?.notes || '',
-            operator_id: user?.id,
-            operator_name: user?.name,
             local_image_path: localPaths?.top?.[0]?.path || localPaths?.bottom?.[0]?.path || '',
             local_image_paths: JSON.stringify(localPaths),
           }
-          
+
+          // Only include optional fields if they have actual values
+          // (null values cause Zod validation to fail — .optional() rejects null)
+          if (sectionId) overridePayload.section_id = sectionId
+          if (lineId) overridePayload.line_id = lineId
+          if (customerId) overridePayload.customer_id = customerId
+          if (user?.id) overridePayload.operator_id = user.id
+          if (user?.name) overridePayload.operator_name = user.name
+
+          console.log('[LiveView] Creating override:', { boardId, overrideType, reason: overridePayload.reason })
+
           const overrideResponse = await authFetch('/api/overrides', {
             method: 'POST',
             body: JSON.stringify(overridePayload)
           })
-          
+
           const overrideResult = await overrideResponse.json()
-          
-          if (!overrideResult.success) {
-            console.error('[LiveView] Override creation failed:', overrideResult.error)
+
+          if (overrideResult.success) {
+            console.log('[LiveView] Override created:', overrideResult.data?.id, overrideResult.duplicate ? '(duplicate)' : '')
+          } else {
+            console.error('[LiveView] Override creation failed:', overrideResult.error, overrideResult.details)
           }
-        } catch (err) {
-          console.error('[LiveView] False call process error:', err)
+        } catch (overrideErr) {
+          console.error('[LiveView] Override API error:', overrideErr.message)
         }
+
+        // Clear captured inspection
+        falseCallInspectionRef.current = null
       }
 
       // 3. Save to database + update counters
@@ -619,17 +798,17 @@ export function LiveViewV3({
           sectionId,
           customerId,
           boardSequence: boardSequenceRef.current + 1,
-          aiResult: activeInspection.decision === 'PASS' ? 'GOOD' : 'NG',
-          aiConfidence: calculateAvgConfidence(activeInspection),
+          aiResult: effectiveInspection.decision === 'PASS' ? 'GOOD' : 'NG',
+          aiConfidence: calculateAvgConfidence(effectiveInspection),
           operatorDecision,
           operatorId: user?.id,
           isFalseCall,
           falseCallReasonCode: falseCallData?.reason,
           plcSignalSent: operatorDecision,
           shift: getCurrentShift(),
-          defectCount: getTotalDefects(activeInspection),
-          imageTopUrl: activeInspection.results?.top?.image_url,
-          imageBottomUrl: activeInspection.results?.bottom?.image_url,
+          defectCount: getTotalDefects(effectiveInspection),
+          imageTopUrl: effectiveInspection.results?.top?.image_url,
+          imageBottomUrl: effectiveInspection.results?.bottom?.image_url,
         }
 
         try {
@@ -711,9 +890,11 @@ export function LiveViewV3({
     processedInspectionRef.current = inspectionId
     
     const isFalseCall = activeInspection.decision === 'FAIL'
-    
+
     if (isFalseCall) {
       // AI said FAIL but operator says GOOD → show false call modal
+      // Capture inspection data NOW so it's available even if SSE clears currentInspection
+      falseCallInspectionRef.current = activeInspection
       setPendingDecision('GOOD')
       setShowFalseCallModal(true)
     } else {
@@ -738,9 +919,11 @@ export function LiveViewV3({
     processedInspectionRef.current = inspectionId
     
     const isMissedDefect = activeInspection.decision === 'PASS'
-    
+
     if (isMissedDefect) {
       // AI said PASS but operator says NG → show false call modal
+      // Capture inspection data NOW so it's available even if SSE clears currentInspection
+      falseCallInspectionRef.current = activeInspection
       setPendingDecision('NG')
       setShowFalseCallModal(true)
     } else {
@@ -1290,11 +1473,18 @@ export function LiveViewV3({
                           )}>
                             {model.name}
                           </p>
-                          {model.customer?.name && (
-                            <p className="font-mono text-[10px] text-text-tertiary">
-                              {model.customer.name}
-                            </p>
-                          )}
+                          <div className="flex items-center gap-2">
+                            {model.customer?.name && (
+                              <span className="font-mono text-[10px] text-text-tertiary">
+                                {model.customer.name}
+                              </span>
+                            )}
+                            {workOrder?.board?.name === model.name && workOrder?.lotSize > 0 && (
+                              <span className="font-mono text-[10px] text-phosphor-green">
+                                {workOrder.lotSize - (workOrder.completedQty || 0)} remaining
+                              </span>
+                            )}
+                          </div>
                         </div>
                         {model.name === currentModel && (
                           <CheckCircle2 className="w-4 h-4 text-purple-400 flex-shrink-0" />
@@ -1439,35 +1629,48 @@ export function LiveViewV3({
       <footer className="h-28 flex-shrink-0 bg-panel border-t border-surface-border flex items-center justify-between px-4">
         {/* Left: WO Stats */}
         <div className="flex items-center gap-4">
-          {workOrder && (
+          {effectiveCounters && (
             <div className="flex items-center gap-6 px-4 py-2 bg-terminal border border-surface-border">
               <div className="flex items-center gap-2">
                 <span className="font-mono text-xs text-text-tertiary">PROGRESS</span>
                 <span className="font-mono text-xl font-bold text-phosphor-amber">
-                  {workOrder.completedQty}/{workOrder.lotSize}
+                  {effectiveCounters.completedQty}/{effectiveCounters.lotSize}
                 </span>
               </div>
               <div className="w-px h-8 bg-surface-border" />
               <div className="flex items-center gap-2">
                 <CheckCircle2 className="w-5 h-5 text-phosphor-green" />
-                <span className="font-mono text-xl font-bold text-phosphor-green">{workOrder.goodQty}</span>
+                <span className="font-mono text-xl font-bold text-phosphor-green">{effectiveCounters.goodQty}</span>
               </div>
               <div className="w-px h-8 bg-surface-border" />
               <div className="flex items-center gap-2">
                 <XCircle className="w-5 h-5 text-phosphor-red" />
-                <span className="font-mono text-xl font-bold text-phosphor-red">{workOrder.ngQty}</span>
+                <span className="font-mono text-xl font-bold text-phosphor-red">{effectiveCounters.ngQty}</span>
               </div>
               <div className="w-px h-8 bg-surface-border" />
               <div className="flex items-center gap-2">
                 <span className="font-mono text-xs text-text-tertiary">YIELD</span>
                 <span className={cn(
                   "font-mono text-xl font-bold",
-                  parseFloat(yieldPercent) >= 98 ? "text-phosphor-green" : 
+                  parseFloat(yieldPercent) >= 98 ? "text-phosphor-green" :
                   parseFloat(yieldPercent) >= 95 ? "text-phosphor-amber" : "text-phosphor-red"
                 )}>
                   {yieldPercent}%
                 </span>
               </div>
+              {/* Cycle Time */}
+              {effectiveCycleTime != null && (
+                <>
+                  <div className="w-px h-8 bg-surface-border" />
+                  <div className="flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-phosphor-cyan" />
+                    <span className="font-mono text-xs text-text-tertiary">CYCLE</span>
+                    <span className="font-mono text-xl font-bold text-phosphor-cyan">
+                      {effectiveCycleTime}s
+                    </span>
+                  </div>
+                </>
+              )}
             </div>
           )}
         </div>
@@ -1552,6 +1755,7 @@ export function LiveViewV3({
         onClose={() => {
           setShowFalseCallModal(false)
           setPendingDecision(null)
+          falseCallInspectionRef.current = null
         }}
         onSubmit={handleFalseCallSubmit}
         boardId={`${workOrder?.woNumber}-${String(boardSequenceRef.current + 1).padStart(4, '0')}`}

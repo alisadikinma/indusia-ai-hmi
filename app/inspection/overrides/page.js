@@ -98,18 +98,11 @@ export default function OverrideApprovalsPage() {
     );
   }
 
-  const allowedSectionIds = user?.sections || [];
-  const userRole = user?.role || '';
-
-  // Filter overrides
+  // Filter overrides (client-side status + search only)
+  // Section-based access control is already enforced server-side via getSectionFilter()
+  // in the API route, so we don't duplicate that filtering here.
   const filteredOverrides = useMemo(() => {
     return overrides
-      .filter((override) => {
-        if (userRole === 'manager') {
-          return allowedSectionIds.length === 0 || allowedSectionIds.includes(override.sectionId);
-        }
-        return true;
-      })
       .filter((override) => {
         if (statusFilter === 'all') return true;
         return override.status === statusFilter;
@@ -122,7 +115,7 @@ export default function OverrideApprovalsPage() {
           (override.operator || override.operatorName || '').toLowerCase().includes(query)
         );
       });
-  }, [overrides, userRole, allowedSectionIds, statusFilter, searchQuery]);
+  }, [overrides, statusFilter, searchQuery]);
 
   // Pagination
   const totalPages = Math.ceil(filteredOverrides.length / PAGE_SIZE);
