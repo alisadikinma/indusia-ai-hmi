@@ -121,13 +121,17 @@ npx kill-port 3000 3001 8002
 ### Next.js App Router Structure
 
 The app uses Next.js 13.5 with App Router. Pages are in `app/` with the following main routes:
-- `/inspection/operator` - Fullscreen operator HMI with board selector
-- `/inspection/result/[id]` - Operator HMI for inspection results
+- `/dashboard` - Dashboard with KPIs and analytics
+- `/inspection/select-line` - Line and model selection before inspection
+- `/inspection/live/[lineId]` - Live inspection view (operator + manager)
+- `/inspection/result/[id]` - Inspection result details
 - `/inspection/overrides` - Manager review queue for false call overrides
 - `/engineering/master-data` - Engineering console for dataset/model management
+- `/engineering/work-orders` - Work order management
 - `/super-admin/*` - Admin panel for users, roles, permissions
 - `/event-log` - System event tracking
 - `/settings/sync` - Sync configuration
+- `/settings/false-call-reasons` - False call reason configuration
 
 ### Context Architecture
 
@@ -162,30 +166,52 @@ Navigation items in `SideNav.jsx` are filtered by role. Each route should check 
 - `components/system/` - SystemHealthBar, SystemStatusChip, SystemStatusDetailsModal
 - `components/notifications/` - NotificationBell, NotificationDrawer, NotificationFilters
 - `components/inspection/` - FalseCallOverrideModal, OverrideReviewModal, HMIOperatorView, HMIActionPanel, HMITimer, DetectionOverlay, LiveView, LiveViewV3, InspectionStage, InspectionResult, SidePanel, AIDecisionPanel
+- `components/dashboard/` - Dashboard KPI widgets and charts
+- `components/override/` - Override-specific components
+- `components/work-orders/` - Work order management components
 - `components/sync/` - Sync progress and queue components
 - `components/event-log/` - Event log table and filters
 - `components/help/` - HelpOverlay system with context-aware shortcuts
 
 ### Styling System
 
-Uses Tailwind CSS with custom INDUSIA design tokens in `tailwind.config.js`:
+Uses Tailwind CSS with a **Phosphor/Terminal** design system in `tailwind.config.js`.
+
+**Fonts:** Barlow (sans), Barlow Condensed (display), JetBrains Mono (mono)
+
+**Primary color systems** (prefer these for new code):
 
 ```js
-indusia: {
-  bg: '#0A1628',           // Main background
-  surface: '#1A2942',      // Card/panel background
-  surfaceMuted: '#152033', // Subtle backgrounds
-  primary: '#0FB5BA',      // Primary actions/highlights
-  text: '#E8EDF2',         // Main text
-  textMuted: '#8A95A8',    // Secondary text
-  pass: '#10B981',         // Success/pass status
-  fail: '#EF4444',         // Error/fail status
-  warning: '#F59E0B',      // Warning status
-  border: '#2D3E56',       // Borders
+// Phosphor accents
+phosphor: {
+  amber: '#FFAA00',         // Primary actions, highlights, warnings
+  'amber-bright': '#FFD93D', 'amber-dim': '#CC8800',
+  green: '#00FF66',          // Success/pass
+  'green-bright': '#66FFAA', 'green-dim': '#00CC52',
+  red: '#FF4444',            // Error/fail
+  'red-bright': '#FF6B6B',
+  cyan: '#00DDFF',           // Info/links
+  'cyan-dim': '#0099BB',
 }
+
+// Backgrounds (dark-to-light)
+void: '#050608',             // Deepest background
+terminal: '#0A0E14',        // Main app background
+panel: '#0D1117',           // Card/panel background
+elevated: '#161B22',        // Elevated surfaces
+'surface-border': '#21262D', // Borders
+
+// Text hierarchy
+'text-primary': '#E6EDF3',  // Main text
+'text-secondary': '#8B949E', // Secondary text
+'text-tertiary': '#484F58',  // Muted text
 ```
 
-Use these color tokens instead of arbitrary colors to maintain design consistency.
+**Legacy `indusia.*` tokens** exist for backwards compatibility but map to the new Phosphor values. Use the Phosphor system for new code.
+
+**Glow effects:** `shadow-glow-amber`, `shadow-glow-green`, `shadow-glow-red`, `shadow-glow-cyan`
+
+**Animations:** `animate-pulse-glow`, `animate-flicker`, `animate-scan`, `animate-typing-cursor`, `animate-fade-in`, `animate-slide-up`
 
 ### Data Layer Architecture
 
@@ -698,115 +724,17 @@ When implementing Supabase queries, use Row Level Security (RLS) policies based 
 
 ## Phase Execution Workflow
 
-### Implementation Prompts
-
-Detailed implementation prompts are stored in `.claude/prompts/` directory:
-
-| Phase | File | Description |
-|-------|------|-------------|
-| 1 | `phase-1-dashboard-backend.md` | Dashboard KPIs backend (repos + APIs) |
-| 2 | `phase-2-dashboard-frontend.md` | Dashboard frontend (charts + components) |
-| 3 | `phase-3-override-annotation.md` | Override annotation canvas |
-| 4 | `phase-4-live-inspection.md` | Live inspection SSE + overlay |
-| 5 | `phase-5-operator-page.md` | HMI Operator page route + board selector |
-| 6 | `phase-6-inspection-api.md` | Inspection action API + DB schema |
-| 7 | `phase-7-ai-backend-auth.md` | AI Backend auth & API structure |
-| 8 | `phase-8-training-repos.md` | Training pipeline repositories |
-| 9 | `phase-9-ai-api-core.md` | Core AI API endpoints |
-| 11 | `phase-11-ai-api-training.md` | Training pipeline API endpoints |
-| 12 | `phase-12-sse-consumer.md` | SSE consumer & AI Backend client |
-| 13 | `phase-13-wo-hardening.md` | Work Order flow hardening |
-| 14 | `phase-14-validation-db.md` | Zod validation schemas & DB migrations |
-| 16a | `phase-16a-sync-foundation.md` | Sync foundation (lock, online check, admin client) |
-| 16b | `phase-16b-sync-logic.md` | Sync logic - upload to cloud |
-| 16c | `phase-16c-sync-api.md` | Sync API endpoints |
-| 16d | `phase-16d-sync-ui.md` | Sync UI components |
-
-### Post-Phase Checklist
-
-**IMPORTANT:** After completing each phase, ALWAYS perform these steps:
-
-1. **Update README.md** — Add/update relevant sections:
-   - New features implemented
-   - New API endpoints
-   - New components created
-   - Database changes
-   - Configuration changes
-
-2. **Update this section** — Mark phase as completed:
-   ```
-   | Phase | Status | Completed Date |
-   |-------|--------|----------------|
-   | 1 | ✅ Done | 2025-01-XX |
-   ```
-
-3. **Commit changes** — Include both code and documentation:
-   ```bash
-   git add .
-   git commit -m "feat: complete phase-X - [brief description]"
-   ```
-
-### Phase Completion Status
-
-| Phase | Status | Completed | Notes |
-|-------|--------|-----------|-------|
-| 1 | ✅ Done | - | Dashboard backend |
-| 2 | ✅ Done | - | Dashboard frontend |
-| 3 | ✅ Done | - | Override annotation |
-| 4 | ✅ Done | - | Live inspection |
-| 5 | ✅ Done | 2026-01-01 | Operator page route |
-| 6 | ✅ Done | 2026-01-01 | Inspection API |
-| 7 | ✅ Done | 2026-01-04 | AI Backend auth |
-| 8 | ✅ Done | 2026-01-04 | Training repos |
-| 9 | ✅ Done | 2026-01-04 | Core AI APIs |
-| 11 | ✅ Done | 2026-01-04 | Training pipeline APIs |
-| 12 | ✅ Done | 2026-01-04 | SSE consumer & client |
-| 13 | ✅ Done | 2026-01-04 | Work Order flow hardening |
-| 14 | ✅ Done | 2026-01-04 | Zod validation schemas & DB migrations |
-| 15 | ✅ Done | 2026-01-04 | HMI LiveView rework (dual view) |
-| 16a | ✅ Done | 2026-01-06 | Sync foundation (lock, online check, admin) |
-| 16b | ✅ Done | 2026-01-06 | Sync logic - upload to cloud |
-| 16c | ✅ Done | 2026-01-06 | Sync API endpoints |
-| 16d | ✅ Done | 2026-01-06 | Sync UI components |
+All 18 implementation phases are complete (Phases 1-16d). Implementation prompts are archived in `.claude/prompts/` directory for reference.
 
 ### Codebase Cleanup (2026-01-04)
 
-Major cleanup performed to improve code quality:
-
-**Files Deleted:**
-- Unused hooks: `useMockSyncJob.jsx`, `useRealtime.js`, `use-toast.ts`
-- Unused utilities: `apiErrorHandler.js`, `edgeSync.js`, `rateLimit.js`
-- Unused repos: `shiftConfigRepo.js`
-- Legacy: `LiveViewV2.jsx`, `README-NEW.md`, `.bolt/` directory
-- Duplicate APIs: `/api/defect-classes`, `/api/models` (keeping `/api/ai/*` versions)
-- Archive: `.claude/prompts/archive-training-platform/`
-- Test endpoint: `/api/test`
-
-**New Utilities Created:**
-- `lib/utils/roleUtils.js` - Centralized role normalization
-- `data/mockUsers.js` - Shared mock user data
-
-**Codebase Quality Score: 7.2/10**
-
-**Post-Phase Documentation:** After completing each phase, update README.md with new features, API endpoints, components, and database changes.
+Major cleanup removed unused hooks, utilities, repos, legacy components, and duplicate APIs. Created `lib/utils/roleUtils.js` (role normalization) and `data/mockUsers.js` (shared mock users).
 
 ---
 
 ## Future Integrations
 
-Completed:
-- ✅ Repository layer (`lib/repos/`)
-- ✅ API routes (`app/api/`)
-- ✅ Zod validation layer (`lib/validations/`)
-- ✅ API authentication/authorization (`lib/auth/`)
-- ✅ Input sanitization (`lib/utils/sanitize.js`)
-
-In progress:
-- Supabase Auth migration (currently using mock auth with x-user-id header)
-- Dashboard analytics and live inspection views
-
 Planned:
+- Supabase Auth migration (currently using mock auth with x-user-id header)
 - FastAPI microservice for AI training (separate repo)
-- Modal.com integration for ML workflows
 - Semantic search with pgvector for override embeddings
-- AI Assistant with RAG using `kb_articles` table

@@ -227,7 +227,21 @@
     "noRecordsFound": "Tidak ada record ditemukan",
     "approved": "Disetujui",
     "rejected": "Ditolak",
-    "pendingReview": "Tertunda"
+    "pendingReview": "Tertunda",
+    "synced": "Tersinkron",
+    "syncedRecords": "Record Tersinkron",
+    "failedRecords": "Record Gagal",
+    "compareCloud": "Bandingkan dengan Cloud",
+    "comparing": "Membandingkan...",
+    "allRecordsVerified": "Semua record terverifikasi di cloud",
+    "cloudVerified": "terverifikasi di cloud",
+    "cloudMissing": "Tidak Ada di Cloud",
+    "cloudCompareError": "Tidak dapat menghubungi cloud untuk perbandingan",
+    "failedRecordsNote": "Menampilkan semua record yang gagal saat ini (bukan spesifik sesi)",
+    "syncTime": "Waktu Sinkron",
+    "showingNofTotal": "Menampilkan {shown} dari {total}",
+    "noSyncedRecords": "Tidak ada record tersinkron",
+    "noFailedRecords": "Tidak ada record gagal"
   },
   "syncTables": {
     "inspectionResults": "Hasil Inspeksi",

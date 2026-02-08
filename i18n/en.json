@@ -228,7 +228,21 @@
     "noRecordsFound": "No records found",
     "approved": "Approved",
     "rejected": "Rejected",
-    "pendingReview": "Pending"
+    "pendingReview": "Pending",
+    "synced": "Synced",
+    "syncedRecords": "Synced Records",
+    "failedRecords": "Failed Records",
+    "compareCloud": "Compare with Cloud",
+    "comparing": "Comparing...",
+    "allRecordsVerified": "All records verified in cloud",
+    "cloudVerified": "verified in cloud",
+    "cloudMissing": "Missing in Cloud",
+    "cloudCompareError": "Could not reach cloud for comparison",
+    "failedRecordsNote": "Showing all currently failed records (not session-specific)",
+    "syncTime": "Sync Time",
+    "showingNofTotal": "Showing {shown} of {total}",
+    "noSyncedRecords": "No synced records found",
+    "noFailedRecords": "No failed records"
   },
   "syncTables": {
     "inspectionResults": "Inspection Results",
