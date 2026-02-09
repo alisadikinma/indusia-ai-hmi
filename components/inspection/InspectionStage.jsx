@@ -2,10 +2,10 @@
 
 /**
  * InspectionStage Component - Step Cards Design
- * Shows 8 horizontal step cards with progress bar during inspection
+ * Shows 7 horizontal step cards with progress bar during inspection
  *
  * Visual Phases:
- * PCB IN → CAMERA MOVE → CAPTURE TOP → FLIP → CAPTURE BTM → AI INSPECT → RESULT → PCB OUT
+ * PCB IN → CAMERA MOVE → CAPTURE TOP → FLIP → CAPTURE BTM → AI INSPECT → RESULT
  *
  * States:
  * - IDLE/PAUSED/STOPPED: Full overlay with action buttons
@@ -29,12 +29,11 @@ import {
   ScanLine,
   Brain,
   ClipboardCheck,
-  ArrowLeftFromLine,
   Loader2
 } from 'lucide-react'
 
 // ============================================
-// 8 Visual Phases
+// 7 Visual Phases
 // ============================================
 
 const VISUAL_PHASES = [
@@ -45,7 +44,6 @@ const VISUAL_PHASES = [
   { key: 'capture_bottom', label: 'CAPTURE BTM',  icon: ScanLine },
   { key: 'ai_inspect',     label: 'AI INSPECT',   icon: Brain },
   { key: 'result',         label: 'RESULT',       icon: ClipboardCheck },
-  { key: 'pcb_out',        label: 'PCB OUT',      icon: ArrowLeftFromLine },
 ]
 
 // ============================================
@@ -53,7 +51,7 @@ const VISUAL_PHASES = [
 // ============================================
 
 /**
- * Map current inspection state to one of the 8 visual phase indices.
+ * Map current inspection state to one of the 7 visual phase indices.
  *
  * Uses the `message` string set by useLiveInspection event handlers,
  * which always reflects the most recent activity (motion or vision).
@@ -66,11 +64,9 @@ const VISUAL_PHASES = [
 function getActivePhaseIndex(stage) {
   const { stageIndex, status, stageName, message } = stage
 
-  // Result arrived → phase 6 (RESULT)
+  // Result arrived or done → phase 6 (RESULT)
   if (status === 'ready') return 6
-
-  // Done stage → phase 7 (PCB OUT)
-  if (stageName === 'done') return 7
+  if (stageName === 'done') return 6
 
   // No progress yet
   if (!stageIndex || stageIndex <= 0) return 0
@@ -82,7 +78,7 @@ function getActivePhaseIndex(stage) {
     if (msg.includes('board incoming')) return 0            // PCB IN
     if (msg.includes('flipping'))      return 3            // FLIP
     if (msg.includes('starting bottom')) return 4          // Just after FLIP
-    if (msg.includes('motion complete')) return 7          // PCB OUT
+    if (msg.includes('motion complete')) return 6          // RESULT
 
     // Vision stages (check before generic position to catch "Capturing"/"AI processing")
     if (msg.includes('capturing top') || msg.includes('ai processing top'))       return 2 // CAPTURE TOP
@@ -101,9 +97,8 @@ function getActivePhaseIndex(stage) {
   if (ratio <= 0.4) return 2
   if (ratio <= 0.5) return 3
   if (ratio <= 0.65) return 4
-  if (ratio <= 0.85) return 5
-  if (ratio <= 0.95) return 6
-  return 7
+  if (ratio <= 0.9) return 5
+  return 6
 }
 
 // ============================================

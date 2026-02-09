@@ -18,7 +18,7 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { cn } from '@/lib/utils'
-import { X, ZoomIn, ZoomOut, CheckCircle2, AlertCircle, Timer } from 'lucide-react'
+import { X, ZoomIn, ZoomOut, CheckCircle2, AlertCircle, Timer, ChevronLeft, ChevronRight } from 'lucide-react'
 
 const AUTO_NG_DELAY_MS = 10000 // 10 seconds per frame
 
@@ -31,6 +31,7 @@ export function CavityReviewOverlay({
   onConfirmGood,    // (reason) => void — board-level: all NG frames were false calls
   onClose,          // () => void — manual close (optional)
   falseCallReasons = [],
+  initialFrameIndex = 0, // Start at a specific NG frame (for thumbnail click)
 }) {
   const serialNumber = inspection?.serialNumber || 'N/A'
 
@@ -56,6 +57,7 @@ export function CavityReviewOverlay({
   const [decisions, setDecisions] = useState({}) // { 'TOP-0': 'REAL_NG', 'BOTTOM-1': 'some reason' }
   const [showReasonInput, setShowReasonInput] = useState(false)
   const [selectedReason, setSelectedReason] = useState('')
+  const [otherText, setOtherText] = useState('')
   const [zoom, setZoom] = useState(1)
 
   // Auto-NG countdown
@@ -69,12 +71,13 @@ export function CavityReviewOverlay({
 
   // Reset review state when inspection changes
   useEffect(() => {
-    setReviewIndex(0)
+    setReviewIndex(initialFrameIndex)
     setDecisions({})
     setShowReasonInput(false)
     setSelectedReason('')
+    setOtherText('')
     setZoom(1)
-  }, [inspection])
+  }, [inspection, initialFrameIndex])
 
   // Finalize board decision after all NG frames reviewed
   const completeReview = useCallback((allDecisions) => {
@@ -84,9 +87,23 @@ export function CavityReviewOverlay({
     } else {
       // All NG frames were marked as false calls → board is GOOD
       const firstReason = Object.values(allDecisions).find(d => d !== 'REAL_NG') || ''
-      onConfirmGood?.(firstReason)
+      onConfirmGood?.(firstReason, allDecisions)
     }
   }, [onConfirmNG, onConfirmGood])
+
+  // Auto-complete when all NG frames have been reviewed
+  const completeReviewRef = useRef(null)
+  completeReviewRef.current = completeReview
+  useEffect(() => {
+    const reviewedCount = Object.keys(decisions).length
+    if (reviewedCount > 0 && reviewedCount === totalNGFrames) {
+      // Small delay so the user sees the last decision badge before closing
+      const timer = setTimeout(() => {
+        completeReviewRef.current?.(decisions)
+      }, 800)
+      return () => clearTimeout(timer)
+    }
+  }, [decisions, totalNGFrames])
 
   // Advance to next NG frame or finalize
   const advanceOrComplete = useCallback((allDecisions, nextIndex) => {
@@ -124,19 +141,22 @@ export function CavityReviewOverlay({
 
   // Submit false call reason for current frame
   const handleSubmitFalseCall = useCallback(() => {
-    if (!selectedReason.trim() || !currentFrame) return
+    const effectiveReason = selectedReason === 'other' ? otherText.trim() : selectedReason.trim()
+    if (!effectiveReason || !currentFrame) return
 
     const key = `${currentFrame.side}-${currentFrame.frameIndex}`
-    const newDecisions = { ...decisions, [key]: selectedReason.trim() }
+    const newDecisions = { ...decisions, [key]: effectiveReason }
     setDecisions(newDecisions)
     setShowReasonInput(false)
     setSelectedReason('')
+    setOtherText('')
     advanceOrComplete(newDecisions, reviewIndex + 1)
-  }, [currentFrame, decisions, reviewIndex, selectedReason, advanceOrComplete])
+  }, [currentFrame, decisions, reviewIndex, selectedReason, otherText, advanceOrComplete])
 
   const handleCancelReason = useCallback(() => {
     setShowReasonInput(false)
     setSelectedReason('')
+    setOtherText('')
   }, [])
 
   // Per-frame auto-NG countdown (resets when reviewIndex changes)
@@ -177,6 +197,14 @@ export function CavityReviewOverlay({
       } else if (e.key === 'g' || e.key === 'G') {
         e.preventDefault()
         handleFrameGood()
+      } else if (e.key === 'ArrowLeft') {
+        e.preventDefault()
+        setReviewIndex(prev => Math.max(0, prev - 1))
+        setZoom(1)
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault()
+        setReviewIndex(prev => Math.min(ngFrames.length - 1, prev + 1))
+        setZoom(1)
       } else if (e.key === 'Escape') {
         e.preventDefault()
         onClose?.()
@@ -263,22 +291,57 @@ export function CavityReviewOverlay({
         </div>
       </div>
 
-      {/* ============ Main content: single NG frame image ============ */}
-      <div className="flex-1 relative bg-void overflow-hidden min-h-0">
-        {currentFrame.image_url ? (
-          <div className="absolute inset-0 flex items-center justify-center overflow-auto p-4"
-            style={{ cursor: zoom > 1 ? 'grab' : 'default' }}>
-            <div className="relative transition-transform duration-200"
-              style={{ transform: `scale(${zoom})`, transformOrigin: 'center' }}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={currentFrame.image_url} alt={`${currentFrame.side} frame ${currentFrame.frameIndex + 1}`}
-                className="max-w-full max-h-[60vh] object-contain" />
+      {/* ============ Main content: single NG frame image with arrows ============ */}
+      <div className="flex-1 relative bg-void overflow-hidden min-h-0 flex items-center">
+        {/* Prev Arrow */}
+        {totalNGFrames > 1 && (
+          <button
+            onClick={() => { setReviewIndex(prev => Math.max(0, prev - 1)); setZoom(1) }}
+            disabled={reviewIndex === 0}
+            className={cn(
+              "absolute left-3 z-10 p-3 rounded-full border-2 transition-all",
+              reviewIndex === 0
+                ? "border-surface-border bg-void/50 text-text-tertiary cursor-not-allowed opacity-30"
+                : "border-phosphor-amber/60 bg-void/80 text-phosphor-amber hover:bg-phosphor-amber/20 hover:border-phosphor-amber"
+            )}
+          >
+            <ChevronLeft className="w-6 h-6" />
+          </button>
+        )}
+
+        {/* Image */}
+        <div className="flex-1 h-full relative">
+          {(currentFrame.image_url || currentFrame.image_raw_url) ? (
+            <div className="absolute inset-0 flex items-center justify-center overflow-auto p-4"
+              style={{ cursor: zoom > 1 ? 'grab' : 'default' }}>
+              <div className="relative transition-transform duration-200"
+                style={{ transform: `scale(${zoom})`, transformOrigin: 'center' }}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={currentFrame.image_url || currentFrame.image_raw_url} alt={`${currentFrame.side} frame ${currentFrame.frameIndex + 1}`}
+                  className="max-w-full max-h-[60vh] object-contain" />
+              </div>
             </div>
-          </div>
-        ) : (
-          <div className="flex items-center justify-center h-full text-text-tertiary">
-            <p className="font-mono text-sm">No image available</p>
-          </div>
+          ) : (
+            <div className="flex items-center justify-center h-full text-text-tertiary">
+              <p className="font-mono text-sm">No image available</p>
+            </div>
+          )}
+        </div>
+
+        {/* Next Arrow */}
+        {totalNGFrames > 1 && (
+          <button
+            onClick={() => { setReviewIndex(prev => Math.min(ngFrames.length - 1, prev + 1)); setZoom(1) }}
+            disabled={reviewIndex === totalNGFrames - 1}
+            className={cn(
+              "absolute right-3 z-10 p-3 rounded-full border-2 transition-all",
+              reviewIndex === totalNGFrames - 1
+                ? "border-surface-border bg-void/50 text-text-tertiary cursor-not-allowed opacity-30"
+                : "border-phosphor-amber/60 bg-void/80 text-phosphor-amber hover:bg-phosphor-amber/20 hover:border-phosphor-amber"
+            )}
+          >
+            <ChevronRight className="w-6 h-6" />
+          </button>
         )}
       </div>
 
@@ -302,22 +365,22 @@ export function CavityReviewOverlay({
                       : "border-surface-border"
                   )}>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={frame.image_url} alt={`NG Frame ${idx + 1}`} className="w-full h-full object-cover" />
+                  <img src={frame.image_url || frame.image_raw_url} alt={`NG Frame ${idx + 1}`} className="w-full h-full object-cover" />
                   {/* Side label */}
                   <div className="absolute top-0.5 left-0.5 bg-void/80 text-text-primary text-xxs font-mono px-1 rounded">
                     {frame.side}
                   </div>
-                  {/* Decision badge */}
-                  {isReviewed && (
-                    <div className={cn(
-                      "absolute top-0.5 right-0.5 w-4 h-4 rounded-full flex items-center justify-center",
-                      wasNG ? "bg-phosphor-red" : "bg-phosphor-green"
-                    )}>
-                      {wasNG
+                  {/* NG badge: red by default (AI=NG), green only if user marked false call */}
+                  <div className={cn(
+                    "absolute top-0.5 right-0.5 w-4 h-4 rounded-full flex items-center justify-center",
+                    isReviewed && !wasNG ? "bg-phosphor-green" : "bg-phosphor-red"
+                  )}>
+                    {isReviewed
+                      ? (wasNG
                         ? <AlertCircle className="w-3 h-3 text-white" />
-                        : <CheckCircle2 className="w-3 h-3 text-white" />}
-                    </div>
-                  )}
+                        : <CheckCircle2 className="w-3 h-3 text-white" />)
+                      : <AlertCircle className="w-3 h-3 text-white" />}
+                  </div>
                 </button>
               )
             })}
@@ -330,19 +393,42 @@ export function CavityReviewOverlay({
         {showReasonInput ? (
           /* False call reason input */
           <div className="flex items-center gap-4 w-full max-w-2xl">
-            <select
-              value={selectedReason}
-              onChange={(e) => setSelectedReason(e.target.value)}
-              autoFocus
-              className="flex-1 h-14 px-4 bg-elevated border border-surface-border rounded-lg text-text-primary font-mono focus:outline-none focus:ring-2 focus:ring-phosphor-green"
-            >
-              <option value="">Select reason...</option>
-              {falseCallReasons.map(r => (
-                <option key={r.id || r} value={r.name || r}>{r.name || r}</option>
-              ))}
-              <option value="other">Other</option>
-            </select>
-            <button onClick={handleSubmitFalseCall} disabled={!selectedReason.trim()}
+            {selectedReason === 'other' ? (
+              <div className="flex items-center gap-2 flex-1">
+                <button
+                  onClick={() => { setSelectedReason(''); setOtherText('') }}
+                  className="h-14 px-3 bg-elevated border border-surface-border rounded-lg text-text-secondary font-mono hover:border-phosphor-amber/50 transition-colors flex-shrink-0"
+                >
+                  &larr;
+                </button>
+                <input
+                  type="text"
+                  value={otherText}
+                  onChange={(e) => setOtherText(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleSubmitFalseCall() }}
+                  placeholder="Type other reason..."
+                  autoFocus
+                  className="flex-1 h-14 px-4 bg-elevated border border-surface-border rounded-lg text-text-primary font-mono placeholder:text-text-tertiary focus:outline-none focus:ring-2 focus:ring-phosphor-green"
+                />
+              </div>
+            ) : (
+              <select
+                value={selectedReason}
+                onChange={(e) => { setSelectedReason(e.target.value); setOtherText('') }}
+                autoFocus
+                className="flex-1 h-14 px-4 bg-elevated border border-surface-border rounded-lg text-text-primary font-mono focus:outline-none focus:ring-2 focus:ring-phosphor-green"
+              >
+                <option value="">Select reason...</option>
+                {falseCallReasons
+                  .filter(r => !(r.name || r).toLowerCase().includes('other'))
+                  .map(r => (
+                    <option key={r.id || r} value={r.name || r}>{r.name || r}</option>
+                  ))}
+                <option value="other">Other</option>
+              </select>
+            )}
+            <button onClick={handleSubmitFalseCall}
+              disabled={selectedReason === 'other' ? !otherText.trim() : !selectedReason.trim()}
               className="h-14 px-8 bg-phosphor-green text-void font-display font-bold text-lg rounded-lg hover:bg-phosphor-green-bright disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
               SUBMIT
             </button>
@@ -367,10 +453,9 @@ export function CavityReviewOverlay({
               </button>
             )}
             {reviewedCount === totalNGFrames && (
-              <button onClick={() => completeReview(decisions)}
-                className="h-14 px-8 bg-phosphor-cyan text-void font-display font-bold text-lg rounded-lg hover:bg-phosphor-cyan/80 transition-colors">
-                CONFIRM BOARD
-              </button>
+              <span className="font-mono text-sm text-phosphor-cyan animate-pulse">
+                All frames reviewed — proceeding...
+              </span>
             )}
           </div>
         ) : (

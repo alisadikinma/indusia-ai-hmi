@@ -11,7 +11,7 @@ import { cn } from '@/lib/utils'
 import { CheckCircle2, AlertTriangle, Clock } from 'lucide-react'
 import SidePanel from './SidePanel'
 
-export function InspectionResult({ inspection, className }) {
+export function InspectionResult({ inspection, className, onFrameClick, reviewingFrameKey }) {
   if (!inspection) return null
 
   const { results, decision } = inspection
@@ -44,6 +44,8 @@ export function InspectionResult({ inspection, className }) {
           <SidePanel
             side="TOP"
             frames={topFrames}
+            onFrameClick={onFrameClick}
+            reviewingFrameKey={reviewingFrameKey}
             className={cn(
               hasSingleSide ? "max-w-3xl w-full" : "flex-1"
             )}
@@ -90,6 +92,8 @@ export function InspectionResult({ inspection, className }) {
           <SidePanel
             side="BOTTOM"
             frames={bottomFrames}
+            onFrameClick={onFrameClick}
+            reviewingFrameKey={reviewingFrameKey}
             className={cn(
               hasSingleSide ? "max-w-3xl w-full" : "flex-1"
             )}

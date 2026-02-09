@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useCallback } from 'react';
-import { X, ChevronDown, ChevronRight, ExternalLink, Image, Loader2, CloudOff, CheckCircle, AlertTriangle, Cloud } from 'lucide-react';
+import { useState, useCallback, useMemo } from 'react';
+import { X, ChevronDown, ChevronRight, ExternalLink, Image, Loader2, CloudOff, CheckCircle, AlertTriangle, Cloud, Hash } from 'lucide-react';
 
 /**
  * Individual session record row (synced or failed)
@@ -61,6 +61,84 @@ function SessionRecordRow({ record, table, columns }) {
           {record.syncError}
         </p>
       )}
+    </div>
+  );
+}
+
+/**
+ * Override records table - simple table layout matching Overrides Queue style
+ */
+function OverrideRecordTable({ records }) {
+  const statusColors = {
+    approved: 'bg-green-500/20 text-green-400',
+    rejected: 'bg-red-500/20 text-red-400',
+    pending: 'bg-yellow-500/20 text-yellow-400'
+  };
+  const syncColors = {
+    synced: 'bg-green-500/20 text-green-400',
+    failed: 'bg-red-500/20 text-red-400',
+    pending: 'bg-yellow-500/20 text-yellow-400'
+  };
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-[11px]">
+        <thead>
+          <tr className="border-b border-indusia-border/50">
+            <th className="text-left py-1.5 px-2 text-[10px] font-semibold text-indusia-textMuted uppercase tracking-wide">Board</th>
+            <th className="text-left py-1.5 px-2 text-[10px] font-semibold text-indusia-textMuted uppercase tracking-wide">Type</th>
+            <th className="text-left py-1.5 px-2 text-[10px] font-semibold text-indusia-textMuted uppercase tracking-wide">Reason</th>
+            <th className="text-left py-1.5 px-2 text-[10px] font-semibold text-indusia-textMuted uppercase tracking-wide">Operator</th>
+            <th className="text-center py-1.5 px-2 text-[10px] font-semibold text-indusia-textMuted uppercase tracking-wide">Status</th>
+            <th className="text-center py-1.5 px-2 text-[10px] font-semibold text-indusia-textMuted uppercase tracking-wide">Sync</th>
+          </tr>
+        </thead>
+        <tbody>
+          {records.map((record) => (
+            <tr key={record.id} className="border-b border-indusia-border/30 hover:bg-indusia-border/20 transition-colors">
+              <td className="py-1.5 px-2">
+                <span className="font-mono font-medium text-indusia-text">{record.boardId}</span>
+                {record.createdAt && (
+                  <p className="text-[10px] text-indusia-textMuted mt-0.5">
+                    {new Date(record.createdAt).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                  </p>
+                )}
+              </td>
+              <td className="py-1.5 px-2 text-indusia-text">{record.defectType}</td>
+              <td className="py-1.5 px-2">
+                <span className="text-indusia-text">{record.reason}</span>
+                {record.operatorNotes && (
+                  <p className="text-[10px] text-indusia-textMuted italic truncate max-w-[120px]" title={record.operatorNotes}>
+                    &quot;{record.operatorNotes}&quot;
+                  </p>
+                )}
+              </td>
+              <td className="py-1.5 px-2 text-indusia-textMuted">{record.operatorName}</td>
+              <td className="py-1.5 px-2 text-center">
+                {record.overrideStatus && (
+                  <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                    statusColors[record.overrideStatus] || 'bg-gray-500/20 text-gray-400'
+                  }`}>
+                    {record.overrideStatus}
+                  </span>
+                )}
+              </td>
+              <td className="py-1.5 px-2 text-center">
+                <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                  syncColors[record.syncStatus] || syncColors.pending
+                }`}>
+                  {record.syncStatus}
+                </span>
+                {record.syncError && (
+                  <p className="text-[10px] text-red-400 truncate max-w-[100px] mt-0.5" title={record.syncError}>
+                    {record.syncError}
+                  </p>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -286,8 +364,8 @@ function ExpandableTableRow({ table, detail, session, getTableDisplayName, t }) 
             </p>
           )}
 
-          {/* Column headers */}
-          {columns && currentRecords?.data?.length > 0 && (
+          {/* Column headers (skip for overrides — uses card layout) */}
+          {table !== 'overrides' && columns && currentRecords?.data?.length > 0 && (
             <div className="flex items-center gap-2 px-2 py-1 text-[10px] text-indusia-textMuted font-medium">
               <span className="flex-1">{columns[0]}</span>
               <span className="w-20 text-center">{columns[1]}</span>
@@ -304,15 +382,21 @@ function ExpandableTableRow({ table, detail, session, getTableDisplayName, t }) 
               <span className="ml-2 text-xs text-indusia-textMuted">Loading...</span>
             </div>
           ) : currentRecords?.data?.length > 0 ? (
-            <div className="space-y-1 max-h-48 overflow-y-auto">
-              {currentRecords.data.map((record) => (
-                <SessionRecordRow
-                  key={record.id}
-                  record={record}
-                  table={table}
-                  columns={columns}
-                />
-              ))}
+            <div className="max-h-64 overflow-y-auto">
+              {table === 'overrides' ? (
+                <OverrideRecordTable records={currentRecords.data} />
+              ) : (
+                <div className="space-y-1">
+                  {currentRecords.data.map((record) => (
+                    <SessionRecordRow
+                      key={record.id}
+                      record={record}
+                      table={table}
+                      columns={columns}
+                    />
+                  ))}
+                </div>
+              )}
               {currentRecords.data.length >= 20 && (
                 <p className="text-[10px] text-indusia-textMuted text-center py-1">
                   {t('sync.showingNofTotal', { shown: currentRecords.data.length, total: statusFilter === 'synced' ? detail.success : detail.failed })}
@@ -334,13 +418,204 @@ function ExpandableTableRow({ table, detail, session, getTableDisplayName, t }) 
 }
 
 /**
+ * Override image card - shows synced frames grouped by serial number
+ */
+function OverrideImageCard({ override }) {
+  const [activeSN, setActiveSN] = useState(0);
+  const [selectedFrame, setSelectedFrame] = useState(null);
+  const [showRaw, setShowRaw] = useState(false);
+
+  const snGroups = useMemo(() => {
+    const map = new Map();
+    for (const frame of override.frames || []) {
+      const sn = frame.serialNumber || 'Unknown';
+      if (!map.has(sn)) map.set(sn, []);
+      map.get(sn).push(frame);
+    }
+    return Array.from(map.entries()).map(([sn, frames]) => ({ sn, frames }));
+  }, [override.frames]);
+
+  const currentGroup = snGroups[activeSN];
+
+  const getImageUrl = (frame) => {
+    if (!frame) return null;
+    return showRaw
+      ? (frame.cloudRawUrl || frame.cloudAnnotatedUrl)
+      : (frame.cloudAnnotatedUrl || frame.cloudRawUrl);
+  };
+
+  return (
+    <div className="bg-indusia-bg rounded-lg border border-indusia-border/50 overflow-hidden">
+      {/* Override header */}
+      <div className="px-4 py-2.5 flex items-center justify-between border-b border-indusia-border/30">
+        <div className="flex items-center gap-3">
+          <span className="font-mono text-sm font-semibold text-indusia-text">
+            {override.boardId}
+          </span>
+          <span className="text-[11px] text-indusia-textMuted">
+            {override.frameCount} frame{override.frameCount !== 1 ? 's' : ''}
+            {override.snCount > 0 && ` · ${override.snCount} SN${override.snCount !== 1 ? 's' : ''}`}
+          </span>
+        </div>
+        {override.reason && (
+          <span className="text-[11px] px-2 py-0.5 rounded bg-indusia-primary/10 text-indusia-primary font-medium">
+            {override.reason}
+          </span>
+        )}
+      </div>
+
+      {/* SN tabs */}
+      {snGroups.length > 1 && (
+        <div className="flex gap-1.5 px-4 pt-3 pb-1 overflow-x-auto">
+          {snGroups.map((group, idx) => (
+            <button
+              key={group.sn}
+              onClick={() => { setActiveSN(idx); setSelectedFrame(null); setShowRaw(false); }}
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-mono flex-shrink-0 border transition-colors ${
+                idx === activeSN
+                  ? 'border-indusia-primary/50 bg-indusia-primary/10 text-indusia-primary'
+                  : 'border-indusia-border bg-indusia-surface text-indusia-textMuted hover:text-indusia-text'
+              }`}
+            >
+              <Hash className="w-3 h-3" />
+              {group.sn}
+              <span className="opacity-60">({group.frames.length})</span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Single SN header */}
+      {snGroups.length === 1 && currentGroup && currentGroup.sn !== 'Unknown' && (
+        <div className="flex items-center gap-2 px-4 pt-3 pb-1">
+          <Hash className="w-3.5 h-3.5 text-indusia-primary" />
+          <span className="font-mono text-xs text-indusia-text">{currentGroup.sn}</span>
+          <span className="text-[11px] text-indusia-textMuted">
+            {currentGroup.frames.length} frame{currentGroup.frames.length !== 1 ? 's' : ''}
+          </span>
+        </div>
+      )}
+
+      {/* Expanded frame preview */}
+      {selectedFrame && (
+        <div className="px-4 pt-2">
+          <div className="relative bg-black rounded-lg overflow-hidden">
+            {/* AI/RAW toggle */}
+            <div className="absolute top-2 right-2 z-10 flex rounded-md border border-indusia-border/50 bg-black/70 overflow-hidden">
+              <button
+                onClick={() => setShowRaw(false)}
+                className={`px-2 py-0.5 text-[10px] font-mono transition-colors ${
+                  !showRaw ? 'bg-indusia-primary/30 text-indusia-primary' : 'text-gray-400 hover:text-gray-300'
+                }`}
+              >
+                AI
+              </button>
+              <button
+                onClick={() => setShowRaw(true)}
+                disabled={!selectedFrame.cloudRawUrl}
+                className={`px-2 py-0.5 text-[10px] font-mono transition-colors ${
+                  showRaw ? 'bg-cyan-500/30 text-cyan-400' : 'text-gray-400 hover:text-gray-300'
+                } ${!selectedFrame.cloudRawUrl ? 'opacity-30 cursor-not-allowed' : ''}`}
+              >
+                RAW
+              </button>
+            </div>
+
+            {getImageUrl(selectedFrame) ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={getImageUrl(selectedFrame)}
+                alt={`${selectedFrame.side} F${selectedFrame.frameIndex}`}
+                className="w-full h-48 object-contain"
+              />
+            ) : (
+              <div className="h-32 flex items-center justify-center">
+                <Image className="w-6 h-6 text-gray-600" />
+              </div>
+            )}
+          </div>
+          {/* Frame metadata bar */}
+          <div className="flex items-center gap-3 mt-2 mb-1 text-[11px]">
+            <span className="font-mono font-medium text-indusia-text">
+              {selectedFrame.side} F{selectedFrame.frameIndex ?? '?'}
+            </span>
+            {selectedFrame.position != null && (
+              <span className="text-indusia-textMuted">Pos: {selectedFrame.position}</span>
+            )}
+            {selectedFrame.falseCallReason && (
+              <span className="text-indusia-primary">{selectedFrame.falseCallReason}</span>
+            )}
+            {selectedFrame.objects?.length > 0 && (
+              <span className="text-red-400">
+                {selectedFrame.objects.map(o => o.name).join(', ')}
+              </span>
+            )}
+            {getImageUrl(selectedFrame) && (
+              <a
+                href={getImageUrl(selectedFrame)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="ml-auto flex items-center gap-1 text-indusia-primary hover:underline"
+              >
+                <ExternalLink className="w-3 h-3" />
+                Open
+              </a>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Frame thumbnail grid */}
+      {currentGroup && (
+        <div className={`grid gap-2 p-4 ${selectedFrame ? 'pt-2' : 'pt-3'} ${
+          currentGroup.frames.length <= 3 ? 'grid-cols-3' :
+          currentGroup.frames.length <= 6 ? 'grid-cols-4' : 'grid-cols-5'
+        }`}>
+          {currentGroup.frames.map((frame, idx) => {
+            const imageUrl = frame.cloudAnnotatedUrl;
+            const isActive = selectedFrame === frame;
+            return (
+              <button
+                key={`${frame.side}-${frame.frameIndex}-${idx}`}
+                onClick={() => { setSelectedFrame(isActive ? null : frame); setShowRaw(false); }}
+                className={`relative rounded-lg overflow-hidden border-2 transition-all aspect-[4/3] ${
+                  isActive
+                    ? 'border-indusia-primary ring-1 ring-indusia-primary/30'
+                    : 'border-indusia-border/50 hover:border-indusia-border'
+                }`}
+              >
+                {imageUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={imageUrl}
+                    alt={`${frame.side} F${frame.frameIndex}`}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <div className="w-full h-full bg-indusia-surface flex items-center justify-center">
+                    <Image className="w-4 h-4 text-indusia-textMuted" />
+                  </div>
+                )}
+                <div className="absolute bottom-0 inset-x-0 bg-black/70 px-1.5 py-0.5 text-center">
+                  <span className="text-[9px] font-mono text-white">
+                    {frame.side} {frame.frameIndex != null ? `F${frame.frameIndex}` : ''}
+                  </span>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
  * SyncDetailModal - Shows detailed sync session information with expandable
  * per-table record views and cloud comparison capability.
  */
 export default function SyncDetailModal({ session, uploadedImages = [], loadingImages, onClose, getTableDisplayName, t }) {
   if (!session) return null;
-
-  const hasImages = uploadedImages.length > 0;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -361,11 +636,8 @@ export default function SyncDetailModal({ session, uploadedImages = [], loadingI
         </div>
 
         {/* Body - scrollable */}
-        <div className={`p-5 overflow-y-auto flex-1 ${
-          hasImages ? 'grid grid-cols-5 gap-5' : ''
-        }`}>
-          {/* Left Column: Sync Details */}
-          <div className={`space-y-4 ${hasImages ? 'col-span-3' : ''}`}>
+        <div className="p-5 overflow-y-auto flex-1">
+          <div className="space-y-4">
             {/* Status Badge */}
             <div className="flex items-center gap-2">
               <div className={`w-3 h-3 rounded-full ${
@@ -467,56 +739,30 @@ export default function SyncDetailModal({ session, uploadedImages = [], loadingI
             )}
           </div>
 
-          {/* Right Column: Uploaded Images */}
-          {hasImages && (
-            <div className="col-span-2 border-l border-indusia-border pl-5">
+          {/* Synced Override Images - full width below sync details */}
+          {(uploadedImages.length > 0 || loadingImages) && (
+            <div className="mt-5 pt-5 border-t border-indusia-border">
               <div className="flex items-center gap-2 mb-3">
                 <Image className="w-4 h-4 text-indusia-primary" />
                 <span className="text-sm font-medium text-indusia-text">{t('sync.uploadedImages')}</span>
-                <span className="text-xs text-indusia-textMuted">({uploadedImages.length})</span>
+                {uploadedImages.length > 0 && (
+                  <span className="text-xs text-indusia-textMuted">
+                    ({uploadedImages.length} override{uploadedImages.length !== 1 ? 's' : ''} · {uploadedImages.reduce((sum, o) => sum + (o.imageCount || 0), 0)} images)
+                  </span>
+                )}
               </div>
-              <p className="text-xs text-indusia-textMuted mb-3">
-                {t('sync.recentlySyncedImages')}
-              </p>
-
-              <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
-                {uploadedImages.map((img, idx) => (
-                  <div
-                    key={idx}
-                    className="bg-indusia-bg rounded-lg p-2.5"
-                  >
-                    <div className="flex gap-3">
-                      {/* Thumbnail */}
-                      <div className="w-16 h-16 bg-indusia-border rounded overflow-hidden flex-shrink-0">
-                        <img
-                          src={img.url}
-                          alt={img.boardId}
-                          className="w-full h-full object-cover"
-                          onError={(e) => { e.target.src = '/images/placeholder.png'; }}
-                        />
-                      </div>
-                      {/* Info */}
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-indusia-text truncate">
-                          {img.boardId}
-                        </p>
-                        <p className="text-xs text-indusia-textMuted mt-0.5">
-                          {t('sync.side')}: <span className="uppercase text-indusia-primary">{img.side}</span>
-                        </p>
-                        <a
-                          href={img.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 text-xs text-indusia-primary hover:underline mt-1.5"
-                        >
-                          <ExternalLink className="w-3 h-3" />
-                          {t('sync.viewFullImage')}
-                        </a>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
+              {loadingImages ? (
+                <div className="flex items-center justify-center py-6">
+                  <Loader2 className="w-4 h-4 animate-spin text-indusia-primary" />
+                  <span className="ml-2 text-xs text-indusia-textMuted">Loading images...</span>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {uploadedImages.map((override) => (
+                    <OverrideImageCard key={override.overrideId} override={override} />
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>

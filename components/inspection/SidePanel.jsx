@@ -31,7 +31,7 @@ const DEFECT_COLORS = {
   'default': '#EF4444'
 }
 
-export function SidePanel({ side, frames = [], className }) {
+export function SidePanel({ side, frames = [], className, onFrameClick, reviewingFrameKey }) {
   const [activeFrameIndex, setActiveFrameIndex] = useState(0)
   const [zoom, setZoom] = useState(1)
   const [showFullscreen, setShowFullscreen] = useState(false)
@@ -39,9 +39,9 @@ export function SidePanel({ side, frames = [], className }) {
   const imgRef = useRef(null)
   const containerRef = useRef(null)
   
-  // Current active frame
+  // Current active frame — prefer url (with bbox) but fall back to raw_url
   const activeFrame = frames[activeFrameIndex] || null
-  const imageUrl = activeFrame?.image_url
+  const imageUrl = activeFrame?.image_url || activeFrame?.image_raw_url
   const objects = activeFrame?.objects || []
   
   // Use frame-level label (true=NG, false=GOOD) as the authoritative AI verdict.
@@ -203,24 +203,32 @@ export function SidePanel({ side, frames = [], className }) {
             {frames.map((frame, index) => {
               const frameIsNG = frame.label == true
               const isActive = index === activeFrameIndex
+              const frameKey = `${side}-${index}`
+              const isReviewing = reviewingFrameKey === frameKey
 
               return (
                 <button
                   key={index}
-                  onClick={() => setActiveFrameIndex(index)}
+                  onClick={() => {
+                    setActiveFrameIndex(index)
+                    if (frameIsNG && onFrameClick) onFrameClick(frame, index, side)
+                  }}
                   className={cn(
                     "relative flex-shrink-0 w-16 h-12 rounded overflow-hidden border-2 transition-all",
-                    isActive
-                      ? "border-phosphor-amber ring-2 ring-phosphor-amber/30"
-                      : frameIsNG
-                        ? "border-phosphor-red/50 hover:border-phosphor-red"
-                        : "border-surface-border hover:border-phosphor-green/50"
+                    isReviewing
+                      ? "border-phosphor-amber ring-2 ring-phosphor-amber/50 animate-pulse"
+                      : isActive
+                        ? "border-phosphor-amber ring-2 ring-phosphor-amber/30"
+                        : frameIsNG
+                          ? "border-phosphor-red/50 hover:border-phosphor-red"
+                          : "border-surface-border hover:border-phosphor-green/50",
+                    frameIsNG && onFrameClick && "cursor-pointer"
                   )}
                 >
                   {/* Thumbnail Image */}
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src={frame.image_url}
+                    src={frame.image_url || frame.image_raw_url}
                     alt={`Frame ${index + 1}`}
                     className="w-full h-full object-cover"
                   />

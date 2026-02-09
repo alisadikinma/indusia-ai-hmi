@@ -8,21 +8,28 @@ const LOCAL_STORAGE_PATH = process.env.FALSE_CALL_STORAGE_PATH || 'D:/Projects/i
 /**
  * POST /api/inspection/upload-false-call
  * Save false call images to LOCAL storage only
- * 
+ *
  * Flow:
  * 1. Operator confirms false call → images saved locally here
- * 2. Override record created with local_image_path
+ * 2. Override record created with local_image_path + ng_frame_details
  * 3. Manager approves → added to sync_queue
  * 4. Manager clicks "Sync to Cloud" → uploads to Supabase Storage
+ *
+ * Supports two modes:
+ * - Legacy: saves annotated images for all defect frames
+ * - Per-frame: accepts perFrameDecisions, saves annotated + raw for false call frames only
  */
 export async function POST(request) {
   console.log('[UploadFalseCall] Saving to LOCAL storage...')
-  
+
   try {
     const body = await request.json()
-    const { inspection, workOrder, customerName, boardSequence, falseCallReason } = body
-    
+    const { inspection, workOrder, customerName, boardSequence, falseCallReason, perFrameDecisions } = body
+
     console.log('[UploadFalseCall] WO:', workOrder?.woNumber, 'Customer:', customerName)
+    if (perFrameDecisions) {
+      console.log('[UploadFalseCall] Per-frame decisions:', Object.keys(perFrameDecisions).length, 'frames')
+    }
 
     if (!inspection?.results) {
       return NextResponse.json({ success: false, error: 'No inspection results' }, { status: 400 })
@@ -39,6 +46,7 @@ export async function POST(request) {
     const reason = sanitize(falseCallReason)
 
     const savedPaths = { top: [], bottom: [] }
+    const frameDetails = []
     const errors = []
 
     // Helper: check if frame has defects (label=1)
@@ -47,104 +55,128 @@ export async function POST(request) {
       return objects.some(obj => obj.label === 1)
     }
 
-    // Helper: save to local filesystem
-    const saveToLocal = async (imageUrl, relativePath, side, frameIndex) => {
+    // Helper: check if frame is a false call (operator says GOOD but AI said NG)
+    const isFalseCall = (side, frameIndex) => {
+      if (!perFrameDecisions) return null // legacy mode
+      const key = `${side}-${frameIndex}`
+      const decision = perFrameDecisions[key]
+      // REAL_NG = confirmed defect (not a false call), everything else = false call reason
+      return decision && decision !== 'REAL_NG' ? decision : null
+    }
+
+    // Helper: save image to local filesystem
+    const saveToLocal = async (imageUrl, relativePath, label) => {
       try {
-        console.log(`[UploadFalseCall] Saving ${side} frame ${frameIndex} locally...`)
-        
-        // Fetch image from AI Backend
         const imageResponse = await fetch(imageUrl)
         if (!imageResponse.ok) {
           throw new Error(`Fetch failed: ${imageResponse.status}`)
         }
-        
+
         const imageBuffer = Buffer.from(await imageResponse.arrayBuffer())
-        
-        // Create full path
+
         const fullPath = path.join(LOCAL_STORAGE_PATH, relativePath)
         const dirPath = path.dirname(fullPath)
-        
-        // Ensure directory exists
         await fs.mkdir(dirPath, { recursive: true })
-        
-        // Write file
         await fs.writeFile(fullPath, imageBuffer)
-        
-        console.log(`[UploadFalseCall] ✅ Saved locally: ${relativePath}`)
+
+        console.log(`[UploadFalseCall] ✅ Saved ${label}: ${relativePath}`)
         return { success: true, localPath: relativePath }
-        
       } catch (err) {
-        console.error(`[UploadFalseCall] ❌ Save failed:`, err.message)
+        console.error(`[UploadFalseCall] ❌ Save ${label} failed:`, err.message)
         return { success: false, error: err.message }
       }
     }
 
-    // Process TOP side images - only frames with defects
-    const topFrames = Array.isArray(inspection.results.top)
-      ? inspection.results.top
-      : inspection.results.top?.image_url ? [inspection.results.top] : []
-    
-    const topDefectFrames = topFrames.filter(hasDefects)
-    console.log(`[UploadFalseCall] TOP: ${topFrames.length} frames, ${topDefectFrames.length} with defects`)
+    // Process frames for a given side
+    const processSide = async (sideKey, sideLabel) => {
+      const frames = Array.isArray(inspection.results[sideKey])
+        ? inspection.results[sideKey]
+        : inspection.results[sideKey]?.image_url ? [inspection.results[sideKey]] : []
 
-    for (let i = 0; i < topDefectFrames.length; i++) {
-      const frame = topDefectFrames[i]
-      if (!frame?.image_url) continue
+      for (let i = 0; i < frames.length; i++) {
+        const frame = frames[i]
+        if (!frame?.image_url) continue
 
-      const frameIdx = topDefectFrames.length > 1 ? `_F${i + 1}` : ''
-      const filename = `${timestamp}_TOP${frameIdx}_${customer}_${wo}_${board}_${reason}.png`
-      const relativePath = `${dateFolder}/${wo}/${filename}`
+        // Determine if this frame should be saved
+        const falseCallDecision = isFalseCall(sideLabel, i)
 
-      const result = await saveToLocal(frame.image_url, relativePath, 'TOP', i)
-      
-      if (result.success) {
-        savedPaths.top.push({ path: result.localPath, frameIndex: i })
-      } else {
-        errors.push(`TOP ${i + 1}: ${result.error}`)
+        if (perFrameDecisions) {
+          // New mode: only save false call frames (skip REAL_NG and frames without decisions)
+          if (!falseCallDecision) continue
+        } else {
+          // Legacy mode: save frames with defects
+          if (!hasDefects(frame)) continue
+        }
+
+        const frameIdx = `_F${i}`
+        const baseFilename = `${timestamp}_${sideLabel}${frameIdx}_${customer}_${wo}_${board}`
+
+        // Save annotated image (AI bbox overlay)
+        const annotatedFilename = `${baseFilename}_${reason}.png`
+        const annotatedPath = `${dateFolder}/${wo}/${annotatedFilename}`
+        const annotatedResult = await saveToLocal(frame.image_url, annotatedPath, `${sideLabel} F${i} annotated`)
+
+        // Save raw image (original camera capture) - new mode only
+        let rawResult = null
+        if (perFrameDecisions && frame.image_raw_url) {
+          const rawFilename = `${baseFilename}_raw.png`
+          const rawPath = `${dateFolder}/${wo}/${rawFilename}`
+          rawResult = await saveToLocal(frame.image_raw_url, rawPath, `${sideLabel} F${i} raw`)
+        }
+
+        if (annotatedResult.success) {
+          const pathEntry = { path: annotatedResult.localPath, frameIndex: i }
+          if (rawResult?.success) {
+            pathEntry.rawPath = rawResult.localPath
+          }
+          savedPaths[sideKey].push(pathEntry)
+
+          // Build frame detail for ng_frame_details
+          if (perFrameDecisions) {
+            frameDetails.push({
+              side: sideLabel,
+              frameIndex: i,
+              position: frame.position ?? null,
+              serialNumber: frame.serial_number || null,
+              falseCallReason: falseCallDecision,
+              imageAnnotatedPath: annotatedResult.localPath,
+              imageRawPath: rawResult?.success ? rawResult.localPath : null,
+              objects: (frame.objects || [])
+                .filter(obj => obj.label === 1)
+                .map(obj => ({
+                  name: obj.name,
+                  box: obj.box,
+                  score: obj.score,
+                  label: obj.label
+                }))
+            })
+          }
+        } else {
+          errors.push(`${sideLabel} F${i}: ${annotatedResult.error}`)
+        }
       }
     }
 
-    // Process BOTTOM side images - only frames with defects
-    const bottomFrames = Array.isArray(inspection.results.bottom)
-      ? inspection.results.bottom
-      : inspection.results.bottom?.image_url ? [inspection.results.bottom] : []
-    
-    const bottomDefectFrames = bottomFrames.filter(hasDefects)
-    console.log(`[UploadFalseCall] BOTTOM: ${bottomFrames.length} frames, ${bottomDefectFrames.length} with defects`)
+    await processSide('top', 'TOP')
+    await processSide('bottom', 'BOTTOM')
 
-    for (let i = 0; i < bottomDefectFrames.length; i++) {
-      const frame = bottomDefectFrames[i]
-      if (!frame?.image_url) continue
-
-      const frameIdx = bottomDefectFrames.length > 1 ? `_F${i + 1}` : ''
-      const filename = `${timestamp}_BOTTOM${frameIdx}_${customer}_${wo}_${board}_${reason}.png`
-      const relativePath = `${dateFolder}/${wo}/${filename}`
-
-      const result = await saveToLocal(frame.image_url, relativePath, 'BOTTOM', i)
-      
-      if (result.success) {
-        savedPaths.bottom.push({ path: result.localPath, frameIndex: i })
-      } else {
-        errors.push(`BOTTOM ${i + 1}: ${result.error}`)
-      }
-    }
-
-    const totalDefectFrames = topDefectFrames.length + bottomDefectFrames.length
     const totalSaved = savedPaths.top.length + savedPaths.bottom.length
 
-    if (totalDefectFrames === 0) {
-      return NextResponse.json({ 
-        success: true, 
-        paths: savedPaths, 
-        message: 'No defect frames to save' 
+    if (totalSaved === 0 && errors.length === 0) {
+      return NextResponse.json({
+        success: true,
+        paths: savedPaths,
+        frameDetails: [],
+        message: 'No false call frames to save'
       })
     }
 
-    console.log(`[UploadFalseCall] Complete: ${totalSaved}/${totalDefectFrames} saved locally`)
+    console.log(`[UploadFalseCall] Complete: ${totalSaved} saved locally, ${frameDetails.length} frame details`)
 
     return NextResponse.json({
       success: totalSaved > 0,
       paths: savedPaths,
+      frameDetails: frameDetails.length > 0 ? frameDetails : undefined,
       errors: errors.length > 0 ? errors : undefined,
       message: `Saved ${totalSaved} images locally`
     })

@@ -209,6 +209,15 @@ export function LiveViewV3({
   // Auto-NG toggle state (synced via API for all clients) - default OFF
   const [autoNgEnabled, setAutoNgEnabled] = useState(false)
 
+  // Inline NG frame review state (manual mode — no overlay, per-frame in footer)
+  const [ngFrameReview, setNgFrameReview] = useState(null)
+  // Shape: { frames: [{ ...frame, side, frameIndex }], currentIndex: 0, decisions: {} }
+  const [inlineReasonInput, setInlineReasonInput] = useState(false) // Show reason dropdown in footer
+  const [inlineSelectedReason, setInlineSelectedReason] = useState('')
+  const [inlineOtherText, setInlineOtherText] = useState('')
+  const overlayDelayRef = useRef(null) // Timer for 5s delay before AUTO-NG overlay
+  const [cavityInitialIndex, setCavityInitialIndex] = useState(0) // Initial frame index for CavityReviewOverlay
+
   const [availableModels, setAvailableModels] = useState([])
   const [isModelSwitching, setIsModelSwitching] = useState(false)
   const [showModelDropdown, setShowModelDropdown] = useState(false)
@@ -222,7 +231,7 @@ export function LiveViewV3({
       stageName: 'idle', 
       message: 'Waiting for sync...',
       stageIndex: 0,
-      totalStages: 7
+      totalStages: 0
     },
     hardware: { cameras: [], plcs: [] },
     currentInspection: null,
@@ -256,7 +265,7 @@ export function LiveViewV3({
             stageName: 'idle',
             message: 'Waiting for board...',
             stageIndex: 0,
-            totalStages: 7
+            totalStages: 0
           },
           hardware: result.data.hardware || { cameras: [], plcs: [] },
           currentInspection: result.data.currentInspection,
@@ -403,27 +412,29 @@ export function LiveViewV3({
   // Track if current inspection has been processed (prevent double submit)
   const processedInspectionRef = useRef(null)
 
-  // Board sequence (for local tracking)
-  const boardSequenceRef = useRef(workOrder?.completedQty || 0)
+  // Derive cavity count from selected board (must be before boardSequenceRef sync)
+  const activeCavityCount = availableModels.find(m => m.name === currentModel)?.cavityCount || 1
+
+  // Board sequence tracks PANEL count (not individual PCB count)
+  // For multi-cavity: panel_count = completedQty / cavityCount
+  const boardSequenceRef = useRef(Math.floor((workOrder?.completedQty || 0) / activeCavityCount))
 
   // Cycle time tracking
   const cycleStartTimeRef = useRef(null)
   const lastCycleTimeRef = useRef(null)
   const [displayCycleTime, setDisplayCycleTime] = useState(null)
-  
+
   // Sync boardSequenceRef when workOrder changes (important for page refresh/reconnect)
   useEffect(() => {
     if (workOrder?.completedQty !== undefined) {
-      // Only update if DB value is higher (avoid going backwards)
-      if (workOrder.completedQty > boardSequenceRef.current) {
-        console.log(`[LiveView] Syncing boardSequence: ${boardSequenceRef.current} → ${workOrder.completedQty}`)
-        boardSequenceRef.current = workOrder.completedQty
+      const panelCount = Math.floor(workOrder.completedQty / activeCavityCount)
+      // Only update if DB-derived panel count is higher (avoid going backwards)
+      if (panelCount > boardSequenceRef.current) {
+        console.log(`[LiveView] Syncing boardSequence: ${boardSequenceRef.current} → ${panelCount} (completedQty=${workOrder.completedQty}, cavityCount=${activeCavityCount})`)
+        boardSequenceRef.current = panelCount
       }
     }
-  }, [workOrder?.completedQty])
-
-  // Derive cavity count from selected board (must be before cycle time effect)
-  const activeCavityCount = availableModels.find(m => m.name === currentModel)?.cavityCount || 1
+  }, [workOrder?.completedQty, activeCavityCount])
 
   // Cycle time tracking: start when stage begins, end when inspection result arrives
   // For multi-cavity panels: CYCLE/PCB = panel_time / cavity_count
@@ -493,7 +504,7 @@ export function LiveViewV3({
     stageName: 'idle',
     message: 'Waiting for board...',
     stageIndex: 0,
-    totalStages: 7,  // Match 7-stage flow
+    totalStages: 0,  // Dynamic — set by backend SSE events per model
     icon: 'hourglass'
   })
 
@@ -562,26 +573,67 @@ export function LiveViewV3({
     fetchReasons()
   }, [isOperator])
 
-  // Auto-show cavity overlay when NG PCB arrives from queue
+  // NG PCB review flow: AUTO-NG (5s delay → overlay) or Manual (inline per-frame)
   useEffect(() => {
-    if (!isOperator || !currentInspection) return
+    if (!isOperator || !currentInspection) {
+      // Clear overlay delay if inspection cleared
+      if (overlayDelayRef.current) {
+        clearTimeout(overlayDelayRef.current)
+        overlayDelayRef.current = null
+      }
+      // Clear stale inline NG review when inspection is gone
+      setNgFrameReview(null)
+      return
+    }
 
-    // Check if this PCB has any NG frames (label=true at result level)
-    const allFrames = [
-      ...(currentInspection.results?.top || []),
-      ...(currentInspection.results?.bottom || [])
-    ]
-    const hasNGFrames = allFrames.some(f => f.label == true)
+    // Collect NG frames
+    const topFrames = currentInspection.results?.top || []
+    const bottomFrames = currentInspection.results?.bottom || []
+    const ngFrames = []
+    topFrames.forEach((f, idx) => {
+      if (f.label == true) ngFrames.push({ ...f, side: 'TOP', frameIndex: idx })
+    })
+    bottomFrames.forEach((f, idx) => {
+      if (f.label == true) ngFrames.push({ ...f, side: 'BOTTOM', frameIndex: idx })
+    })
+
+    const hasNGFrames = ngFrames.length > 0
     const aiNG = currentInspection.decision === 'FAIL'
 
     if (hasNGFrames || aiNG) {
-      // NG PCB — show overlay for review
-      setShowCavityOverlay(true)
+      if (autoNgEnabled) {
+        // AUTO-NG mode: 5s delay before showing CavityReviewOverlay
+        overlayDelayRef.current = setTimeout(() => {
+          setCavityInitialIndex(0)
+          setShowCavityOverlay(true)
+          overlayDelayRef.current = null
+        }, 5000)
+      } else {
+        // Manual mode: initialize inline per-frame review (no overlay)
+        // Mark as processed so auto-proceed effect doesn't interfere
+        const inspectionId = currentInspection.inspection_id || currentInspection.inspectionId
+        processedInspectionRef.current = inspectionId
+        falseCallInspectionRef.current = currentInspection
+        setShowCavityOverlay(false)
+        setNgFrameReview({
+          frames: ngFrames.length > 0 ? ngFrames : [{ side: 'TOP', frameIndex: 0, label: true }],
+          currentIndex: 0,
+          decisions: {}
+        })
+      }
     } else {
-      // GOOD PCB — auto-confirm and move to next in queue
+      // GOOD PCB — no review needed
       setShowCavityOverlay(false)
+      setNgFrameReview(null)
     }
-  }, [isOperator, currentInspection])
+
+    return () => {
+      if (overlayDelayRef.current) {
+        clearTimeout(overlayDelayRef.current)
+        overlayDelayRef.current = null
+      }
+    }
+  }, [isOperator, currentInspection, autoNgEnabled])
 
   // Fetch available boards on mount (operator only)
   useEffect(() => {
@@ -661,7 +713,7 @@ export function LiveViewV3({
         stageName: 'idle',
         message: 'Syncing...',
         stageIndex: 0,
-        totalStages: 7
+        totalStages: 0
       })
 
   // Determine AI result for UI
@@ -732,6 +784,11 @@ export function LiveViewV3({
       hasFetchedWO: !!fetchedWO,
       workOrderId: workOrder?.id
     })
+
+    // Always clear inline NG review — board is being confirmed
+    setNgFrameReview(null)
+    setInlineReasonInput(false)
+
     // Use captured inspection from modal as fallback (prevents stale closure when SSE clears currentInspection)
     const effectiveInspection = activeInspection || falseCallInspectionRef.current
     if (!effectiveInspection || !workOrder) {
@@ -756,6 +813,20 @@ export function LiveViewV3({
       const isFalseCall = (effectiveInspection.decision === 'PASS' && operatorDecision === 'NG') ||
                          (effectiveInspection.decision === 'FAIL' && operatorDecision === 'GOOD')
 
+      // Check for per-frame false calls (mixed scenario: overall NG but some frames are false calls)
+      const hasPerFrameFalseCalls = falseCallData?.perFrameDecisions &&
+        Object.values(falseCallData.perFrameDecisions).some(d => d && d !== 'REAL_NG')
+      const shouldCreateOverride = isFalseCall || hasPerFrameFalseCalls
+
+      console.log('[LiveView] False call check:', {
+        aiDecision: effectiveInspection.decision,
+        operatorDecision,
+        isFalseCall,
+        hasPerFrameFalseCalls,
+        shouldCreateOverride,
+        hasFalseCallRef: !!falseCallInspectionRef.current
+      })
+
       // 2.1. Optimistic local counter update — instant UI feedback (real WO path)
       // Multi-cavity panels: 1 board confirmation = N PCBs (cavity_count)
       const qty = activeCavityCount
@@ -764,34 +835,42 @@ export function LiveViewV3({
           completedQty: prev.completedQty + qty,
           goodQty: operatorDecision === 'GOOD' ? prev.goodQty + qty : prev.goodQty,
           ngQty: operatorDecision === 'NG' ? prev.ngQty + qty : prev.ngQty,
-          falseCallQty: isFalseCall ? prev.falseCallQty + qty : prev.falseCallQty,
+          falseCallQty: shouldCreateOverride ? prev.falseCallQty + qty : prev.falseCallQty,
         }))
         console.log('[LiveView] Optimistic counter update applied:', operatorDecision)
       }
 
-      // 2.5. If false call: save images locally + create Override for Manager review
+      // 2.5. If false call (board-level OR per-frame): save images + create Override
       // Use captured inspection from modal open (falseCallInspectionRef) to prevent stale closure
       const inspectionForOverride = falseCallInspectionRef.current || activeInspection
-      if (isFalseCall && inspectionForOverride) {
+      if (shouldCreateOverride && inspectionForOverride) {
         const boardId = `${workOrder.woNumber}-${String(boardSequenceRef.current + 1).padStart(4, '0')}`
         const overrideType = inspectionForOverride.decision === 'PASS' ? 'MISSED_DEFECT' : 'FALSE_POSITIVE'
 
         // Step 1: Save images to LOCAL storage (non-blocking — failure here must NOT prevent override creation)
         let localPaths = {}
+        let frameDetails = null
         try {
+          const uploadBody = {
+            inspection: inspectionForOverride,
+            workOrder,
+            customerName: workOrder?.customer?.name || workOrder?.customerName || 'UNKNOWN',
+            boardSequence: String(boardSequenceRef.current + 1).padStart(4, '0'),
+            falseCallReason: falseCallData?.reason || 'UNSPECIFIED'
+          }
+          // Pass per-frame decisions for multi-frame false call metadata
+          if (falseCallData?.perFrameDecisions) {
+            uploadBody.perFrameDecisions = falseCallData.perFrameDecisions
+          }
           const uploadResponse = await authFetch('/api/inspection/upload-false-call', {
             method: 'POST',
-            body: JSON.stringify({
-              inspection: inspectionForOverride,
-              workOrder,
-              customerName: workOrder?.customer?.name || workOrder?.customerName || 'UNKNOWN',
-              boardSequence: String(boardSequenceRef.current + 1).padStart(4, '0'),
-              falseCallReason: falseCallData?.reason || 'UNSPECIFIED'
-            })
+            body: JSON.stringify(uploadBody)
           })
           const uploadResult = await uploadResponse.json()
           localPaths = uploadResult.success ? uploadResult.paths : {}
-          console.log('[LiveView] Image upload:', uploadResult.success ? 'OK' : uploadResult.error)
+          frameDetails = uploadResult.frameDetails || null
+          console.log('[LiveView] Image upload:', uploadResult.success ? 'OK' : uploadResult.error,
+            frameDetails ? `(${frameDetails.length} frame details)` : '')
         } catch (uploadErr) {
           console.warn('[LiveView] Image upload failed (continuing with override):', uploadErr.message)
         }
@@ -810,20 +889,34 @@ export function LiveViewV3({
 
           // Only include optional fields if they have actual values
           // (null values cause Zod validation to fail — .optional() rejects null)
+          // ng_frame_details must be conditional to avoid PostgREST error if column doesn't exist yet
+          if (frameDetails) overridePayload.ng_frame_details = JSON.stringify(frameDetails)
           if (sectionId) overridePayload.section_id = sectionId
           if (lineId) overridePayload.line_id = lineId
+          if (workOrder?.id) overridePayload.work_order_id = workOrder.id
           if (customerId) overridePayload.customer_id = customerId
           if (user?.id) overridePayload.operator_id = user.id
           if (user?.name) overridePayload.operator_name = user.name
 
           console.log('[LiveView] Creating override:', { boardId, overrideType, reason: overridePayload.reason })
 
-          const overrideResponse = await authFetch('/api/overrides', {
+          let overrideResponse = await authFetch('/api/overrides', {
             method: 'POST',
             body: JSON.stringify(overridePayload)
           })
 
-          const overrideResult = await overrideResponse.json()
+          let overrideResult = await overrideResponse.json()
+
+          // Retry without ng_frame_details if column doesn't exist yet (migration not run)
+          if (!overrideResult.success && overrideResult.error?.includes('ng_frame_details')) {
+            console.warn('[LiveView] ng_frame_details column missing, retrying without it')
+            const { ng_frame_details, ...fallbackPayload } = overridePayload
+            overrideResponse = await authFetch('/api/overrides', {
+              method: 'POST',
+              body: JSON.stringify(fallbackPayload)
+            })
+            overrideResult = await overrideResponse.json()
+          }
 
           if (overrideResult.success) {
             console.log('[LiveView] Override created:', overrideResult.data?.id, overrideResult.duplicate ? '(duplicate)' : '')
@@ -852,7 +945,7 @@ export function LiveViewV3({
           aiConfidence: calculateAvgConfidence(effectiveInspection),
           operatorDecision,
           operatorId: user?.id,
-          isFalseCall,
+          isFalseCall: shouldCreateOverride,
           falseCallReasonCode: falseCallData?.reason,
           plcSignalSent: operatorDecision,
           shift: getCurrentShift(),
@@ -872,7 +965,7 @@ export function LiveViewV3({
           ? { goodQty: qty, completedQty: qty }
           : { ngQty: qty, completedQty: qty }
 
-        if (isFalseCall) {
+        if (shouldCreateOverride) {
           counterUpdate.falseCallQty = qty
         }
 
@@ -896,14 +989,20 @@ export function LiveViewV3({
           completedQty: prev.completedQty + qty,
           goodQty: operatorDecision === 'GOOD' ? prev.goodQty + qty : prev.goodQty,
           ngQty: operatorDecision === 'NG' ? prev.ngQty + qty : prev.ngQty,
-          falseCallQty: isFalseCall ? prev.falseCallQty + qty : prev.falseCallQty,
+          falseCallQty: shouldCreateOverride ? prev.falseCallQty + qty : prev.falseCallQty,
         }))
       }
-      
-      // 5. Update local sequence
+
+      console.log('[LiveView] Decision submitted:', { operatorDecision, isFalseCall, shouldCreateOverride })
+
+    } catch (error) {
+      console.error('[LiveView] Submit decision error:', error)
+    } finally {
+      // Always increment sequence — even if confirmInspection or DB save threw.
+      // Skipping this causes the next board to reuse the same board_id → duplicate.
       boardSequenceRef.current += 1
 
-      // 7. Reset dev mock if used
+      // Reset dev mock if used
       if (devMockInspection) {
         setDevMockInspection(null)
         setDevMockStage({
@@ -911,15 +1010,10 @@ export function LiveViewV3({
           stageName: 'idle',
           message: 'Waiting for board...',
           stageIndex: 0,
-          totalStages: 7,  // Match 7-stage flow
+          totalStages: 0,
           icon: 'hourglass'
         })
       }
-
-      console.log('[LiveView] Decision submitted:', { operatorDecision, isFalseCall })
-
-    } catch (error) {
-      console.error('[LiveView] Submit decision error:', error)
     }
   }, [activeInspection, workOrder, fetchedWO, currentInspection, confirmInspection,
       lineId, sectionId, customerId, user, updateCounters, refreshWO, devMockInspection, activeCavityCount])
@@ -1002,10 +1096,84 @@ export function LiveViewV3({
   /**
    * Handle cavity overlay GOOD confirmation (False Call)
    */
-  const handleCavityConfirmGood = useCallback(async (reason) => {
+  const handleCavityConfirmGood = useCallback(async (reason, decisions) => {
     setShowCavityOverlay(false)
-    await submitDecision('GOOD', { reason, notes: '' })
+    await submitDecision('GOOD', { reason, notes: '', perFrameDecisions: decisions || null })
   }, [submitDecision])
+
+  // ============================================
+  // Inline NG Frame Review (Manual Mode)
+  // ============================================
+
+  const completeInlineReview = useCallback(async (allDecisions) => {
+    const hasRealNG = Object.values(allDecisions).some(d => d === 'REAL_NG')
+    const hasFalseCall = Object.values(allDecisions).some(d => d && d !== 'REAL_NG')
+    const firstReason = Object.values(allDecisions).find(d => d && d !== 'REAL_NG') || ''
+    setNgFrameReview(null)
+    setInlineReasonInput(false)
+    setInlineSelectedReason('')
+    if (hasRealNG) {
+      // Mixed scenario: some frames are real NG, some are false calls
+      // Overall decision is NG (board goes to reject bin), but still pass
+      // perFrameDecisions so overrides can be created for false call frames
+      await submitDecision('NG', hasFalseCall ? { reason: firstReason, notes: '', perFrameDecisions: allDecisions } : undefined)
+    } else {
+      await submitDecision('GOOD', { reason: firstReason, notes: '', perFrameDecisions: allDecisions })
+    }
+  }, [submitDecision])
+
+  const handleInlineFrameNG = useCallback(() => {
+    if (!ngFrameReview) return
+    const frame = ngFrameReview.frames[ngFrameReview.currentIndex]
+    if (!frame) return
+
+    const key = `${frame.side}-${frame.frameIndex}`
+    const newDecisions = { ...ngFrameReview.decisions, [key]: 'REAL_NG' }
+    const nextIndex = ngFrameReview.currentIndex + 1
+
+    if (nextIndex >= ngFrameReview.frames.length) {
+      completeInlineReview(newDecisions)
+    } else {
+      setNgFrameReview(prev => ({ ...prev, currentIndex: nextIndex, decisions: newDecisions }))
+    }
+    setInlineReasonInput(false)
+    setInlineSelectedReason('')
+  }, [ngFrameReview, completeInlineReview])
+
+  const handleInlineFrameGood = useCallback(() => {
+    const effectiveReason = inlineSelectedReason === 'other' ? inlineOtherText.trim() : inlineSelectedReason.trim()
+    if (!ngFrameReview || !effectiveReason) return
+    const frame = ngFrameReview.frames[ngFrameReview.currentIndex]
+    if (!frame) return
+
+    const key = `${frame.side}-${frame.frameIndex}`
+    const newDecisions = { ...ngFrameReview.decisions, [key]: effectiveReason }
+    const nextIndex = ngFrameReview.currentIndex + 1
+
+    if (nextIndex >= ngFrameReview.frames.length) {
+      completeInlineReview(newDecisions)
+    } else {
+      setNgFrameReview(prev => ({ ...prev, currentIndex: nextIndex, decisions: newDecisions }))
+    }
+    setInlineReasonInput(false)
+    setInlineSelectedReason('')
+    setInlineOtherText('')
+  }, [ngFrameReview, inlineSelectedReason, inlineOtherText, completeInlineReview])
+
+  /**
+   * Handle NG thumbnail click in manual mode → open CavityReviewOverlay at that frame
+   */
+  const handleNGFrameClick = useCallback((frame, index, side) => {
+    if (!ngFrameReview || !frame || frame.label != true) return
+    // Find this frame's index in the ngFrameReview.frames array
+    const reviewIdx = ngFrameReview.frames.findIndex(
+      f => f.side === side && f.frameIndex === index
+    )
+    if (reviewIdx >= 0) {
+      setCavityInitialIndex(reviewIdx)
+      setShowCavityOverlay(true)
+    }
+  }, [ngFrameReview])
 
   // ============================================
   // Auto-proceed logic:
@@ -1084,19 +1252,19 @@ export function LiveViewV3({
   const simulateInspection = useCallback(async (result) => {
     if (!workOrder || activeInspection) return
 
-    // Simulate stages (7-stage flow for dual-side inspection)
-    const stages = ['board_incoming', 'position_1', 'position_2', 'pcb_flipping', 'position_3', 'position_4', 'done']
-    
+    // Simulate stages (generic dual-side flow for dev mode)
+    const stages = ['board_incoming', 'capture_top', 'pcb_flipping', 'capture_bottom', 'done']
+
     for (let i = 0; i < stages.length; i++) {
       const stage = stages[i]
       setDevMockStage({
         status: stage === 'done' ? 'ready' : 'processing',
         stageName: stage,
-        message: stage === 'done' ? 'Ready for review' : 
-                 stage === 'pcb_flipping' ? 'Flipping PCB...' : 
+        message: stage === 'done' ? 'Ready for review' :
+                 stage === 'pcb_flipping' ? 'Flipping PCB...' :
                  `Processing ${stage}...`,
         stageIndex: i + 1,
-        totalStages: 7,
+        totalStages: stages.length,
         icon: stage === 'done' ? 'check' : stage === 'pcb_flipping' ? 'rotate-ccw' : 'cpu'
       })
       await new Promise(r => setTimeout(r, 200)) // Fast simulation
@@ -1144,6 +1312,8 @@ export function LiveViewV3({
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (showFalseCallModal) return
+      if (showCavityOverlay) return // Don't intercept keys while CavityReviewOverlay is open (reason input etc.)
+      if (inlineReasonInput) return // Don't intercept keys while typing reason
       if (!workOrder) return
 
       const key = e.key.toLowerCase()
@@ -1178,7 +1348,7 @@ export function LiveViewV3({
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [isOperator, isConfirming, showFalseCallModal, activeInspection, workOrder,
+  }, [isOperator, isConfirming, showFalseCallModal, showCavityOverlay, inlineReasonInput, activeInspection, workOrder,
       handleGoodClick, handleNGClick, aiBackendAvailable, simulateInspection])
 
   // ============================================
@@ -1267,8 +1437,9 @@ export function LiveViewV3({
     )
   }
 
-  // Actions disabled? Only enable when AI says FAIL (NG)
-  const actionsDisabled = !isOperator || isConfirming || isPaused || !activeInspection || aiResult !== 'NG'
+  // Actions disabled? Enable when AI FAIL (NG) or inline frame review active
+  const inlineReviewActive = !!ngFrameReview && ngFrameReview.frames.length > 0
+  const actionsDisabled = !isOperator || isConfirming || isPaused || !activeInspection || (aiResult !== 'NG' && !inlineReviewActive)
 
   // ============================================
   // Render
@@ -1681,6 +1852,10 @@ export function LiveViewV3({
             <InspectionResult
               inspection={activeInspection}
               className="flex-1"
+              onFrameClick={inlineReviewActive ? handleNGFrameClick : undefined}
+              reviewingFrameKey={inlineReviewActive && ngFrameReview?.frames[ngFrameReview.currentIndex]
+                ? `${ngFrameReview.frames[ngFrameReview.currentIndex].side}-${ngFrameReview.frames[ngFrameReview.currentIndex].frameIndex}`
+                : undefined}
             />
           ) : (
             /* Inspection Stage Progress */
@@ -1795,39 +1970,166 @@ export function LiveViewV3({
             </>
           )}
 
-          {/* GOOD Button - Large for glove operation (min 30mm) */}
-          <button
-            onClick={handleGoodClick}
-            disabled={actionsDisabled}
-            className={cn(
-              "h-20 px-14 flex items-center gap-4 border-4 transition-all",
-              "font-display text-2xl font-bold tracking-wider",
-              actionsDisabled
-                ? "bg-surface-border/20 border-surface-border text-text-tertiary cursor-not-allowed"
-                : "bg-phosphor-green/10 border-phosphor-green text-phosphor-green hover:bg-phosphor-green hover:text-void hover:shadow-glow-green"
-            )}
-          >
-            <CheckCircle2 className="w-8 h-8" />
-            <span>GOOD</span>
-            <span className="font-mono text-sm opacity-60">(G)</span>
-          </button>
+          {/* Inline NG Frame Review (Manual Mode) */}
+          {inlineReviewActive && !inlineReasonInput ? (() => {
+            const curFrame = ngFrameReview.frames[ngFrameReview.currentIndex]
+            const curKey = curFrame ? `${curFrame.side}-${curFrame.frameIndex}` : ''
+            const curDecision = ngFrameReview.decisions[curKey]
+            const isAlreadyReviewed = curDecision != null
+            const reviewedCount = Object.keys(ngFrameReview.decisions).length
 
-          {/* NG Button - Large for glove operation (min 30mm) */}
-          <button
-            onClick={handleNGClick}
-            disabled={actionsDisabled}
-            className={cn(
-              "h-20 px-14 flex items-center gap-4 border-4 transition-all",
-              "font-display text-2xl font-bold tracking-wider",
-              actionsDisabled
-                ? "bg-surface-border/20 border-surface-border text-text-tertiary cursor-not-allowed"
-                : "bg-phosphor-red/10 border-phosphor-red text-phosphor-red hover:bg-phosphor-red hover:text-void hover:shadow-glow-red"
-            )}
-          >
-            <XCircle className="w-8 h-8" />
-            <span>NG</span>
-            <span className="font-mono text-sm opacity-60">(N)</span>
-          </button>
+            return (
+              <>
+                {/* NG Frame Indicator */}
+                <div className="flex items-center gap-2 px-4 py-2 bg-phosphor-red/10 border border-phosphor-red/50">
+                  <span className="font-mono text-sm text-phosphor-red font-bold">
+                    NG Frame {ngFrameReview.currentIndex + 1}/{ngFrameReview.frames.length}
+                  </span>
+                  <span className="font-mono text-xs text-text-tertiary">
+                    {curFrame?.side} #{(curFrame?.frameIndex || 0) + 1}
+                  </span>
+                  {reviewedCount > 0 && (
+                    <span className="font-mono text-xs text-text-tertiary">
+                      ({reviewedCount}/{ngFrameReview.frames.length} reviewed)
+                    </span>
+                  )}
+                </div>
+
+                {isAlreadyReviewed ? (
+                  /* Already reviewed — show decision badge */
+                  <div className={cn(
+                    "h-20 px-10 flex items-center gap-3 border-4",
+                    curDecision === 'REAL_NG'
+                      ? "border-phosphor-red/60 bg-phosphor-red/10"
+                      : "border-phosphor-green/60 bg-phosphor-green/10"
+                  )}>
+                    {curDecision === 'REAL_NG' ? (
+                      <AlertCircle className="w-7 h-7 text-phosphor-red" />
+                    ) : (
+                      <CheckCircle2 className="w-7 h-7 text-phosphor-green" />
+                    )}
+                    <span className={cn(
+                      "font-display text-xl font-bold",
+                      curDecision === 'REAL_NG' ? "text-phosphor-red" : "text-phosphor-green"
+                    )}>
+                      {curDecision === 'REAL_NG' ? 'Confirmed NG' : `False Call`}
+                    </span>
+                  </div>
+                ) : (
+                  /* Not yet reviewed — GOOD/NG buttons */
+                  <>
+                    <button
+                      onClick={() => setInlineReasonInput(true)}
+                      disabled={isConfirming}
+                      className="h-20 px-14 flex items-center gap-4 border-4 transition-all font-display text-2xl font-bold tracking-wider bg-phosphor-green/10 border-phosphor-green text-phosphor-green hover:bg-phosphor-green hover:text-void hover:shadow-glow-green"
+                    >
+                      <CheckCircle2 className="w-8 h-8" />
+                      <span>GOOD</span>
+                      <span className="font-mono text-sm opacity-60">(G)</span>
+                    </button>
+
+                    <button
+                      onClick={handleInlineFrameNG}
+                      disabled={isConfirming}
+                      className="h-20 px-14 flex items-center gap-4 border-4 transition-all font-display text-2xl font-bold tracking-wider bg-phosphor-red/10 border-phosphor-red text-phosphor-red hover:bg-phosphor-red hover:text-void hover:shadow-glow-red"
+                    >
+                      <XCircle className="w-8 h-8" />
+                      <span>NG</span>
+                      <span className="font-mono text-sm opacity-60">(N)</span>
+                    </button>
+                  </>
+                )}
+              </>
+            )
+          })() : inlineReviewActive && inlineReasonInput ? (
+            /* Inline reason input for false call */
+            <div className="flex items-center gap-4">
+              {inlineSelectedReason === 'other' ? (
+                <div className="flex items-center gap-2 min-w-[200px]">
+                  <button
+                    onClick={() => { setInlineSelectedReason(''); setInlineOtherText('') }}
+                    className="h-14 px-3 bg-elevated border border-surface-border text-text-secondary font-mono hover:border-phosphor-amber/50 transition-colors flex-shrink-0"
+                  >
+                    &larr;
+                  </button>
+                  <input
+                    type="text"
+                    value={inlineOtherText}
+                    onChange={(e) => setInlineOtherText(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') handleInlineFrameGood() }}
+                    placeholder="Type other reason..."
+                    autoFocus
+                    className="h-14 px-4 bg-elevated border border-surface-border text-text-primary font-mono focus:outline-none focus:ring-2 focus:ring-phosphor-green min-w-[200px] flex-1"
+                  />
+                </div>
+              ) : (
+                <select
+                  value={inlineSelectedReason}
+                  onChange={(e) => { setInlineSelectedReason(e.target.value); setInlineOtherText('') }}
+                  autoFocus
+                  className="h-14 px-4 bg-elevated border border-surface-border text-text-primary font-mono focus:outline-none focus:ring-2 focus:ring-phosphor-green min-w-[200px]"
+                >
+                  <option value="">Select reason...</option>
+                  {falseCallReasons
+                    .filter(r => !(r.name || r).toLowerCase().includes('other'))
+                    .map(r => (
+                      <option key={r.id || r} value={r.name || r}>{r.name || r}</option>
+                    ))}
+                  <option value="other">Other</option>
+                </select>
+              )}
+              <button
+                onClick={handleInlineFrameGood}
+                disabled={inlineSelectedReason === 'other' ? !inlineOtherText.trim() : !inlineSelectedReason.trim()}
+                className="h-14 px-8 bg-phosphor-green text-void font-display font-bold text-lg hover:bg-phosphor-green-bright disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              >
+                SUBMIT
+              </button>
+              <button
+                onClick={() => { setInlineReasonInput(false); setInlineSelectedReason(''); setInlineOtherText('') }}
+                className="h-14 px-6 bg-elevated border border-surface-border text-text-secondary font-display font-bold hover:border-phosphor-amber/50 transition-colors"
+              >
+                CANCEL
+              </button>
+            </div>
+          ) : (
+            /* Default GOOD/NG Buttons (non-review mode) */
+            <>
+              {/* GOOD Button - Large for glove operation (min 30mm) */}
+              <button
+                onClick={handleGoodClick}
+                disabled={actionsDisabled}
+                className={cn(
+                  "h-20 px-14 flex items-center gap-4 border-4 transition-all",
+                  "font-display text-2xl font-bold tracking-wider",
+                  actionsDisabled
+                    ? "bg-surface-border/20 border-surface-border text-text-tertiary cursor-not-allowed"
+                    : "bg-phosphor-green/10 border-phosphor-green text-phosphor-green hover:bg-phosphor-green hover:text-void hover:shadow-glow-green"
+                )}
+              >
+                <CheckCircle2 className="w-8 h-8" />
+                <span>GOOD</span>
+                <span className="font-mono text-sm opacity-60">(G)</span>
+              </button>
+
+              {/* NG Button - Large for glove operation (min 30mm) */}
+              <button
+                onClick={handleNGClick}
+                disabled={actionsDisabled}
+                className={cn(
+                  "h-20 px-14 flex items-center gap-4 border-4 transition-all",
+                  "font-display text-2xl font-bold tracking-wider",
+                  actionsDisabled
+                    ? "bg-surface-border/20 border-surface-border text-text-tertiary cursor-not-allowed"
+                    : "bg-phosphor-red/10 border-phosphor-red text-phosphor-red hover:bg-phosphor-red hover:text-void hover:shadow-glow-red"
+                )}
+              >
+                <XCircle className="w-8 h-8" />
+                <span>NG</span>
+                <span className="font-mono text-sm opacity-60">(N)</span>
+              </button>
+            </>
+          )}
         </div>
       </footer>
 
@@ -1844,6 +2146,7 @@ export function LiveViewV3({
           onConfirmGood={handleCavityConfirmGood}
           onClose={() => setShowCavityOverlay(false)}
           falseCallReasons={falseCallReasons}
+          initialFrameIndex={cavityInitialIndex}
         />
       )}
 

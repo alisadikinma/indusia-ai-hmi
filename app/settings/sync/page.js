@@ -435,36 +435,30 @@ export default function SyncPage() {
       setPendingTables(cachedPending.data.tables || []);
       setTotalPending(cachedPending.data.count || 0);
       setIsLoading(false);
-      
-      // Refresh in background if expired
-      if (cachedPending.isExpired) {
-        loadPendingCounts(false);
-      }
     } else {
       loadPendingCounts(true);
     }
-    
+    // Always refresh pending counts in background (approvals may have changed since cache)
+    loadPendingCounts(false);
+
     if (cachedHistory?.data) {
       setSyncHistory(cachedHistory.data.history || []);
       setTotalHistoryCount(cachedHistory.data.total || 0);
       setLoadingHistory(false);
-      
+
       // Set last sync from cached history
-      const lastCompleted = cachedHistory.data.history?.find(h => 
+      const lastCompleted = cachedHistory.data.history?.find(h =>
         h.status === 'completed' || h.status === 'success' || h.status === 'completed_with_errors'
       );
       if (lastCompleted) {
         setLastSyncTime(lastCompleted.timestamp);
         setLastSyncStatus(lastCompleted.status);
       }
-      
-      // Refresh in background if expired
-      if (cachedHistory.isExpired) {
-        loadSyncHistory(1, false);
-      }
     } else {
       loadSyncHistory(1, true);
     }
+    // Always refresh history in background
+    loadSyncHistory(1, false);
   }, [loadPendingCounts, loadSyncHistory, checkCloudOnline]);
 
   // Periodic online check + browser online/offline events

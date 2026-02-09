@@ -19,6 +19,7 @@ const STATE_FILE = path.join(process.cwd(), '.line-state.json')
 
 // In-memory cache - loaded from file once at startup
 let lineStateCache = null
+let writeInFlight = false
 
 // Load cache from file (called once on first access)
 function ensureCache() {
@@ -30,7 +31,9 @@ function ensureCache() {
       lineStateCache = new Map(JSON.parse(data))
     }
   } catch (err) {
-    console.warn('[LineState] Failed to read state file:', err.message)
+    console.warn('[LineState] Corrupt state file, resetting:', err.message)
+    // Delete corrupt file so it doesn't block future startups
+    try { fs.unlinkSync(STATE_FILE) } catch (_) { /* ignore */ }
   }
 
   if (!lineStateCache) {
@@ -40,14 +43,26 @@ function ensureCache() {
   return lineStateCache
 }
 
-// Persist cache to file (async - doesn't block response)
+// Persist cache to file (async, atomic write via temp file, skip if write already in-flight)
 function persistToFile() {
+  if (writeInFlight) return // skip — previous write still pending
   try {
     const data = JSON.stringify([...lineStateCache.entries()])
-    fs.writeFile(STATE_FILE, data, 'utf-8', (err) => {
-      if (err) console.warn('[LineState] Failed to persist state file:', err.message)
+    const tmpFile = STATE_FILE + '.tmp'
+    writeInFlight = true
+    fs.writeFile(tmpFile, data, 'utf-8', (err) => {
+      writeInFlight = false
+      if (err) {
+        console.warn('[LineState] Failed to write temp state file:', err.message)
+        return
+      }
+      // Atomic rename — prevents reading a half-written file
+      fs.rename(tmpFile, STATE_FILE, (renameErr) => {
+        if (renameErr) console.warn('[LineState] Failed to rename state file:', renameErr.message)
+      })
     })
   } catch (err) {
+    writeInFlight = false
     console.warn('[LineState] Failed to serialize state:', err.message)
   }
 }
@@ -61,7 +76,7 @@ const getDefaultState = () => ({
     stageName: 'idle',
     message: 'Waiting for board...',
     stageIndex: 0,
-    totalStages: 7
+    totalStages: 0  // Dynamic — set by operator's SSE stage events
   },
   hardware: {
     cameras: [],

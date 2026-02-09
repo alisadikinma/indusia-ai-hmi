@@ -28,29 +28,24 @@ import {
   triggerSimReady
 } from '@/lib/services/aiBackendService'
 
-// Default stage definitions (fallback if /stages fails)
-// Must match AI Backend's 7-stage flow
-const DEFAULT_STAGES = [
-  { stage_id: 'stage-01', name: 'board_incoming', label: 'Board', icon: 'box' },
-  { stage_id: 'stage-02', name: 'position_1', label: 'Pos 1', icon: 'camera' },
-  { stage_id: 'stage-03', name: 'position_2', label: 'Pos 2', icon: 'camera' },
-  { stage_id: 'stage-04', name: 'pcb_flipping', label: 'Flip', icon: 'rotate-ccw' },
-  { stage_id: 'stage-05', name: 'position_3', label: 'Pos 3', icon: 'camera' },
-  { stage_id: 'stage-06', name: 'position_4', label: 'Pos 4', icon: 'camera' },
-  { stage_id: 'stage-07', name: 'done', label: 'Done', icon: 'check' }
-]
+// Stage definitions are fetched dynamically from GET /model/stages.
+// Different models may have different stage counts (e.g., 4, 7, 11, 27).
+// Empty default — actual stages populated by fetchStages() on connect.
+const DEFAULT_STAGES = []
 
-// Stage message map
+// Stage message map (legacy fallback)
 const STAGE_MESSAGES = {
   'idle': 'Waiting for board...',
   'start': 'Board incoming...',
   'board_incoming': 'Board incoming...',
   'position_1': 'Camera Position 1...',
   'position_2': 'Camera Position 2...',
-  'flip': 'Flipping PCB...',
-  'pcb_flipping': 'Flipping PCB...',
   'position_3': 'Camera Position 3...',
   'position_4': 'Camera Position 4...',
+  'position_5': 'Camera Position 5...',
+  'position_6': 'Camera Position 6...',
+  'flip': 'Flipping PCB...',
+  'pcb_flipping': 'Flipping PCB...',
   'running': 'Processing...',
   'done': 'Ready for review'
 }
@@ -361,8 +356,9 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
       position_id: frame.position_id,
       frame_id: frame.frame_id,
       serial_number: frame.serial_number || null,
-      user_confirmation: frame.user_confirmation ?? null,
+      user_confirmation: null,  // Set by HMI on operator decision (no longer from SSE)
       label: frame.label,  // board-level: true=NG, false=GOOD
+      times: frame.times || null,  // { capture: number, inference: number }
       objects: (frame.objects || []).map(obj => ({
         name: obj.name,
         box: obj.box,
@@ -390,9 +386,17 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
       bottomFrames = (rawResults.bottom || []).map(transformFrame)
     }
 
+    console.log('[LiveInspection] 🎯 Frames received: TOP=%d, BOTTOM=%d (raw: %d items)',
+      topFrames.length, bottomFrames.length, Array.isArray(rawResults) ? rawResults.length : 'nested')
+
     // Extract serial number (same for all results in 1 inspection = 1 physical PCB)
     const allFrames = [...topFrames, ...bottomFrames]
     const serialNumber = allFrames.find(f => f.serial_number)?.serial_number || null
+
+    // Keep frames that have ANY image (url or raw_url).
+    // url = AI Engine visualization (with bbox), raw_url = original capture.
+    // Display components prefer image_url but fall back to image_raw_url.
+    const hasImage = (f) => f.image_url || f.image_raw_url
 
     const inspection = {
       inspectionId: data.inspection_id,
@@ -400,8 +404,8 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
       modelName: data.model_name,
       serialNumber,
       results: {
-        top: topFrames.filter(f => f.image_url),
-        bottom: bottomFrames.filter(f => f.image_url)
+        top: topFrames.filter(hasImage),
+        bottom: bottomFrames.filter(hasImage)
       },
       decision: data.decision ? String(data.decision).toUpperCase() : data.decision,
       timestamp: data.timestamp
