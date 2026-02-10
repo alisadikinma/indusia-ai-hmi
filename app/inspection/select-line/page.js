@@ -53,7 +53,7 @@ function formatDuration(startTime, t) {
   }
 }
 
-function LineCard({ line, section, isSelected, onSelect, currentUserId, isOperator, t, models, selectedModel, onModelSelect, activeModelName }) {
+function LineCard({ line, section, isSelected, onSelect, currentUserId, isOperator, t, models, selectedModel, onModelSelect, activeModelName, hasNoActiveWO }) {
   const statusConfig = {
     running: { 
       label: t('lineStatus.running'), 
@@ -185,8 +185,8 @@ function LineCard({ line, section, isSelected, onSelect, currentUserId, isOperat
         </div>
       </div>
 
-      {/* Work Order Info - shown when active WO exists */}
-      {line.woNumber && (
+      {/* Work Order Info - shown when active WO exists AND board matches */}
+      {line.woNumber && selectedModel && !hasNoActiveWO && (
         <div className="mb-3 px-3 py-2 bg-terminal border border-surface-border">
           {/* WO Number Row */}
           <div className="flex items-center justify-between mb-2">
@@ -232,8 +232,8 @@ function LineCard({ line, section, isSelected, onSelect, currentUserId, isOperat
         </div>
       )}
 
-      {/* Stats Grid - Show when has active WO or running */}
-      {hasStats && (
+      {/* Stats Grid - Show when has active WO or running AND board matches */}
+      {hasStats && selectedModel && !hasNoActiveWO && (
         <div className="grid grid-cols-4 gap-2 mb-3">
           <div className="bg-terminal border border-surface-border p-2 text-center">
             <p className="font-mono text-xxs text-text-tertiary">{t('lineStats.inspected')}</p>
@@ -338,15 +338,18 @@ function LineCard({ line, section, isSelected, onSelect, currentUserId, isOperat
         {!isDisabled && (
           <div className={cn(
             "flex items-center gap-2 px-3 py-1.5 transition-colors",
-            isSelected 
-              ? "bg-phosphor-amber text-void" 
-              : "bg-surface-border/50 text-text-secondary"
+            isSelected && hasNoActiveWO
+              ? "bg-phosphor-red/20 text-phosphor-red"
+              : isSelected
+                ? "bg-phosphor-amber text-void"
+                : "bg-surface-border/50 text-text-secondary"
           )}>
             {!isOperator && <Eye size={12} />}
+            {isSelected && hasNoActiveWO && <AlertTriangle size={12} />}
             <span className="font-display text-xs font-bold tracking-wider">
-              {isSelected ? t('line.selected') : isOperator ? t('line.select') : t('line.view')}
+              {isSelected && hasNoActiveWO ? 'NO WO' : isSelected ? t('line.selected') : isOperator ? t('line.select') : t('line.view')}
             </span>
-            <ChevronRight size={14} />
+            {!(isSelected && hasNoActiveWO) && <ChevronRight size={14} />}
           </div>
         )}
         
@@ -379,6 +382,7 @@ export default function SelectLinePage() {
   const [models, setModels] = useState([]);
   const [selectedModels, setSelectedModels] = useState({});
   const [dataLoading, setDataLoading] = useState(true);
+  const [noWoWarning, setNoWoWarning] = useState(null); // Warning when no active WO
 
   // Load saved model selections from localStorage
   const loadSavedModels = useCallback((modelList) => {
@@ -406,7 +410,7 @@ export default function SelectLinePage() {
   }, []);
 
   // Handle model selection for a line
-  const handleModelSelect = useCallback((lineId, model) => {
+  const handleModelSelect = useCallback(async (lineId, model) => {
     setSelectedModels(prev => {
       const next = { ...prev };
       if (model) {
@@ -428,8 +432,33 @@ export default function SelectLinePage() {
     if (model) {
       const matchLine = lines.find(l => l.id === lineId);
       if (matchLine) setSelectedLine(matchLine);
+
+      // Check if there's an active WO for this line AND matching the selected board (operator only)
+      if (isOperator) {
+        try {
+          const res = await authFetch(`/api/work-orders/active/${lineId}`);
+          const json = await res.json();
+          if (!json.success || !json.data) {
+            const lineName = matchLine?.name || lineId;
+            setNoWoWarning(lineName);
+          } else {
+            // WO exists but verify it matches the selected board
+            const woBoardName = json.data.board?.name || json.data.boardName;
+            if (woBoardName && model.name && woBoardName !== model.name) {
+              const lineName = matchLine?.name || lineId;
+              setNoWoWarning(lineName);
+            } else {
+              setNoWoWarning(null);
+            }
+          }
+        } catch {
+          setNoWoWarning(null); // Don't block on network error
+        }
+      }
+    } else {
+      setNoWoWarning(null);
     }
-  }, [lines]);
+  }, [lines, isOperator]);
 
   // Fetch all select-line data in a single batch request
   // Replaces 3 base calls + 3 calls per line (N+1) with 1 server-side batch
@@ -541,6 +570,7 @@ export default function SelectLinePage() {
   const handleStartInspection = () => {
     if (!selectedLine) return;
     if (isOperator && !selectedLineModel) return;
+    if (isOperator && noWoWarning) return;
     setIsLoading(true);
 
     if (isOperator) {
@@ -751,7 +781,7 @@ export default function SelectLinePage() {
                 line={line}
                 section={getSection(line.sectionId)}
                 isSelected={selectedLine?.id === line.id}
-                onSelect={setSelectedLine}
+                onSelect={(line) => { setSelectedLine(line); setNoWoWarning(null); }}
                 currentUserId={user?.id}
                 isOperator={isOperator}
                 t={t}
@@ -759,6 +789,7 @@ export default function SelectLinePage() {
                 selectedModel={selectedModels[line.id] || null}
                 onModelSelect={handleModelSelect}
                 activeModelName={line.activeModelName}
+                hasNoActiveWO={!!(selectedLine?.id === line.id && noWoWarning)}
               />
             ))
           )}
@@ -802,12 +833,21 @@ export default function SelectLinePage() {
             )}
           </div>
 
+          {noWoWarning && (
+            <div className="flex items-center gap-3 px-4 py-3 bg-phosphor-red/10 border border-phosphor-red/30">
+              <AlertTriangle className="w-5 h-5 text-phosphor-red shrink-0" />
+              <p className="font-mono text-sm text-phosphor-red">
+                Tidak ada Work Order aktif untuk <span className="font-bold">{noWoWarning}</span>. Hubungi admin/manager untuk membuat Work Order baru.
+              </p>
+            </div>
+          )}
+
           <button
             onClick={handleStartInspection}
-            disabled={!selectedLine || isLoading || (isOperator && !selectedLineModel)}
+            disabled={!selectedLine || isLoading || (isOperator && !selectedLineModel) || (isOperator && !!noWoWarning)}
             className={cn(
               "h-14 px-8 font-display text-lg font-bold tracking-wider flex items-center gap-3 transition-all",
-              selectedLine && (!isOperator || selectedLineModel)
+              selectedLine && (!isOperator || selectedLineModel) && !(isOperator && noWoWarning)
                 ? isOperator
                   ? "bg-phosphor-green text-void hover:shadow-glow-green"
                   : "bg-phosphor-cyan text-void hover:shadow-glow-cyan"

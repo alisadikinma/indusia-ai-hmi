@@ -32,7 +32,7 @@ CREATE TABLE work_orders (
   
   -- Status
   status VARCHAR(20) NOT NULL DEFAULT 'draft' 
-    CHECK (status IN ('draft', 'ready', 'active', 'completed', 'closed')),
+    CHECK (status IN ('draft', 'ready', 'active', 'on_hold', 'completed', 'closed')),
   
   -- Counters (operator-confirmed)
   completed_qty INTEGER NOT NULL DEFAULT 0,

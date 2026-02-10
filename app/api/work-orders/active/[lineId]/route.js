@@ -39,6 +39,7 @@ export async function GET(request, { params }) {
       success: true,
       data: result.data,
       hasActiveWO: result.data !== null,
+      lastCompleted: result.lastCompleted || null,
     });
   } catch (error) {
     console.error('[API] GET /work-orders/active/[lineId] error:', error);

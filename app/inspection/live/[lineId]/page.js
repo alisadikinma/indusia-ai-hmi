@@ -62,12 +62,15 @@ export default function LiveInspectionPage() {
     }
   }, [lineId])
 
-  // Set active line for operators when entering
+  // Set active line for operators on initial page entry only.
+  // Must NOT re-run when activeLineId changes — otherwise clearActiveLine()
+  // (used when WO completes) triggers re-activation before navigation completes.
   useEffect(() => {
-    if (isOperator && lineId && !activeLineId) {
+    if (isOperator && lineId) {
       setActiveLine(lineId, lineName)
     }
-  }, [isOperator, lineId, lineName, activeLineId, setActiveLine])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []) // Only run on mount
 
   // Loading state
   if (loading || !user) {

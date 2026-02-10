@@ -131,6 +131,7 @@ export function useWorkOrder(id) {
  */
 export function useActiveWorkOrder(lineId) {
   const [workOrder, setWorkOrder] = useState(null);
+  const [lastCompleted, setLastCompleted] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [hasActiveWO, setHasActiveWO] = useState(false);
@@ -165,6 +166,7 @@ export function useActiveWorkOrder(lineId) {
 
       setWorkOrder(result.data);
       setHasActiveWO(result.hasActiveWO);
+      setLastCompleted(result.lastCompleted || null);
     } catch (err) {
       console.error('[useActiveWorkOrder] Fetch error:', err);
       setError(err.message);
@@ -181,6 +183,7 @@ export function useActiveWorkOrder(lineId) {
   return {
     workOrder,
     hasActiveWO,
+    lastCompleted,
     loading,
     error,
     refresh: fetchActiveWO,

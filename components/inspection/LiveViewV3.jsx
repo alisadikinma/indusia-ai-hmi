@@ -93,11 +93,11 @@ export function LiveViewV3({
 }) {
   const router = useRouter()
   const { showSidebar } = useSidebar()
-  const { logout } = useAuth()
+  const { logout, clearActiveLine } = useAuth()
   const { t } = useI18n()
   
   // Work Order hooks
-  const { workOrder: fetchedWO, hasActiveWO: fetchedHasWO, loading: woLoading, refresh: refreshWO } = useActiveWorkOrder(lineId)
+  const { workOrder: fetchedWO, hasActiveWO: fetchedHasWO, lastCompleted: lastCompletedWO, loading: woLoading, refresh: refreshWO } = useActiveWorkOrder(lineId)
   const { updateCounters } = useWorkOrderMutations()
 
   // Mock WO state (mutable, so counters update in real-time)
@@ -356,23 +356,29 @@ export function LiveViewV3({
         // Line-state recovery: if sessionCounters are zero (no localStorage backup)
         // but line-state has higher effective counters than DB base, recover the delta.
         // This handles the case where updateCounters() failed but line-state was pushed.
+        // IMPORTANT: Only recover if WO ID matches — prevents stale counters from previous WO.
         if (isOperator && workOrder && newSyncedState.workOrderCounters) {
           const lsCounters = newSyncedState.workOrderCounters
-          setSessionCounters(prev => {
-            const isSessionEmpty = prev.completedQty === 0 && prev.goodQty === 0 && prev.ngQty === 0
-            if (!isSessionEmpty) return prev // Already have data (from localStorage), skip
-            const recovered = {
-              completedQty: Math.max(0, (lsCounters.completedQty || 0) - (workOrder.completedQty || 0)),
-              goodQty: Math.max(0, (lsCounters.goodQty || 0) - (workOrder.goodQty || 0)),
-              ngQty: Math.max(0, (lsCounters.ngQty || 0) - (workOrder.ngQty || 0)),
-              falseCallQty: Math.max(0, (lsCounters.falseCallQty || 0) - (workOrder.falseCallQty || 0)),
-            }
-            if (recovered.completedQty > 0) {
-              console.log('[LiveView] Recovered sessionCounters from line-state:', recovered)
-              return recovered
-            }
-            return prev
-          })
+          // Skip recovery if line-state has counters from a different WO
+          if (lsCounters.workOrderId && workOrder.id && lsCounters.workOrderId !== workOrder.id) {
+            console.log('[LiveView] Line-state has counters from different WO, skipping recovery')
+          } else {
+            setSessionCounters(prev => {
+              const isSessionEmpty = prev.completedQty === 0 && prev.goodQty === 0 && prev.ngQty === 0
+              if (!isSessionEmpty) return prev // Already have data (from localStorage), skip
+              const recovered = {
+                completedQty: Math.max(0, (lsCounters.completedQty || 0) - (workOrder.completedQty || 0)),
+                goodQty: Math.max(0, (lsCounters.goodQty || 0) - (workOrder.goodQty || 0)),
+                ngQty: Math.max(0, (lsCounters.ngQty || 0) - (workOrder.ngQty || 0)),
+                falseCallQty: Math.max(0, (lsCounters.falseCallQty || 0) - (workOrder.falseCallQty || 0)),
+              }
+              if (recovered.completedQty > 0) {
+                console.log('[LiveView] Recovered sessionCounters from line-state:', recovered)
+                return recovered
+              }
+              return prev
+            })
+          }
         }
       }
     } catch (error) {
@@ -427,6 +433,7 @@ export function LiveViewV3({
       autoNgEnabled: autoNgEnabled,  // Always include for sync consistency
       modelName: currentModel || modelName || null,
       workOrderCounters: workOrder ? {
+        workOrderId: workOrder.id || null,
         completedQty: (workOrder.completedQty || 0) + sessionCounters.completedQty,
         goodQty: (workOrder.goodQty || 0) + sessionCounters.goodQty,
         ngQty: (workOrder.ngQty || 0) + sessionCounters.ngQty,
@@ -483,6 +490,36 @@ export function LiveViewV3({
   // WO completion state — shows overlay and blocks further production
   const [woCompleted, setWoCompleted] = useState(false)
   const [woOnHold, setWoOnHold] = useState(false)
+  // Captured WO data at the moment of completion (prevents mock WO fallback showing wrong numbers)
+  const [completedWoData, setCompletedWoData] = useState(null)
+  // Tracks if user dismissed the completion modal (prevents re-showing on same page)
+  const woCompletedDismissedRef = useRef(false)
+  // Track WO ID transitions to reset counters when a new WO is assigned
+  const prevFetchedWoIdRef = useRef(fetchedWO?.id || null)
+
+  // Page-load case: if no active WO but there's a recently completed WO for this line,
+  // show the completion modal with the REAL completed WO data (not mock placeholder)
+  useEffect(() => {
+    if (!woLoading && !fetchedWO && lastCompletedWO && !woCompletedDismissedRef.current) {
+      console.log('[LiveView] No active WO, showing last completed:', lastCompletedWO.woNumber)
+      setCompletedWoData({
+        woNumber: lastCompletedWO.woNumber,
+        lotSize: lastCompletedWO.lotSize,
+        completedQty: lastCompletedWO.completedQty,
+        goodQty: lastCompletedWO.goodQty,
+        ngQty: lastCompletedWO.ngQty,
+        falseCallQty: lastCompletedWO.falseCallQty,
+      })
+      setWoCompleted(true)
+      // Clear stale sessionCounters — they belong to the completed WO
+      setSessionCounters(COUNTER_ZERO)
+      try {
+        Object.keys(localStorage)
+          .filter(k => k.startsWith(COUNTER_STORAGE_PREFIX))
+          .forEach(k => localStorage.removeItem(k))
+      } catch (e) { /* ignore */ }
+    }
+  }, [woLoading, fetchedWO, lastCompletedWO, COUNTER_STORAGE_PREFIX])
 
   // Brief toast message shown when START is blocked (auto-dismissed after 4s)
   const [startBlockReason, setStartBlockReason] = useState(null)
@@ -491,12 +528,38 @@ export function LiveViewV3({
     setTimeout(() => setStartBlockReason(null), 4000)
   }, [])
 
+  // Detect WO ID transitions — reset counters when a different WO is assigned
+  useEffect(() => {
+    const newId = fetchedWO?.id || null
+    const prevId = prevFetchedWoIdRef.current
+
+    if (prevId && newId && prevId !== newId) {
+      console.log('[LiveView] WO changed:', prevId, '→', newId, '— resetting all counters')
+      setSessionCounters(COUNTER_ZERO)
+      setWoCompleted(false)
+      setCompletedWoData(null)
+      lastKnownServerRef.current = null
+      // Clear all localStorage counter keys for this line
+      try {
+        Object.keys(localStorage)
+          .filter(k => k.startsWith(COUNTER_STORAGE_PREFIX))
+          .forEach(k => localStorage.removeItem(k))
+      } catch (e) { /* ignore */ }
+      // Clear stale line-state counters so manager doesn't see old data
+      saveLineState({ workOrderCounters: null })
+    }
+
+    prevFetchedWoIdRef.current = newId
+  }, [fetchedWO?.id, COUNTER_STORAGE_PREFIX, saveLineState])
+
   // Reactive WO completion check — uses BOTH DB values and session counters.
   // DB values alone may be behind due to async counter updates, so we also check
   // the effective total (DB base + session offsets) to catch lot size completion
   // even when some counter updates haven't been persisted yet.
+  // IMPORTANT: Only check real WO from DB, NOT mock WO placeholder.
+  // Mock WO has arbitrary lotSize and stale sessionCounters would trigger false completion.
   useEffect(() => {
-    if (!isOperator || !workOrder) return
+    if (!isOperator || !fetchedWO) return
     const dbCompleted = workOrder.completedQty || 0
     const effectiveCompleted = dbCompleted + sessionCounters.completedQty
     const isCompletedDB = workOrder.lotSize > 0 && dbCompleted >= workOrder.lotSize
@@ -504,6 +567,15 @@ export function LiveViewV3({
     const isCompleted = isCompletedDB || isCompletedEffective
     if (isCompleted && !woCompleted) {
       console.log('[LiveView] WO completed:', isCompletedDB ? `DB ${dbCompleted}` : `effective ${effectiveCompleted}`, '>=', workOrder.lotSize)
+      // Capture final WO data NOW before fetchedWO becomes null (DB status → completed → hook returns null)
+      setCompletedWoData({
+        woNumber: workOrder.woNumber,
+        lotSize: workOrder.lotSize,
+        completedQty: effectiveCompleted,
+        goodQty: (workOrder.goodQty || 0) + sessionCounters.goodQty,
+        ngQty: (workOrder.ngQty || 0) + sessionCounters.ngQty,
+        falseCallQty: (workOrder.falseCallQty || 0) + sessionCounters.falseCallQty,
+      })
       setWoCompleted(true)
       if (processStatus === 'RUNNING' || processStatus === 'PAUSED') {
         stopProcess().catch(() => {})
@@ -513,8 +585,9 @@ export function LiveViewV3({
       // WO was reset (counters cleared or lot_size increased) — dismiss overlay
       console.log('[LiveView] WO no longer completed:', effectiveCompleted, '<', workOrder.lotSize)
       setWoCompleted(false)
+      setCompletedWoData(null)
     }
-  }, [workOrder, isOperator, woCompleted, processStatus, stopProcess, saveLineState, sessionCounters.completedQty])
+  }, [fetchedWO, workOrder, isOperator, woCompleted, processStatus, stopProcess, saveLineState, sessionCounters.completedQty])
 
   // Process control wrappers that save state to API
   const handleRunProcess = useCallback(async () => {
@@ -523,6 +596,15 @@ export function LiveViewV3({
       const totalCompleted = (workOrder.completedQty || 0) + sessionCounters.completedQty
       if (totalCompleted >= workOrder.lotSize) {
         showStartBlocked(`Work Order ${workOrder.woNumber || ''} sudah selesai (${totalCompleted}/${workOrder.lotSize}). Silakan pilih Work Order baru.`)
+        if (!completedWoData) {
+          setCompletedWoData({
+            woNumber: workOrder.woNumber, lotSize: workOrder.lotSize,
+            completedQty: totalCompleted,
+            goodQty: (workOrder.goodQty || 0) + sessionCounters.goodQty,
+            ngQty: (workOrder.ngQty || 0) + sessionCounters.ngQty,
+            falseCallQty: (workOrder.falseCallQty || 0) + sessionCounters.falseCallQty,
+          })
+        }
         setWoCompleted(true)
         return
       }
@@ -977,6 +1059,14 @@ export function LiveViewV3({
       const currentTotal = (workOrder.completedQty || 0) + sessionCounters.completedQty
       if (currentTotal >= workOrder.lotSize) {
         console.warn('[LiveView] submitDecision blocked: WO lot size reached', { currentTotal, lotSize: workOrder.lotSize })
+        if (!completedWoData) {
+          setCompletedWoData({
+            woNumber: workOrder.woNumber, lotSize: workOrder.lotSize, completedQty: currentTotal,
+            goodQty: (workOrder.goodQty || 0) + sessionCounters.goodQty,
+            ngQty: (workOrder.ngQty || 0) + sessionCounters.ngQty,
+            falseCallQty: (workOrder.falseCallQty || 0) + sessionCounters.falseCallQty,
+          })
+        }
         setWoCompleted(true)
         try { await handleStopProcess() } catch (e) { /* ignore */ }
         return
@@ -1186,6 +1276,16 @@ export function LiveViewV3({
         }
         if (wasAutoCompleted) {
           console.log('[LiveView] WO auto-completed — stopping machine')
+          // Capture final WO data before fetchedWO becomes null
+          const finalCompleted = (workOrder.completedQty || 0) + sessionCounters.completedQty
+          setCompletedWoData({
+            woNumber: workOrder.woNumber,
+            lotSize: workOrder.lotSize,
+            completedQty: finalCompleted,
+            goodQty: (workOrder.goodQty || 0) + sessionCounters.goodQty,
+            ngQty: (workOrder.ngQty || 0) + sessionCounters.ngQty,
+            falseCallQty: (workOrder.falseCallQty || 0) + sessionCounters.falseCallQty,
+          })
           setWoCompleted(true)
           try {
             await handleStopProcess()
@@ -2444,38 +2544,51 @@ export function LiveViewV3({
         </div>
       )}
 
-      {woCompleted && (
-        <div className="fixed inset-0 z-50 bg-void/90 flex items-center justify-center">
-          <div className="bg-panel border-2 border-phosphor-green p-8 max-w-lg text-center space-y-6">
-            <CheckCircle2 className="w-16 h-16 text-phosphor-green mx-auto" />
-            <h2 className="font-display text-3xl font-bold text-phosphor-green tracking-wide">
-              WORK ORDER COMPLETED
-            </h2>
-            <div className="space-y-2">
-              <p className="font-mono text-lg text-text-primary">
-                {workOrder?.woNumber || 'WO'}
-              </p>
-              <p className="font-mono text-sm text-text-secondary">
-                {effectiveCounters?.completedQty?.toLocaleString() || 0} / {effectiveCounters?.lotSize?.toLocaleString() || 0} units completed
-              </p>
-              <p className="font-mono text-sm text-text-tertiary">
-                GOOD: {effectiveCounters?.goodQty?.toLocaleString() || 0} | NG: {effectiveCounters?.ngQty?.toLocaleString() || 0} | Yield: {yieldPercent}%
-              </p>
-            </div>
-            <div className="pt-4 border-t border-surface-border space-y-3">
-              <p className="font-mono text-sm text-phosphor-amber">
-                Machine has been stopped. Please assign a new Work Order to continue.
-              </p>
-              <button
-                onClick={() => router.push('/inspection/select-line')}
-                className="px-8 py-3 bg-phosphor-amber text-void font-display font-bold text-lg tracking-wider hover:shadow-glow-amber transition-all"
-              >
-                SELECT NEW WORK ORDER
-              </button>
+      {woCompleted && (() => {
+        // Use captured WO data (frozen at completion time) to avoid mock WO fallback showing wrong numbers
+        const modalData = completedWoData || effectiveCounters
+        const modalYield = modalData?.completedQty > 0
+          ? ((modalData.goodQty / modalData.completedQty) * 100).toFixed(1)
+          : '0.0'
+        return (
+          <div className="fixed inset-0 z-50 bg-void/90 flex items-center justify-center">
+            <div className="bg-panel border-2 border-phosphor-green p-8 max-w-lg text-center space-y-6">
+              <CheckCircle2 className="w-16 h-16 text-phosphor-green mx-auto" />
+              <h2 className="font-display text-3xl font-bold text-phosphor-green tracking-wide">
+                WORK ORDER COMPLETED
+              </h2>
+              <div className="space-y-2">
+                <p className="font-mono text-lg text-text-primary">
+                  {modalData?.woNumber || workOrder?.woNumber || 'WO'}
+                </p>
+                <p className="font-mono text-sm text-text-secondary">
+                  {modalData?.completedQty?.toLocaleString() || 0} / {modalData?.lotSize?.toLocaleString() || 0} units completed
+                </p>
+                <p className="font-mono text-sm text-text-tertiary">
+                  GOOD: {modalData?.goodQty?.toLocaleString() || 0} | NG: {modalData?.ngQty?.toLocaleString() || 0} | Yield: {modalYield}%
+                </p>
+              </div>
+              <div className="pt-4 border-t border-surface-border space-y-3">
+                <p className="font-mono text-sm text-phosphor-amber">
+                  Machine has been stopped. Please assign a new Work Order to continue.
+                </p>
+                <button
+                  onClick={() => {
+                    woCompletedDismissedRef.current = true
+                    setWoCompleted(false)
+                    setCompletedWoData(null)
+                    clearActiveLine()
+                    router.push('/inspection/select-line')
+                  }}
+                  className="px-8 py-3 bg-phosphor-amber text-void font-display font-bold text-lg tracking-wider hover:shadow-glow-amber transition-all cursor-pointer"
+                >
+                  SELECT NEW WORK ORDER
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
     </div>
   )
 }
