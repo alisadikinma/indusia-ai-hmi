@@ -37,7 +37,7 @@ import {
   Square, FlaskConical, Menu, LogOut, ChevronDown,
   Layers, RefreshCw, Settings, Camera, Cpu, RotateCcw,
   Loader2, Activity, CircleDot, FileText, ToggleLeft, ToggleRight,
-  Brain
+  Brain, X
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useSidebar } from '@/context/SidebarContext'
@@ -484,15 +484,26 @@ export function LiveViewV3({
   const [woCompleted, setWoCompleted] = useState(false)
   const [woOnHold, setWoOnHold] = useState(false)
 
-  // Reactive WO completion check — uses DB values only (source of truth).
-  // sessionCounters may be stale from localStorage on first render, so we don't include them here.
-  // The submitDecision guard handles the session-counter-based overflow during active inspection.
+  // Brief toast message shown when START is blocked (auto-dismissed after 4s)
+  const [startBlockReason, setStartBlockReason] = useState(null)
+  const showStartBlocked = useCallback((reason) => {
+    setStartBlockReason(reason)
+    setTimeout(() => setStartBlockReason(null), 4000)
+  }, [])
+
+  // Reactive WO completion check — uses BOTH DB values and session counters.
+  // DB values alone may be behind due to async counter updates, so we also check
+  // the effective total (DB base + session offsets) to catch lot size completion
+  // even when some counter updates haven't been persisted yet.
   useEffect(() => {
     if (!isOperator || !workOrder) return
     const dbCompleted = workOrder.completedQty || 0
-    const isCompleted = workOrder.lotSize > 0 && dbCompleted >= workOrder.lotSize
+    const effectiveCompleted = dbCompleted + sessionCounters.completedQty
+    const isCompletedDB = workOrder.lotSize > 0 && dbCompleted >= workOrder.lotSize
+    const isCompletedEffective = workOrder.lotSize > 0 && effectiveCompleted >= workOrder.lotSize
+    const isCompleted = isCompletedDB || isCompletedEffective
     if (isCompleted && !woCompleted) {
-      console.log('[LiveView] WO completed (DB):', dbCompleted, '>=', workOrder.lotSize)
+      console.log('[LiveView] WO completed:', isCompletedDB ? `DB ${dbCompleted}` : `effective ${effectiveCompleted}`, '>=', workOrder.lotSize)
       setWoCompleted(true)
       if (processStatus === 'RUNNING' || processStatus === 'PAUSED') {
         stopProcess().catch(() => {})
@@ -500,10 +511,10 @@ export function LiveViewV3({
       }
     } else if (!isCompleted && woCompleted) {
       // WO was reset (counters cleared or lot_size increased) — dismiss overlay
-      console.log('[LiveView] WO no longer completed (DB):', dbCompleted, '<', workOrder.lotSize)
+      console.log('[LiveView] WO no longer completed:', effectiveCompleted, '<', workOrder.lotSize)
       setWoCompleted(false)
     }
-  }, [workOrder, isOperator, woCompleted, processStatus, stopProcess, saveLineState])
+  }, [workOrder, isOperator, woCompleted, processStatus, stopProcess, saveLineState, sessionCounters.completedQty])
 
   // Process control wrappers that save state to API
   const handleRunProcess = useCallback(async () => {
@@ -511,6 +522,7 @@ export function LiveViewV3({
     if (workOrder && workOrder.lotSize > 0) {
       const totalCompleted = (workOrder.completedQty || 0) + sessionCounters.completedQty
       if (totalCompleted >= workOrder.lotSize) {
+        showStartBlocked(`Work Order ${workOrder.woNumber || ''} sudah selesai (${totalCompleted}/${workOrder.lotSize}). Silakan pilih Work Order baru.`)
         setWoCompleted(true)
         return
       }
@@ -522,6 +534,7 @@ export function LiveViewV3({
       const json = await res.json()
       if (!json.success || !json.data) {
         console.warn('[LiveView] No active WO found on line, blocking start')
+        showStartBlocked(`Work Order tidak aktif atau sedang On Hold. Hubungi supervisor untuk mengaktifkan WO.`)
         setWoOnHold(true)
         return
       }
@@ -533,7 +546,7 @@ export function LiveViewV3({
     setWoOnHold(false)
     await runProcess()
     saveLineState({ processStatus: 'RUNNING' })
-  }, [runProcess, saveLineState, workOrder, sessionCounters.completedQty, lineId])
+  }, [runProcess, saveLineState, workOrder, sessionCounters.completedQty, lineId, showStartBlocked])
   
   const handlePauseProcess = useCallback(async () => {
     await pauseProcess()
@@ -551,6 +564,12 @@ export function LiveViewV3({
   
   // Track if current inspection has been processed (prevent double submit)
   const processedInspectionRef = useRef(null)
+
+  // Serialization guard: prevents concurrent submitDecision calls that cause
+  // race conditions in the server-side counter update (read-then-write).
+  // Queued call is stored and executed after the current one finishes.
+  const isSubmittingRef = useRef(false)
+  const pendingSubmitRef = useRef(null)
 
   // Derive cavity count from selected board (must be before boardSequenceRef sync)
   const activeCavityCount = availableModels.find(m => m.name === currentModel)?.cavityCount || 1
@@ -917,6 +936,16 @@ export function LiveViewV3({
    * (Defined first as other handlers depend on it)
    */
   const submitDecision = useCallback(async (operatorDecision, falseCallData = null) => {
+    // Serialization guard: queue if another submitDecision is already running.
+    // This prevents concurrent DB counter updates that cause race conditions
+    // (two reads of the same base value → both write base+1 → one increment lost).
+    if (isSubmittingRef.current) {
+      console.log('[LiveView] submitDecision queued (previous still running):', operatorDecision)
+      pendingSubmitRef.current = { operatorDecision, falseCallData }
+      return
+    }
+    isSubmittingRef.current = true
+
     console.log('[LiveView] submitDecision called:', {
       operatorDecision,
       hasActiveInspection: !!activeInspection,
@@ -933,6 +962,13 @@ export function LiveViewV3({
     const effectiveInspection = activeInspection || falseCallInspectionRef.current
     if (!effectiveInspection || !workOrder) {
       console.warn('[LiveView] submitDecision bailed: activeInspection=', !!activeInspection, 'capturedInspection=', !!falseCallInspectionRef.current, 'workOrder=', !!workOrder)
+      isSubmittingRef.current = false
+      // Process queued call if any
+      const queued = pendingSubmitRef.current
+      if (queued) {
+        pendingSubmitRef.current = null
+        submitDecision(queued.operatorDecision, queued.falseCallData)
+      }
       return
     }
 
@@ -1137,6 +1173,17 @@ export function LiveViewV3({
         }
 
         // 7. Auto-stop machine if WO was completed (lot size reached)
+        // Check BOTH server auto-complete flag AND client-side session counters.
+        // Session counter check is critical: if some DB counter updates were lost or
+        // delayed, the server might not detect lot_size reached, but the client knows
+        // the real count from optimistic updates.
+        if (!wasAutoCompleted && workOrder.lotSize > 0) {
+          const effectiveTotal = (workOrder.completedQty || 0) + sessionCounters.completedQty
+          if (effectiveTotal >= workOrder.lotSize) {
+            console.log('[LiveView] Client-side lot size reached:', effectiveTotal, '>=', workOrder.lotSize)
+            wasAutoCompleted = true
+          }
+        }
         if (wasAutoCompleted) {
           console.log('[LiveView] WO auto-completed — stopping machine')
           setWoCompleted(true)
@@ -1177,6 +1224,15 @@ export function LiveViewV3({
           totalStages: 0,
           icon: 'hourglass'
         })
+      }
+
+      // Release serialization lock and process queued call
+      isSubmittingRef.current = false
+      const queued = pendingSubmitRef.current
+      if (queued) {
+        pendingSubmitRef.current = null
+        // Use setTimeout(0) to avoid deep recursion in the call stack
+        setTimeout(() => submitDecision(queued.operatorDecision, queued.falseCallData), 0)
       }
     }
   }, [activeInspection, workOrder, fetchedWO, currentInspection, confirmInspection,
@@ -1755,10 +1811,10 @@ export function LiveViewV3({
       <div className="h-14 flex-shrink-0 bg-terminal border-b border-surface-border flex items-center justify-between px-4">
         {/* Left: Machine Control Buttons */}
         <div className="flex items-center gap-3">
-          {/* RUN Button */}
+          {/* RUN Button — NOT disabled when woCompleted/woOnHold so user can click and see a toast message */}
           <button
             onClick={handleRunProcess}
-            disabled={!isOperator || !isConnected || isControlling || effectiveProcessStatus === 'RUNNING' || woCompleted || woOnHold}
+            disabled={!isOperator || !isConnected || isControlling || effectiveProcessStatus === 'RUNNING'}
             className={cn(
               "h-10 px-4 flex items-center gap-2 border-2 transition-all",
               "font-display text-xs font-bold tracking-wider",
@@ -1808,6 +1864,17 @@ export function LiveViewV3({
             <Square className="w-4 h-4" />
             <span>STOP</span>
           </button>
+
+          {/* START blocked toast — appears inline next to buttons */}
+          {startBlockReason && (
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-phosphor-amber/15 border border-phosphor-amber/40 animate-fade-in">
+              <AlertTriangle className="w-4 h-4 text-phosphor-amber flex-shrink-0" />
+              <span className="font-mono text-xs text-phosphor-amber leading-tight">{startBlockReason}</span>
+              <button onClick={() => setStartBlockReason(null)} className="text-phosphor-amber/60 hover:text-phosphor-amber ml-1 flex-shrink-0">
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Center: spacer (stage indicator is in body InspectionStage component) */}
