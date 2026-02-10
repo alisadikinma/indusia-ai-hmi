@@ -108,11 +108,56 @@ export function LiveViewV3({
   const hasActiveWO = BYPASS_WO_CHECK || fetchedHasWO
 
   // Optimistic counter tracking — updates UI instantly on each decision
-  // without waiting for DB round-trip (real WO path only)
-  const [sessionCounters, setSessionCounters] = useState({
-    completedQty: 0, goodQty: 0, ngQty: 0, falseCallQty: 0
+  // without waiting for DB round-trip (real WO path only).
+  // Restored from localStorage on mount to survive page refresh/browser close.
+  const COUNTER_STORAGE_PREFIX = `indusia_session_counters_${lineId}_`
+  const COUNTER_ZERO = { completedQty: 0, goodQty: 0, ngQty: 0, falseCallQty: 0 }
+
+  const [sessionCounters, setSessionCounters] = useState(() => {
+    if (typeof window === 'undefined') return COUNTER_ZERO
+    try {
+      const keys = Object.keys(localStorage).filter(k => k.startsWith(COUNTER_STORAGE_PREFIX))
+      let latest = null
+      for (const key of keys) {
+        const data = JSON.parse(localStorage.getItem(key))
+        if (data?.counters && (!latest || data.timestamp > latest.timestamp)) latest = data
+      }
+      // Expire after 24 hours (stale from previous shift)
+      if (latest && (Date.now() - latest.timestamp) < 24 * 60 * 60 * 1000) {
+        console.log('[LiveView] Restored sessionCounters from localStorage:', latest.counters)
+        return latest.counters
+      }
+    } catch (e) { /* localStorage unavailable */ }
+    return COUNTER_ZERO
   })
   const lastKnownServerRef = useRef(null)
+
+  // Persist sessionCounters to localStorage on every change
+  useEffect(() => {
+    if (!workOrder?.id) return
+    try {
+      localStorage.setItem(`${COUNTER_STORAGE_PREFIX}${workOrder.id}`, JSON.stringify({
+        counters: sessionCounters,
+        timestamp: Date.now(),
+        woId: workOrder.id,
+      }))
+    } catch (e) { /* quota or private browsing */ }
+  }, [sessionCounters, workOrder?.id, COUNTER_STORAGE_PREFIX])
+
+  // Validate restored sessionCounters match current WO — reset if WO changed
+  useEffect(() => {
+    if (!workOrder?.id) return
+    try {
+      const staleKeys = Object.keys(localStorage).filter(k =>
+        k.startsWith(COUNTER_STORAGE_PREFIX) && !k.endsWith(`_${workOrder.id}`)
+      )
+      if (staleKeys.length > 0) {
+        console.log('[LiveView] Clearing stale sessionCounters from different WO')
+        setSessionCounters(COUNTER_ZERO)
+        staleKeys.forEach(k => localStorage.removeItem(k))
+      }
+    } catch (e) { /* ignore */ }
+  }, [workOrder?.id, COUNTER_STORAGE_PREFIX])
 
   // Reconcile session counters when server data catches up via refreshWO
   useEffect(() => {
@@ -282,6 +327,28 @@ export function LiveViewV3({
         if (isOperator && newSyncedState.cycleTime != null && lastCycleTimeRef.current == null) {
           lastCycleTimeRef.current = newSyncedState.cycleTime
           setDisplayCycleTime(newSyncedState.cycleTime)
+        }
+
+        // Line-state recovery: if sessionCounters are zero (no localStorage backup)
+        // but line-state has higher effective counters than DB base, recover the delta.
+        // This handles the case where updateCounters() failed but line-state was pushed.
+        if (isOperator && workOrder && newSyncedState.workOrderCounters) {
+          const lsCounters = newSyncedState.workOrderCounters
+          setSessionCounters(prev => {
+            const isSessionEmpty = prev.completedQty === 0 && prev.goodQty === 0 && prev.ngQty === 0
+            if (!isSessionEmpty) return prev // Already have data (from localStorage), skip
+            const recovered = {
+              completedQty: Math.max(0, (lsCounters.completedQty || 0) - (workOrder.completedQty || 0)),
+              goodQty: Math.max(0, (lsCounters.goodQty || 0) - (workOrder.goodQty || 0)),
+              ngQty: Math.max(0, (lsCounters.ngQty || 0) - (workOrder.ngQty || 0)),
+              falseCallQty: Math.max(0, (lsCounters.falseCallQty || 0) - (workOrder.falseCallQty || 0)),
+            }
+            if (recovered.completedQty > 0) {
+              console.log('[LiveView] Recovered sessionCounters from line-state:', recovered)
+              return recovered
+            }
+            return prev
+          })
         }
       }
     } catch (error) {
@@ -837,7 +904,7 @@ export function LiveViewV3({
           ngQty: operatorDecision === 'NG' ? prev.ngQty + qty : prev.ngQty,
           falseCallQty: shouldCreateOverride ? prev.falseCallQty + qty : prev.falseCallQty,
         }))
-        console.log('[LiveView] Optimistic counter update applied:', operatorDecision)
+        console.log('[LiveView] Optimistic counter update applied:', operatorDecision, `qty=${qty} (cavityCount=${activeCavityCount})`)
       }
 
       // 2.5. If false call (board-level OR per-frame): save images + create Override
@@ -1871,33 +1938,54 @@ export function LiveViewV3({
         </div>
       </main>
 
+      {/* NG Frame Review Notice — above footer to avoid crowding buttons */}
+      {inlineReviewActive && (() => {
+        const curFrame = ngFrameReview.frames[ngFrameReview.currentIndex]
+        const reviewedCount = Object.keys(ngFrameReview.decisions).length
+        return (
+          <div className="flex-shrink-0 flex items-center justify-center gap-3 px-4 py-1.5 bg-phosphor-red/10 border-t border-phosphor-red/30">
+            <span className="font-mono text-sm text-phosphor-red font-bold">
+              NG Frame {ngFrameReview.currentIndex + 1}/{ngFrameReview.frames.length}
+            </span>
+            <span className="font-mono text-xs text-text-tertiary">
+              {curFrame?.side} #{(curFrame?.frameIndex || 0) + 1}
+            </span>
+            {reviewedCount > 0 && (
+              <span className="font-mono text-xs text-text-tertiary">
+                ({reviewedCount}/{ngFrameReview.frames.length} reviewed)
+              </span>
+            )}
+          </div>
+        )
+      })()}
+
       {/* ============ FOOTER: ACTIONS ============ */}
-      <footer className="h-28 flex-shrink-0 bg-panel border-t border-surface-border flex items-center justify-between px-4">
+      <footer className="flex-shrink-0 bg-panel border-t border-surface-border flex flex-col md:flex-row md:items-center md:justify-between px-2 md:px-4 py-1.5 md:py-0 md:h-28 gap-1 md:gap-0">
         {/* Left: WO Stats */}
-        <div className="flex items-center gap-4">
+        <div className="flex items-center justify-center md:justify-start">
           {effectiveCounters && (
-            <div className="flex items-center gap-6 px-4 py-2 bg-terminal border border-surface-border">
-              <div className="flex items-center gap-2">
-                <span className="font-mono text-xs text-text-tertiary">PROGRESS</span>
-                <span className="font-mono text-xl font-bold text-phosphor-amber">
+            <div className="flex items-center gap-2 md:gap-3 lg:gap-4 xl:gap-6 px-2 md:px-3 lg:px-4 py-1.5 md:py-2 bg-terminal border border-surface-border">
+              <div className="flex items-center gap-1 md:gap-2">
+                <span className="font-mono text-xs text-text-tertiary hidden md:inline">PROGRESS</span>
+                <span className="font-mono text-sm md:text-base lg:text-lg xl:text-xl font-bold text-phosphor-amber">
                   {effectiveCounters.completedQty}/{effectiveCounters.lotSize}
                 </span>
               </div>
-              <div className="w-px h-8 bg-surface-border" />
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="w-5 h-5 text-phosphor-green" />
-                <span className="font-mono text-xl font-bold text-phosphor-green">{effectiveCounters.goodQty}</span>
+              <div className="w-px h-6 md:h-8 bg-surface-border" />
+              <div className="flex items-center gap-1 md:gap-2">
+                <CheckCircle2 className="w-4 h-4 md:w-5 md:h-5 text-phosphor-green" />
+                <span className="font-mono text-sm md:text-base lg:text-lg xl:text-xl font-bold text-phosphor-green">{effectiveCounters.goodQty}</span>
               </div>
-              <div className="w-px h-8 bg-surface-border" />
-              <div className="flex items-center gap-2">
-                <XCircle className="w-5 h-5 text-phosphor-red" />
-                <span className="font-mono text-xl font-bold text-phosphor-red">{effectiveCounters.ngQty}</span>
+              <div className="w-px h-6 md:h-8 bg-surface-border" />
+              <div className="flex items-center gap-1 md:gap-2">
+                <XCircle className="w-4 h-4 md:w-5 md:h-5 text-phosphor-red" />
+                <span className="font-mono text-sm md:text-base lg:text-lg xl:text-xl font-bold text-phosphor-red">{effectiveCounters.ngQty}</span>
               </div>
-              <div className="w-px h-8 bg-surface-border" />
-              <div className="flex items-center gap-2">
-                <span className="font-mono text-xs text-text-tertiary">YIELD</span>
+              <div className="w-px h-6 md:h-8 bg-surface-border" />
+              <div className="flex items-center gap-1 md:gap-2">
+                <span className="font-mono text-xs text-text-tertiary hidden md:inline">YIELD</span>
                 <span className={cn(
-                  "font-mono text-xl font-bold",
+                  "font-mono text-sm md:text-base lg:text-lg xl:text-xl font-bold",
                   parseFloat(yieldPercent) >= 98 ? "text-phosphor-green" :
                   parseFloat(yieldPercent) >= 95 ? "text-phosphor-amber" : "text-phosphor-red"
                 )}>
@@ -1907,25 +1995,12 @@ export function LiveViewV3({
               {/* Cycle Time */}
               {effectiveCycleTime != null && (
                 <>
-                  <div className="w-px h-8 bg-surface-border" />
-                  <div className="flex items-center gap-2">
-                    <Clock className="w-4 h-4 text-phosphor-cyan" />
-                    <span className="font-mono text-xs text-text-tertiary">CYCLE/PCB</span>
-                    <span className="font-mono text-xl font-bold text-phosphor-cyan">
+                  <div className="w-px h-6 md:h-8 bg-surface-border" />
+                  <div className="flex items-center gap-1 md:gap-2">
+                    <Clock className="w-3.5 h-3.5 md:w-4 md:h-4 text-phosphor-cyan" />
+                    <span className="font-mono text-xs text-text-tertiary hidden md:inline">CYCLE/PCB</span>
+                    <span className="font-mono text-sm md:text-base lg:text-lg xl:text-xl font-bold text-phosphor-cyan">
                       {effectiveCycleTime}s
-                    </span>
-                  </div>
-                </>
-              )}
-              {/* Panel Progress (multi-cavity) */}
-              {isOperator && activeCavityCount > 1 && panelProgress.total > 0 && (
-                <>
-                  <div className="w-px h-8 bg-surface-border" />
-                  <div className="flex items-center gap-2">
-                    <Layers className="w-4 h-4 text-purple-400" />
-                    <span className="font-mono text-xs text-text-tertiary">PANEL</span>
-                    <span className="font-mono text-xl font-bold text-purple-400">
-                      {panelProgress.confirmed}/{panelProgress.total}
                     </span>
                   </div>
                 </>
@@ -1935,7 +2010,7 @@ export function LiveViewV3({
         </div>
 
         {/* Center: Action Buttons */}
-        <div className="flex items-center gap-4">
+        <div className="flex items-center justify-center gap-2 md:gap-4">
           {/* Dev Mode Simulate Buttons - ONLY for Operator */}
           {DEV_MODE && isOperator && !activeInspection && !aiBackendAvailable && (
             <>
@@ -1980,36 +2055,21 @@ export function LiveViewV3({
 
             return (
               <>
-                {/* NG Frame Indicator */}
-                <div className="flex items-center gap-2 px-4 py-2 bg-phosphor-red/10 border border-phosphor-red/50">
-                  <span className="font-mono text-sm text-phosphor-red font-bold">
-                    NG Frame {ngFrameReview.currentIndex + 1}/{ngFrameReview.frames.length}
-                  </span>
-                  <span className="font-mono text-xs text-text-tertiary">
-                    {curFrame?.side} #{(curFrame?.frameIndex || 0) + 1}
-                  </span>
-                  {reviewedCount > 0 && (
-                    <span className="font-mono text-xs text-text-tertiary">
-                      ({reviewedCount}/{ngFrameReview.frames.length} reviewed)
-                    </span>
-                  )}
-                </div>
-
                 {isAlreadyReviewed ? (
                   /* Already reviewed — show decision badge */
                   <div className={cn(
-                    "h-20 px-10 flex items-center gap-3 border-4",
+                    "h-20 px-6 md:px-10 flex items-center gap-2 md:gap-3 border-4",
                     curDecision === 'REAL_NG'
                       ? "border-phosphor-red/60 bg-phosphor-red/10"
                       : "border-phosphor-green/60 bg-phosphor-green/10"
                   )}>
                     {curDecision === 'REAL_NG' ? (
-                      <AlertCircle className="w-7 h-7 text-phosphor-red" />
+                      <AlertCircle className="w-6 h-6 md:w-7 md:h-7 text-phosphor-red" />
                     ) : (
-                      <CheckCircle2 className="w-7 h-7 text-phosphor-green" />
+                      <CheckCircle2 className="w-6 h-6 md:w-7 md:h-7 text-phosphor-green" />
                     )}
                     <span className={cn(
-                      "font-display text-xl font-bold",
+                      "font-display text-lg md:text-xl font-bold",
                       curDecision === 'REAL_NG' ? "text-phosphor-red" : "text-phosphor-green"
                     )}>
                       {curDecision === 'REAL_NG' ? 'Confirmed NG' : `False Call`}
@@ -2021,21 +2081,21 @@ export function LiveViewV3({
                     <button
                       onClick={() => setInlineReasonInput(true)}
                       disabled={isConfirming}
-                      className="h-20 px-14 flex items-center gap-4 border-4 transition-all font-display text-2xl font-bold tracking-wider bg-phosphor-green/10 border-phosphor-green text-phosphor-green hover:bg-phosphor-green hover:text-void hover:shadow-glow-green"
+                      className="h-20 px-6 md:px-8 lg:px-10 xl:px-14 flex items-center gap-2 md:gap-4 border-4 transition-all font-display text-lg md:text-xl xl:text-2xl font-bold tracking-wider bg-phosphor-green/10 border-phosphor-green text-phosphor-green hover:bg-phosphor-green hover:text-void hover:shadow-glow-green"
                     >
-                      <CheckCircle2 className="w-8 h-8" />
+                      <CheckCircle2 className="w-6 h-6 md:w-7 md:h-7 xl:w-8 xl:h-8" />
                       <span>GOOD</span>
-                      <span className="font-mono text-sm opacity-60">(G)</span>
+                      <span className="font-mono text-xs md:text-sm opacity-60">(G)</span>
                     </button>
 
                     <button
                       onClick={handleInlineFrameNG}
                       disabled={isConfirming}
-                      className="h-20 px-14 flex items-center gap-4 border-4 transition-all font-display text-2xl font-bold tracking-wider bg-phosphor-red/10 border-phosphor-red text-phosphor-red hover:bg-phosphor-red hover:text-void hover:shadow-glow-red"
+                      className="h-20 px-6 md:px-8 lg:px-10 xl:px-14 flex items-center gap-2 md:gap-4 border-4 transition-all font-display text-lg md:text-xl xl:text-2xl font-bold tracking-wider bg-phosphor-red/10 border-phosphor-red text-phosphor-red hover:bg-phosphor-red hover:text-void hover:shadow-glow-red"
                     >
-                      <XCircle className="w-8 h-8" />
+                      <XCircle className="w-6 h-6 md:w-7 md:h-7 xl:w-8 xl:h-8" />
                       <span>NG</span>
-                      <span className="font-mono text-sm opacity-60">(N)</span>
+                      <span className="font-mono text-xs md:text-sm opacity-60">(N)</span>
                     </button>
                   </>
                 )}
@@ -2095,38 +2155,38 @@ export function LiveViewV3({
           ) : (
             /* Default GOOD/NG Buttons (non-review mode) */
             <>
-              {/* GOOD Button - Large for glove operation (min 30mm) */}
+              {/* GOOD Button - Large for glove operation (min 30mm / h-20=80px) */}
               <button
                 onClick={handleGoodClick}
                 disabled={actionsDisabled}
                 className={cn(
-                  "h-20 px-14 flex items-center gap-4 border-4 transition-all",
-                  "font-display text-2xl font-bold tracking-wider",
+                  "h-20 px-6 md:px-8 lg:px-10 xl:px-14 flex items-center gap-2 md:gap-4 border-4 transition-all",
+                  "font-display text-lg md:text-xl xl:text-2xl font-bold tracking-wider",
                   actionsDisabled
                     ? "bg-surface-border/20 border-surface-border text-text-tertiary cursor-not-allowed"
                     : "bg-phosphor-green/10 border-phosphor-green text-phosphor-green hover:bg-phosphor-green hover:text-void hover:shadow-glow-green"
                 )}
               >
-                <CheckCircle2 className="w-8 h-8" />
+                <CheckCircle2 className="w-6 h-6 md:w-7 md:h-7 xl:w-8 xl:h-8" />
                 <span>GOOD</span>
-                <span className="font-mono text-sm opacity-60">(G)</span>
+                <span className="font-mono text-xs md:text-sm opacity-60">(G)</span>
               </button>
 
-              {/* NG Button - Large for glove operation (min 30mm) */}
+              {/* NG Button - Large for glove operation (min 30mm / h-20=80px) */}
               <button
                 onClick={handleNGClick}
                 disabled={actionsDisabled}
                 className={cn(
-                  "h-20 px-14 flex items-center gap-4 border-4 transition-all",
-                  "font-display text-2xl font-bold tracking-wider",
+                  "h-20 px-6 md:px-8 lg:px-10 xl:px-14 flex items-center gap-2 md:gap-4 border-4 transition-all",
+                  "font-display text-lg md:text-xl xl:text-2xl font-bold tracking-wider",
                   actionsDisabled
                     ? "bg-surface-border/20 border-surface-border text-text-tertiary cursor-not-allowed"
                     : "bg-phosphor-red/10 border-phosphor-red text-phosphor-red hover:bg-phosphor-red hover:text-void hover:shadow-glow-red"
                 )}
               >
-                <XCircle className="w-8 h-8" />
+                <XCircle className="w-6 h-6 md:w-7 md:h-7 xl:w-8 xl:h-8" />
                 <span>NG</span>
-                <span className="font-mono text-sm opacity-60">(N)</span>
+                <span className="font-mono text-xs md:text-sm opacity-60">(N)</span>
               </button>
             </>
           )}
