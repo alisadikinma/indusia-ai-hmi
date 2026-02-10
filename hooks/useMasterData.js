@@ -1,6 +1,6 @@
 /**
  * useMasterData Hook
- * Fetches master data from API - NO MOCK DATA
+ * Fetches master data from batch API - single request instead of 5
  */
 
 import { useState, useEffect, useCallback } from 'react';
@@ -15,34 +15,25 @@ export function useMasterData() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Fetch all master data from API
+  // Fetch all master data from batch API (single request)
   const fetchMasterData = useCallback(async () => {
     setLoading(true);
     setError(null);
 
-    const fetchEndpoint = async (endpoint, setter) => {
-      try {
-        const res = await authFetch(endpoint);
-        if (!res.ok) throw new Error(`Failed to fetch ${endpoint}`);
-        const json = await res.json();
-        if (!json.success) throw new Error(json.error || `Failed to fetch ${endpoint}`);
-        setter(json.data || []);
-      } catch (err) {
-        console.error(`[useMasterData] ${endpoint} error:`, err.message);
-        setter([]);
-        throw err;
-      }
-    };
-
     try {
-      await Promise.all([
-        fetchEndpoint('/api/master-data/customers', setCustomers),
-        fetchEndpoint('/api/master-data/sections', setSections),
-        fetchEndpoint('/api/master-data/lines', setLines),
-        fetchEndpoint('/api/master-data/boards', setBoards),
-        fetchEndpoint('/api/master-data/menu-items', setMenuItems),
-      ]);
+      const res = await authFetch('/api/master-data/batch');
+      if (!res.ok) throw new Error('Failed to fetch master data');
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error || 'Failed to fetch master data');
+
+      const data = json.data || {};
+      setCustomers(data.customers || []);
+      setSections(data.sections || []);
+      setLines(data.lines || []);
+      setBoards(data.boards || []);
+      setMenuItems(data.menuItems || []);
     } catch (err) {
+      console.error('[useMasterData] batch fetch error:', err.message);
       setError(err.message);
     } finally {
       setLoading(false);
@@ -66,18 +57,9 @@ export function useMasterData() {
     return boards.filter(board => board.customerId === customerId);
   }, [boards]);
 
-  const getSectionsByCustomer = useCallback(async (customerId) => {
-    try {
-      const res = await authFetch(`/api/master-data/sections?customer_id=${customerId}`);
-      if (!res.ok) throw new Error('Failed to fetch sections');
-      const json = await res.json();
-      if (!json.success) throw new Error(json.error || 'Failed to fetch sections');
-      return json.data || [];
-    } catch (err) {
-      console.error('[useMasterData] getSectionsByCustomer error:', err.message);
-      return [];
-    }
-  }, []);
+  const getSectionsByCustomer = useCallback((customerId) => {
+    return sections.filter(s => s.customerId === customerId);
+  }, [sections]);
 
   const getCustomerById = useCallback((id) => {
     return customers.find(c => c.id === id);

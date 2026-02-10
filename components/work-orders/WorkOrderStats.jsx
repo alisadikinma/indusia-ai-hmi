@@ -5,7 +5,7 @@
 
 'use client';
 
-import { FileText, Clock, Play, CheckCircle } from 'lucide-react';
+import { FileText, Clock, Play, Pause, CheckCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export function WorkOrderStats({ workOrders = [] }) {
@@ -14,6 +14,7 @@ export function WorkOrderStats({ workOrders = [] }) {
     total: workOrders.length,
     draft: workOrders.filter(wo => wo.status === 'draft').length,
     active: workOrders.filter(wo => wo.status === 'active').length,
+    onHold: workOrders.filter(wo => wo.status === 'on_hold').length,
     completed: workOrders.filter(wo => wo.status === 'completed').length,
   };
 
@@ -40,6 +41,13 @@ export function WorkOrderStats({ workOrders = [] }) {
       bgColor: 'bg-green-500/20',
     },
     {
+      label: 'On Hold',
+      value: stats.onHold,
+      icon: Pause,
+      color: 'text-yellow-400',
+      bgColor: 'bg-yellow-500/20',
+    },
+    {
       label: 'Completed',
       value: stats.completed,
       icon: CheckCircle,
@@ -49,7 +57,7 @@ export function WorkOrderStats({ workOrders = [] }) {
   ];
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+    <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
       {cards.map((card) => (
         <div
           key={card.label}

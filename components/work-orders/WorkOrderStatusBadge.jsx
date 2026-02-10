@@ -24,6 +24,12 @@ const STATUS_CONFIG = {
     textColor: 'text-green-400',
     borderColor: 'border-green-500/30',
   },
+  on_hold: {
+    label: 'On Hold',
+    bgColor: 'bg-yellow-500/20',
+    textColor: 'text-yellow-400',
+    borderColor: 'border-yellow-500/30',
+  },
   completed: {
     label: 'Completed',
     bgColor: 'bg-purple-500/20',

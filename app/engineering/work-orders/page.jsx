@@ -218,6 +218,50 @@ export default function WorkOrdersPage() {
     }
   };
 
+  // Handle hold work order
+  const handleHold = (workOrder) => {
+    setConfirmDialog({
+      open: true,
+      type: 'hold',
+      workOrder,
+    });
+  };
+
+  const confirmHold = async () => {
+    const { workOrder } = confirmDialog;
+    const result = await update(workOrder.id, { status: 'on_hold' });
+    setConfirmDialog({ open: false, type: null, workOrder: null });
+
+    if (result.success) {
+      showToast('success', `Work Order ${result.data.woNumber} put on hold`);
+      refresh();
+    } else {
+      showToast('error', result.error || 'Failed to hold work order');
+    }
+  };
+
+  // Handle resume work order
+  const handleResume = (workOrder) => {
+    setConfirmDialog({
+      open: true,
+      type: 'resume',
+      workOrder,
+    });
+  };
+
+  const confirmResume = async () => {
+    const { workOrder } = confirmDialog;
+    const result = await update(workOrder.id, { status: 'active' });
+    setConfirmDialog({ open: false, type: null, workOrder: null });
+
+    if (result.success) {
+      showToast('success', `Work Order ${result.data.woNumber} resumed`);
+      refresh();
+    } else {
+      showToast('error', result.error || 'Failed to resume work order');
+    }
+  };
+
   // Handle complete work order
   const handleComplete = (workOrder) => {
     setConfirmDialog({
@@ -288,6 +332,18 @@ export default function WorkOrdersPage() {
           title: 'Start Work Order?',
           message: `This will set ${workOrder?.woNumber} as the active work order for ${workOrder?.line?.name}. Any existing active WO on this line will be blocked.`,
           confirmText: 'Start WO',
+        };
+      case 'hold':
+        return {
+          title: 'Hold Work Order?',
+          message: `This will put ${workOrder?.woNumber} on hold. The line will stop receiving new inspections. Progress: ${workOrder?.completedQty}/${workOrder?.lotSize}`,
+          confirmText: 'Hold WO',
+        };
+      case 'resume':
+        return {
+          title: 'Resume Work Order?',
+          message: `This will resume ${workOrder?.woNumber} and set it back to active on ${workOrder?.line?.name}. Progress: ${workOrder?.completedQty}/${workOrder?.lotSize}`,
+          confirmText: 'Resume WO',
         };
       case 'complete':
         return {
@@ -369,6 +425,8 @@ export default function WorkOrdersPage() {
         onComplete={handleComplete}
         onEdit={handleEdit}
         onDelete={handleDelete}
+        onHold={handleHold}
+        onResume={handleResume}
         sortBy={sortBy}
         sortDirection={sortDirection}
         onSort={handleSort}
@@ -399,6 +457,8 @@ export default function WorkOrdersPage() {
         onClose={() => setConfirmDialog({ open: false, type: null, workOrder: null })}
         onConfirm={
           confirmDialog.type === 'start' ? confirmStart :
+          confirmDialog.type === 'hold' ? confirmHold :
+          confirmDialog.type === 'resume' ? confirmResume :
           confirmDialog.type === 'complete' ? confirmComplete :
           confirmDialog.type === 'delete' ? confirmDelete :
           () => {}

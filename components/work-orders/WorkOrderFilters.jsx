@@ -15,6 +15,7 @@ const STATUS_OPTIONS = [
   { value: 'draft', label: 'Draft' },
   { value: 'ready', label: 'Ready' },
   { value: 'active', label: 'Active' },
+  { value: 'on_hold', label: 'On Hold' },
   { value: 'completed', label: 'Completed' },
   { value: 'closed', label: 'Closed' },
 ];

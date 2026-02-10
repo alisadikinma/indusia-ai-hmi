@@ -230,7 +230,7 @@ export default function DashboardPage() {
   } = useDashboardSummary({
     sectionId,
     lineId,
-    refreshInterval: 5000
+    refreshInterval: 30000
   })
 
   const { data: trend, loading: trendLoading } = useDashboardTrend({

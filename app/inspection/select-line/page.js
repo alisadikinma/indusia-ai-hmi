@@ -431,150 +431,36 @@ export default function SelectLinePage() {
     }
   }, [lines]);
 
-  // Fetch sections, lines, and active WO data
+  // Fetch all select-line data in a single batch request
+  // Replaces 3 base calls + 3 calls per line (N+1) with 1 server-side batch
   const fetchData = useCallback(async () => {
     setDataLoading(true);
     try {
-      // Fetch sections, lines, and boards
-      const [sectionsRes, linesRes, boardsRes] = await Promise.all([
-        authFetch('/api/master-data/sections'),
-        authFetch('/api/master-data/lines'),
-        authFetch('/api/master-data/boards')
-      ]);
+      const res = await authFetch('/api/inspection/select-line-data');
+      const json = await res.json();
 
-      const sectionsData = await sectionsRes.json();
-      const linesData = await linesRes.json();
-      const boardsData = await boardsRes.json();
-
-      if (sectionsData.success) {
-        setSections(sectionsData.data || []);
+      if (!json.success) {
+        console.error('Failed to fetch select-line data:', json.error);
+        return;
       }
 
-      if (boardsData.success) {
-        const boardList = boardsData.data || [];
-        setModels(boardList);
-        // Don't pre-select models on load - operator must explicitly choose
-      }
-      
-      if (linesData.success) {
-        const linesList = linesData.data || [];
-        
-        // Fetch stats and active WO for each line
-        const linesWithStats = await Promise.all(
-          linesList.map(async (line) => {
-            const lineData = {
-              id: line.id,
-              name: line.name,
-              sectionId: line.sectionId || line.section_id,
-              customerId: line.customerId || line.customer_id,
-              status: 'idle',
-              customerName: line.customer?.name || null,
-              customerCode: line.customer?.code || null,
-              woNumber: null,
-              lotSize: 0,
-              startedAt: null,
-              operatorId: null,
-              operatorName: null,
-              inspected: 0,
-              goodQty: 0,
-              ngQty: 0,
-              yield: 0
-            };
+      const { sections: sData, lines: lData, boards: bData } = json.data;
 
-            try {
-              // Fetch all per-line data in parallel
-              const [woRes, statsRes, lineStateRes] = await Promise.all([
-                authFetch(`/api/work-orders/active/${line.id}`).then(r => r.json()).catch(() => ({})),
-                authFetch(`/api/inspection/stats/${line.id}`).then(r => r.json()).catch(() => ({})),
-                authFetch(`/api/inspection/line-state/${line.id}`).then(r => r.json()).catch(() => ({}))
-              ]);
+      setSections(sData || []);
+      setModels(bData || []);
 
-              // Apply work order data
-              if (woRes.success && woRes.data) {
-                const wo = woRes.data;
-                lineData.status = 'running';
-                lineData.customerName = wo.customer?.name || lineData.customerName;
-                lineData.customerCode = wo.customer?.code || lineData.customerCode;
-                lineData.woNumber = wo.woNumber;
-                lineData.lotSize = wo.lotSize || 0;
-                lineData.woBoardName = wo.board?.name || null;
-                lineData.woRemaining = (wo.lotSize || 0) - (wo.completedQty || 0);
-                lineData.startedAt = wo.startedAt || wo.started_at || wo.createdAt || wo.created_at;
-                lineData.inspected = wo.completedQty || 0;
-                lineData.goodQty = wo.goodQty || 0;
-                lineData.ngQty = wo.ngQty || 0;
-                lineData.yield = lineData.inspected > 0
-                  ? ((lineData.goodQty / lineData.inspected) * 100)
-                  : 0;
-              }
+      // Enrich with localStorage model name fallback (client-only)
+      const enrichedLines = (lData || []).map(line => {
+        if (!line.activeModelName) {
+          try {
+            const saved = JSON.parse(localStorage.getItem(`indusia_line_model_${line.id}`));
+            if (saved?.modelName) line.activeModelName = saved.modelName;
+          } catch (e) { /* ignore */ }
+        }
+        return line;
+      });
 
-              // Apply stats data (overrides WO counters if stats have data)
-              if (statsRes.success && statsRes.data) {
-                const data = statsRes.data;
-                const stats = data.stats || {};
-                const total = stats.total || 0;
-
-                if (total > 0) {
-                  lineData.inspected = total;
-                  lineData.goodQty = stats.passed || 0;
-                  lineData.ngQty = stats.failed || 0;
-                  lineData.yield = parseFloat(stats.yield) || 0;
-
-                  if (data.workOrder?.woNumber) {
-                    lineData.woNumber = data.workOrder.woNumber;
-                  }
-                  if (data.workOrder?.lotSize) {
-                    lineData.lotSize = data.workOrder.lotSize;
-                  }
-                  if (data.workOrder?.startedAt || data.workOrder?.started_at) {
-                    lineData.startedAt = data.workOrder.startedAt || data.workOrder.started_at;
-                  }
-                }
-              }
-
-              // Apply line-state data
-              if (lineStateRes.success && lineStateRes.data) {
-                const processStatus = lineStateRes.data.processStatus || 'IDLE';
-
-                const statusMap = {
-                  'RUNNING': 'running',
-                  'PAUSED': 'paused',
-                  'STOPPED': 'stopped',
-                  'IDLE': 'idle',
-                  'READY': 'idle'
-                };
-
-                lineData.status = statusMap[processStatus] || 'idle';
-
-                if (lineStateRes.data.updatedBy) {
-                  lineData.operatorName = lineStateRes.data.updatedBy;
-                }
-                // Model name: prefer line-state, fall back to currentInspection, then localStorage
-                const stateModel = lineStateRes.data.modelName
-                  || lineStateRes.data.currentInspection?.modelName
-                  || lineStateRes.data.currentInspection?.model_name
-                  || null;
-                if (stateModel) {
-                  lineData.activeModelName = stateModel;
-                } else {
-                  try {
-                    const saved = JSON.parse(localStorage.getItem(`indusia_line_model_${line.id}`));
-                    if (saved?.modelName) lineData.activeModelName = saved.modelName;
-                  } catch (e) { /* ignore */ }
-                }
-              } else if (lineData.woNumber) {
-                lineData.status = 'idle';
-              }
-            } catch (err) {
-              console.warn(`Failed to fetch data for line ${line.id}:`, err);
-            }
-
-            return lineData;
-          })
-        );
-        
-        setLines(linesWithStats);
-      }
+      setLines(enrichedLines);
     } catch (error) {
       console.error('Failed to fetch data:', error);
     } finally {
@@ -590,13 +476,13 @@ export default function SelectLinePage() {
     }
   }, [user, fetchData]);
 
-  // Auto-refresh every 10 seconds
+  // Auto-refresh every 15 seconds (single batch call, no N+1)
   useEffect(() => {
     const interval = setInterval(() => {
       if (user && !dataLoading) {
         fetchData();
       }
-    }, 10000);
+    }, 15000);
     return () => clearInterval(interval);
   }, [user, dataLoading, fetchData]);
 

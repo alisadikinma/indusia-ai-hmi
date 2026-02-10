@@ -6,11 +6,12 @@
 'use client';
 
 import { useState } from 'react';
-import { 
-  Play, 
-  CheckCircle, 
-  Trash2, 
-  Edit, 
+import {
+  Play,
+  Pause,
+  CheckCircle,
+  Trash2,
+  Edit,
   MoreHorizontal,
   ChevronUp,
   ChevronDown,
@@ -72,14 +73,17 @@ function ProgressBar({ current, total, className }) {
 /**
  * Action dropdown menu
  */
-function ActionMenu({ workOrder, onStart, onComplete, onEdit, onDelete }) {
+function ActionMenu({ workOrder, onStart, onComplete, onEdit, onDelete, onHold, onResume }) {
   const [open, setOpen] = useState(false);
   const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
-  const buttonRef = useState(null);
 
+  const hasProduction = (workOrder.completedQty || 0) >= 1;
   const canStart = workOrder.status === 'draft' || workOrder.status === 'ready';
-  const canComplete = workOrder.status === 'active';
-  const canEdit = ['draft', 'ready', 'active'].includes(workOrder.status);
+  const canComplete = workOrder.status === 'active' || workOrder.status === 'on_hold';
+  const canHold = workOrder.status === 'active' && hasProduction;
+  const canResume = workOrder.status === 'on_hold';
+  // Can only edit info if WO has NOT started production
+  const canEdit = ['draft', 'ready', 'active'].includes(workOrder.status) && !hasProduction;
   const canDelete = workOrder.status === 'draft';
 
   const handleToggle = (e) => {
@@ -87,11 +91,13 @@ function ActionMenu({ workOrder, onStart, onComplete, onEdit, onDelete }) {
       const rect = e.currentTarget.getBoundingClientRect();
       setMenuPosition({
         top: rect.bottom + 4,
-        left: rect.right - 160, // 160 = menu width
+        left: rect.right - 160,
       });
     }
     setOpen(!open);
   };
+
+  const hasAnyAction = canStart || canComplete || canHold || canResume || canEdit || canDelete;
 
   return (
     <div className="relative">
@@ -107,11 +113,11 @@ function ActionMenu({ workOrder, onStart, onComplete, onEdit, onDelete }) {
 
       {open && (
         <>
-          <div 
-            className="fixed inset-0 z-40" 
-            onClick={() => setOpen(false)} 
+          <div
+            className="fixed inset-0 z-40"
+            onClick={() => setOpen(false)}
           />
-          <div 
+          <div
             className={cn(
               "fixed z-50",
               "w-[160px] bg-indusia-surface border border-indusia-border rounded-lg shadow-xl",
@@ -132,7 +138,35 @@ function ActionMenu({ workOrder, onStart, onComplete, onEdit, onDelete }) {
                 Start WO
               </button>
             )}
-            
+
+            {canResume && (
+              <button
+                onClick={() => { onResume(workOrder); setOpen(false); }}
+                className={cn(
+                  "w-full px-4 py-2 text-left text-sm",
+                  "flex items-center gap-2",
+                  "hover:bg-indusia-bg text-green-400"
+                )}
+              >
+                <Play className="w-4 h-4" />
+                Resume WO
+              </button>
+            )}
+
+            {canHold && (
+              <button
+                onClick={() => { onHold(workOrder); setOpen(false); }}
+                className={cn(
+                  "w-full px-4 py-2 text-left text-sm",
+                  "flex items-center gap-2",
+                  "hover:bg-indusia-bg text-yellow-400"
+                )}
+              >
+                <Pause className="w-4 h-4" />
+                Hold WO
+              </button>
+            )}
+
             {canComplete && (
               <button
                 onClick={() => { onComplete(workOrder); setOpen(false); }}
@@ -178,7 +212,7 @@ function ActionMenu({ workOrder, onStart, onComplete, onEdit, onDelete }) {
               </>
             )}
 
-            {!canStart && !canComplete && !canEdit && !canDelete && (
+            {!hasAnyAction && (
               <div className="px-4 py-2 text-sm text-indusia-textMuted">
                 No actions available
               </div>
@@ -197,6 +231,8 @@ export function WorkOrderTable({
   onComplete,
   onEdit,
   onDelete,
+  onHold,
+  onResume,
   sortBy = 'created_at',
   sortDirection = 'desc',
   onSort,
@@ -377,6 +413,8 @@ export function WorkOrderTable({
                     onComplete={onComplete}
                     onEdit={onEdit}
                     onDelete={onDelete}
+                    onHold={onHold}
+                    onResume={onResume}
                   />
                 </td>
               </tr>

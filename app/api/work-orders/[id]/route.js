@@ -12,6 +12,26 @@ import { sanitizeRequestBody } from '@/lib/utils/sanitize';
 import { workOrderRepo } from '@/lib/repos/workOrderRepo';
 import { updateWorkOrderSchema } from '@/lib/validations/workOrderSchema';
 import { notifyWorkOrderStarted, notifyWorkOrderCompleted } from '@/lib/notificationHelper';
+import fs from 'fs';
+import pathModule from 'path';
+
+const STATE_FILE = pathModule.join(process.cwd(), '.line-state.json');
+
+/**
+ * Read line state from the shared state file
+ * Returns processStatus for a given lineId, or null if not found
+ */
+function getLineProcessStatus(lineId) {
+  try {
+    if (!fs.existsSync(STATE_FILE)) return null;
+    const data = fs.readFileSync(STATE_FILE, 'utf-8');
+    const entries = new Map(JSON.parse(data));
+    const state = entries.get(lineId);
+    return state?.processStatus || null;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * GET /api/work-orders/[id]
@@ -82,10 +102,59 @@ async function handlePUT(request, { params }) {
       );
     }
 
-    // Get current WO to check status change
+    // Get current WO to check status change and production guard
     const currentWO = await workOrderRepo.getById(id);
     const previousStatus = currentWO?.data?.status;
     const newStatus = validation.data.status;
+
+    // Guard: WOs with production (completedQty >= 1) can only change status
+    const hasProduction = (currentWO?.data?.completedQty || 0) >= 1;
+    if (hasProduction) {
+      const dataKeys = Object.keys(validation.data);
+      const nonStatusKeys = dataKeys.filter(k => k !== 'status');
+
+      if (nonStatusKeys.length > 0) {
+        return NextResponse.json(
+          { success: false, error: 'Work order with production history can only change status' },
+          { status: 400 }
+        );
+      }
+
+      if (newStatus && !['on_hold', 'completed', 'active'].includes(newStatus)) {
+        return NextResponse.json(
+          { success: false, error: 'Work order with production can only be set to on_hold, active, or completed' },
+          { status: 400 }
+        );
+      }
+    }
+
+    // Guard: on_hold requires machine to be STOPPED (not RUNNING)
+    if (newStatus === 'on_hold' && previousStatus === 'active') {
+      const lineId = currentWO?.data?.lineId;
+      if (lineId) {
+        const machineStatus = getLineProcessStatus(lineId);
+        if (machineStatus === 'RUNNING') {
+          return NextResponse.json(
+            { success: false, error: 'Mesin masih RUNNING. Stop mesin terlebih dahulu sebelum mengubah status ke On Hold.' },
+            { status: 400 }
+          );
+        }
+      }
+    }
+
+    // Guard: resuming from on_hold → check no other active WO on same line
+    if (newStatus === 'active' && previousStatus === 'on_hold') {
+      const lineId = currentWO?.data?.lineId;
+      if (lineId) {
+        const activeCheck = await workOrderRepo.getActiveByLine(lineId);
+        if (activeCheck?.data && activeCheck.data.id !== id) {
+          return NextResponse.json(
+            { success: false, error: `Cannot resume: line already has active WO ${activeCheck.data.woNumber}` },
+            { status: 400 }
+          );
+        }
+      }
+    }
 
     const result = await workOrderRepo.update(id, validation.data);
 

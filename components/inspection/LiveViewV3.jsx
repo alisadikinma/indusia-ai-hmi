@@ -162,13 +162,42 @@ export function LiveViewV3({
   // Reconcile session counters when server data catches up via refreshWO
   useEffect(() => {
     if (!fetchedWO) return
+    const serverNow = {
+      completedQty: fetchedWO.completedQty || 0,
+      goodQty: fetchedWO.goodQty || 0,
+      ngQty: fetchedWO.ngQty || 0,
+      falseCallQty: fetchedWO.falseCallQty || 0,
+    }
+
+    // If server counters dropped (WO reset externally), clear session counters
+    // This handles: admin reset counters in DB, or lot_size changed and counters zeroed
+    if (lastKnownServerRef.current) {
+      const prev = lastKnownServerRef.current
+      if (serverNow.completedQty < prev.completedQty) {
+        console.log('[LiveView] Server counters dropped (WO reset detected), clearing sessionCounters')
+        setSessionCounters(COUNTER_ZERO)
+        setWoCompleted(false)
+        lastKnownServerRef.current = serverNow
+        return
+      }
+    } else {
+      // First load: if server is at 0 but session counters are non-zero, it's a stale restore
+      setSessionCounters(prev => {
+        if (serverNow.completedQty === 0 && prev.completedQty > 0) {
+          console.log('[LiveView] Server at 0 but sessionCounters restored from localStorage, clearing')
+          return COUNTER_ZERO
+        }
+        return prev
+      })
+    }
+
     if (lastKnownServerRef.current) {
       const prev = lastKnownServerRef.current
       const serverDelta = {
-        completedQty: (fetchedWO.completedQty || 0) - (prev.completedQty || 0),
-        goodQty: (fetchedWO.goodQty || 0) - (prev.goodQty || 0),
-        ngQty: (fetchedWO.ngQty || 0) - (prev.ngQty || 0),
-        falseCallQty: (fetchedWO.falseCallQty || 0) - (prev.falseCallQty || 0),
+        completedQty: serverNow.completedQty - prev.completedQty,
+        goodQty: serverNow.goodQty - prev.goodQty,
+        ngQty: serverNow.ngQty - prev.ngQty,
+        falseCallQty: serverNow.falseCallQty - prev.falseCallQty,
       }
       // Server caught up — reduce local offsets to avoid double-counting
       if (serverDelta.completedQty > 0 || serverDelta.goodQty > 0 || serverDelta.ngQty > 0 || serverDelta.falseCallQty > 0) {
@@ -180,12 +209,7 @@ export function LiveViewV3({
         }))
       }
     }
-    lastKnownServerRef.current = {
-      completedQty: fetchedWO.completedQty || 0,
-      goodQty: fetchedWO.goodQty || 0,
-      ngQty: fetchedWO.ngQty || 0,
-      falseCallQty: fetchedWO.falseCallQty || 0,
-    }
+    lastKnownServerRef.current = serverNow
   }, [fetchedWO])
 
   // Model selector state (fallback to localStorage if prop is empty)
@@ -456,11 +480,60 @@ export function LiveViewV3({
     setAutoNgEnabled(prev => !prev)
   }, [isOperator])
   
+  // WO completion state — shows overlay and blocks further production
+  const [woCompleted, setWoCompleted] = useState(false)
+  const [woOnHold, setWoOnHold] = useState(false)
+
+  // Reactive WO completion check — uses DB values only (source of truth).
+  // sessionCounters may be stale from localStorage on first render, so we don't include them here.
+  // The submitDecision guard handles the session-counter-based overflow during active inspection.
+  useEffect(() => {
+    if (!isOperator || !workOrder) return
+    const dbCompleted = workOrder.completedQty || 0
+    const isCompleted = workOrder.lotSize > 0 && dbCompleted >= workOrder.lotSize
+    if (isCompleted && !woCompleted) {
+      console.log('[LiveView] WO completed (DB):', dbCompleted, '>=', workOrder.lotSize)
+      setWoCompleted(true)
+      if (processStatus === 'RUNNING' || processStatus === 'PAUSED') {
+        stopProcess().catch(() => {})
+        saveLineState({ processStatus: 'STOPPED' })
+      }
+    } else if (!isCompleted && woCompleted) {
+      // WO was reset (counters cleared or lot_size increased) — dismiss overlay
+      console.log('[LiveView] WO no longer completed (DB):', dbCompleted, '<', workOrder.lotSize)
+      setWoCompleted(false)
+    }
+  }, [workOrder, isOperator, woCompleted, processStatus, stopProcess, saveLineState])
+
   // Process control wrappers that save state to API
   const handleRunProcess = useCallback(async () => {
+    // Block start if WO is completed (use effective total including session offsets)
+    if (workOrder && workOrder.lotSize > 0) {
+      const totalCompleted = (workOrder.completedQty || 0) + sessionCounters.completedQty
+      if (totalCompleted >= workOrder.lotSize) {
+        setWoCompleted(true)
+        return
+      }
+    }
+
+    // Fresh check: verify WO is still active before starting machine
+    try {
+      const res = await authFetch(`/api/work-orders/active/${lineId}`)
+      const json = await res.json()
+      if (!json.success || !json.data) {
+        console.warn('[LiveView] No active WO found on line, blocking start')
+        setWoOnHold(true)
+        return
+      }
+    } catch (err) {
+      console.error('[LiveView] Failed to check WO status:', err)
+      // On network error, still allow start to avoid blocking production
+    }
+
+    setWoOnHold(false)
     await runProcess()
     saveLineState({ processStatus: 'RUNNING' })
-  }, [runProcess, saveLineState])
+  }, [runProcess, saveLineState, workOrder, sessionCounters.completedQty, lineId])
   
   const handlePauseProcess = useCallback(async () => {
     await pauseProcess()
@@ -863,6 +936,17 @@ export function LiveViewV3({
       return
     }
 
+    // Client-side guard: block if WO already reached lot size
+    if (workOrder.lotSize > 0) {
+      const currentTotal = (workOrder.completedQty || 0) + sessionCounters.completedQty
+      if (currentTotal >= workOrder.lotSize) {
+        console.warn('[LiveView] submitDecision blocked: WO lot size reached', { currentTotal, lotSize: workOrder.lotSize })
+        setWoCompleted(true)
+        try { await handleStopProcess() } catch (e) { /* ignore */ }
+        return
+      }
+    }
+
     try {
       // 1. Send to AI Backend (triggers PLC)
       if (currentInspection) {
@@ -1036,9 +1120,11 @@ export function LiveViewV3({
           counterUpdate.falseCallQty = qty
         }
 
+        let wasAutoCompleted = false
         try {
           const counterResult = await updateCounters(workOrder.id, counterUpdate)
           console.log('[LiveView] Counter update:', counterResult?.success ? 'OK' : counterResult?.error)
+          wasAutoCompleted = counterResult?.autoCompleted === true
         } catch (dbError) {
           console.warn('[LiveView] Update counters failed:', dbError)
         }
@@ -1048,6 +1134,17 @@ export function LiveViewV3({
           await refreshWO()
         } catch (refreshErr) {
           console.warn('[LiveView] WO refresh failed:', refreshErr)
+        }
+
+        // 7. Auto-stop machine if WO was completed (lot size reached)
+        if (wasAutoCompleted) {
+          console.log('[LiveView] WO auto-completed — stopping machine')
+          setWoCompleted(true)
+          try {
+            await handleStopProcess()
+          } catch (stopErr) {
+            console.warn('[LiveView] Auto-stop failed:', stopErr)
+          }
         }
       } else if (BYPASS_WO_CHECK) {
         // Mock WO: update counters locally in state (cavity_count PCBs per board)
@@ -1083,7 +1180,8 @@ export function LiveViewV3({
       }
     }
   }, [activeInspection, workOrder, fetchedWO, currentInspection, confirmInspection,
-      lineId, sectionId, customerId, user, updateCounters, refreshWO, devMockInspection, activeCavityCount])
+      lineId, sectionId, customerId, user, updateCounters, refreshWO, devMockInspection, activeCavityCount,
+      sessionCounters.completedQty, handleStopProcess])
 
   /**
    * Handle GOOD button click
@@ -1660,13 +1758,13 @@ export function LiveViewV3({
           {/* RUN Button */}
           <button
             onClick={handleRunProcess}
-            disabled={!isOperator || !isConnected || isControlling || effectiveProcessStatus === 'RUNNING'}
+            disabled={!isOperator || !isConnected || isControlling || effectiveProcessStatus === 'RUNNING' || woCompleted || woOnHold}
             className={cn(
               "h-10 px-4 flex items-center gap-2 border-2 transition-all",
               "font-display text-xs font-bold tracking-wider",
               effectiveProcessStatus === 'RUNNING'
                 ? "bg-phosphor-green border-phosphor-green text-void"
-                : isOperator && isConnected && effectiveProcessStatus !== 'RUNNING'
+                : isOperator && isConnected && effectiveProcessStatus !== 'RUNNING' && !woCompleted && !woOnHold
                   ? "border-phosphor-green text-phosphor-green hover:bg-phosphor-green hover:text-void"
                   : "border-surface-border text-text-tertiary cursor-not-allowed"
             )}
@@ -2237,6 +2335,78 @@ export function LiveViewV3({
           >
             RETRY
           </button>
+        </div>
+      )}
+
+      {/* WO Completed Overlay */}
+      {woOnHold && !woCompleted && (
+        <div className="fixed inset-0 z-50 bg-void/90 flex items-center justify-center">
+          <div className="bg-panel border-2 border-phosphor-amber p-8 max-w-lg text-center space-y-6">
+            <Pause className="w-16 h-16 text-phosphor-amber mx-auto" />
+            <h2 className="font-display text-3xl font-bold text-phosphor-amber tracking-wide">
+              WORK ORDER ON HOLD
+            </h2>
+            <div className="space-y-2">
+              <p className="font-mono text-lg text-text-primary">
+                {workOrder?.woNumber || 'WO'}
+              </p>
+              <p className="font-mono text-sm text-text-secondary">
+                Work Order tidak aktif atau sedang di-hold. Mesin tidak dapat dijalankan.
+              </p>
+            </div>
+            <div className="pt-4 border-t border-surface-border space-y-3">
+              <p className="font-mono text-sm text-text-tertiary">
+                Hubungi supervisor untuk mengaktifkan kembali Work Order.
+              </p>
+              <div className="flex items-center justify-center gap-3">
+                <button
+                  onClick={() => { setWoOnHold(false); refreshWO(); }}
+                  className="px-6 py-3 border-2 border-phosphor-amber text-phosphor-amber font-display font-bold tracking-wider hover:bg-phosphor-amber hover:text-void transition-all"
+                >
+                  REFRESH STATUS
+                </button>
+                <button
+                  onClick={() => router.push('/inspection/select-line')}
+                  className="px-6 py-3 bg-surface-border text-text-secondary font-display font-bold tracking-wider hover:bg-elevated transition-all"
+                >
+                  BACK TO LINE SELECT
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {woCompleted && (
+        <div className="fixed inset-0 z-50 bg-void/90 flex items-center justify-center">
+          <div className="bg-panel border-2 border-phosphor-green p-8 max-w-lg text-center space-y-6">
+            <CheckCircle2 className="w-16 h-16 text-phosphor-green mx-auto" />
+            <h2 className="font-display text-3xl font-bold text-phosphor-green tracking-wide">
+              WORK ORDER COMPLETED
+            </h2>
+            <div className="space-y-2">
+              <p className="font-mono text-lg text-text-primary">
+                {workOrder?.woNumber || 'WO'}
+              </p>
+              <p className="font-mono text-sm text-text-secondary">
+                {effectiveCounters?.completedQty?.toLocaleString() || 0} / {effectiveCounters?.lotSize?.toLocaleString() || 0} units completed
+              </p>
+              <p className="font-mono text-sm text-text-tertiary">
+                GOOD: {effectiveCounters?.goodQty?.toLocaleString() || 0} | NG: {effectiveCounters?.ngQty?.toLocaleString() || 0} | Yield: {yieldPercent}%
+              </p>
+            </div>
+            <div className="pt-4 border-t border-surface-border space-y-3">
+              <p className="font-mono text-sm text-phosphor-amber">
+                Machine has been stopped. Please assign a new Work Order to continue.
+              </p>
+              <button
+                onClick={() => router.push('/inspection/select-line')}
+                className="px-8 py-3 bg-phosphor-amber text-void font-display font-bold text-lg tracking-wider hover:shadow-glow-amber transition-all"
+              >
+                SELECT NEW WORK ORDER
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
