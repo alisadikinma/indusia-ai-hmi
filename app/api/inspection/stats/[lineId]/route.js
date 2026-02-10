@@ -42,7 +42,9 @@ export async function GET(request, { params }) {
     
     // ============ Try Work Order First ============
     if (useWO) {
-      const { data: activeWO, error: woError } = await supabase
+      // Use .order().limit(1) instead of .single() to handle edge case
+      // where multiple active WOs exist for the same line
+      const { data: activeWOs, error: woError } = await supabase
         .from('work_orders')
         .select(`
           id,
@@ -57,8 +59,10 @@ export async function GET(request, { params }) {
         `)
         .eq('line_id', lineId)
         .eq('status', 'active')
-        .single();
-      
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      const activeWO = activeWOs?.[0];
       if (!woError && activeWO) {
         // Calculate yield from WO
         const yieldPct = activeWO.completed_qty > 0 

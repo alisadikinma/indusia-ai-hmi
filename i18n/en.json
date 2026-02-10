@@ -272,7 +272,11 @@
     "viewInspection": "VIEW INSPECTION",
     "connecting": "CONNECTING...",
     "resumingSession": "RESUMING SESSION",
-    "connectingTo": "Connecting to {name}..."
+    "connectingTo": "Connecting to {name}...",
+    "aiModel": "AI MODEL",
+    "selectModel": "-- Select Board --",
+    "selectModelRequired": "Select AI model to continue",
+    "noModelsAvailable": "No boards registered. Add boards via Master Data."
   },
   "lineStatus": {
     "running": "RUNNING",

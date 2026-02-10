@@ -271,7 +271,11 @@
     "viewInspection": "LIHAT INSPEKSI",
     "connecting": "MENGHUBUNGKAN...",
     "resumingSession": "MELANJUTKAN SESI",
-    "connectingTo": "Menghubungkan ke {name}..."
+    "connectingTo": "Menghubungkan ke {name}...",
+    "aiModel": "MODEL AI",
+    "selectModel": "-- Pilih Board --",
+    "selectModelRequired": "Pilih model AI untuk melanjutkan",
+    "noModelsAvailable": "Belum ada board terdaftar. Tambahkan board di Master Data."
   },
   "lineStatus": {
     "running": "BERJALAN",
