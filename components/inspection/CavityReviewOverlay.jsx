@@ -36,7 +36,7 @@ export function CavityReviewOverlay({
   initialDecisions = {}, // Persisted decisions from parent (survives modal close/reopen)
   onDecisionChange,      // (key, value) => void — sync each decision to parent immediately
 }) {
-  const serialNumber = inspection?.serialNumber || 'N/A'
+  const boardSerialNumber = inspection?.serialNumber || 'N/A'
 
   // Collect all NG frames from both sides into a flat review list
   // Use loose equality (== true) because backend may send label as boolean true OR integer 1
@@ -233,14 +233,12 @@ export function CavityReviewOverlay({
       {/* ============ Header ============ */}
       <div className="h-14 px-6 flex items-center justify-between bg-terminal border-b border-surface-border shrink-0">
         <div className="flex items-center gap-4">
-          {/* Queue indicator */}
-          <span className="font-display font-bold text-phosphor-amber text-lg">
-            PCB {queuePosition}/{queueTotal}
-          </span>
-          {/* Serial number */}
-          <span className="font-mono text-sm text-text-secondary">
-            SN: {serialNumber}
-          </span>
+          {/* Queue indicator — only show for multi-cavity panels */}
+          {queueTotal > 1 && (
+            <span className="font-display font-bold text-phosphor-amber text-lg">
+              PCB {queuePosition}/{queueTotal}
+            </span>
+          )}
           {/* AI decision */}
           <span className="px-2 py-0.5 rounded bg-phosphor-red/20 text-phosphor-red font-mono text-sm font-bold">
             AI: NG
@@ -321,6 +319,12 @@ export function CavityReviewOverlay({
               style={{ cursor: zoom > 1 ? 'grab' : 'default' }}>
               <div className="relative transition-transform duration-200"
                 style={{ transform: `scale(${zoom})`, transformOrigin: 'center' }}>
+                {/* Floating SN badge — positioned above the image */}
+                <div className="absolute top-2 left-1/2 -translate-x-1/2 z-10 px-3 py-1.5 rounded bg-void/85 border border-phosphor-amber/50 backdrop-blur-sm">
+                  <span className="font-mono text-sm font-bold text-phosphor-amber">
+                    SN: {currentFrame?.serial_number || boardSerialNumber}
+                  </span>
+                </div>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={currentFrame.image_url || currentFrame.image_raw_url} alt={`${currentFrame.side} frame ${currentFrame.frameIndex + 1}`}
                   className="max-w-full max-h-[60vh] object-contain" />
