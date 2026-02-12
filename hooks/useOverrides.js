@@ -45,6 +45,18 @@ const setCache = (key, data, filters = null) => {
   }
 };
 
+/**
+ * Clear override caches so subsequent reads fetch fresh data.
+ * Call this after creating/modifying overrides from outside the hook.
+ */
+export function clearOverridesCache() {
+  if (typeof window === 'undefined') return
+  try {
+    localStorage.removeItem(CACHE_KEY_OVERRIDES)
+    localStorage.removeItem(CACHE_KEY_STATS)
+  } catch (e) { /* localStorage may be unavailable */ }
+}
+
 export function useOverrides(initialFilters = {}) {
   const [overrides, setOverrides] = useState([]);
   const [loading, setLoading] = useState(true);

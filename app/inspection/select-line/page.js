@@ -285,11 +285,15 @@ function LineCard({ line, section, isSelected, onSelect, currentUserId, isOperat
               )}
             >
               <option value="">{t('line.selectModel') || '-- Select Board --'}</option>
-              {models.map(board => (
-                <option key={board.id} value={board.name}>
-                  {board.name}{line.woBoardName === board.name && line.woRemaining > 0 ? ` (${line.woRemaining.toLocaleString()} remaining)` : ''}
-                </option>
-              ))}
+              {models.map(board => {
+                const isWoBoard = line.woBoardName === board.name
+                const isDisabled = !isWoBoard
+                return (
+                  <option key={board.id} value={board.name} disabled={isDisabled}>
+                    {board.name}{isWoBoard && line.woRemaining > 0 ? ` (${line.woRemaining.toLocaleString()} remaining)` : ''}{isDisabled ? ' — No WO' : ''}
+                  </option>
+                )
+              })}
             </select>
           ) : (
             <div className="px-3 py-2 border border-phosphor-amber/30 bg-phosphor-amber/5 font-mono text-xs text-phosphor-amber">

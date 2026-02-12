@@ -46,6 +46,7 @@ import { useI18n } from '@/context/I18nContext'
 import { useActiveWorkOrder, useWorkOrderMutations } from '@/hooks/useWorkOrders'
 import { useLiveInspection } from '@/hooks/useLiveInspection'
 import { useAudioFeedback } from '@/hooks/useAudioFeedback'
+import { clearOverridesCache } from '@/hooks/useOverrides'
 
 // Components
 import { InspectionStage } from './InspectionStage'
@@ -59,6 +60,7 @@ import { HeaderInfoBar } from './HeaderInfoBar'
 import { saveInspection } from '@/lib/services/inspectionService'
 import { getInspectionResult } from '@/lib/services/imageService'
 import { authFetch } from '@/lib/utils/authFetch'
+import { findNextUnreviewedFrame } from '@/lib/utils/inspectionReview'
 
 // Constants
 const NG_REVIEW_TIMEOUT_SECONDS = 15 // Timeout for NG review → auto NG
@@ -1197,6 +1199,7 @@ export function LiveViewV3({
 
           if (overrideResult.success) {
             console.log('[LiveView] Override created:', overrideResult.data?.id, overrideResult.duplicate ? '(duplicate)' : '')
+            clearOverridesCache()
           } else {
             console.error('[LiveView] Override creation failed:', overrideResult.error, overrideResult.details)
           }
@@ -1450,12 +1453,12 @@ export function LiveViewV3({
 
     const key = `${frame.side}-${frame.frameIndex}`
     const newDecisions = { ...ngFrameReview.decisions, [key]: 'REAL_NG' }
-    const nextIndex = ngFrameReview.currentIndex + 1
 
-    if (nextIndex >= ngFrameReview.frames.length) {
+    const nextIdx = findNextUnreviewedFrame(ngFrameReview.frames, newDecisions, ngFrameReview.currentIndex + 1)
+    if (nextIdx === -1) {
       completeInlineReview(newDecisions)
     } else {
-      setNgFrameReview(prev => ({ ...prev, currentIndex: nextIndex, decisions: newDecisions }))
+      setNgFrameReview(prev => ({ ...prev, currentIndex: nextIdx, decisions: newDecisions }))
     }
     setInlineReasonInput(false)
     setInlineSelectedReason('')
@@ -1469,12 +1472,12 @@ export function LiveViewV3({
 
     const key = `${frame.side}-${frame.frameIndex}`
     const newDecisions = { ...ngFrameReview.decisions, [key]: effectiveReason }
-    const nextIndex = ngFrameReview.currentIndex + 1
 
-    if (nextIndex >= ngFrameReview.frames.length) {
+    const nextIdx = findNextUnreviewedFrame(ngFrameReview.frames, newDecisions, ngFrameReview.currentIndex + 1)
+    if (nextIdx === -1) {
       completeInlineReview(newDecisions)
     } else {
-      setNgFrameReview(prev => ({ ...prev, currentIndex: nextIndex, decisions: newDecisions }))
+      setNgFrameReview(prev => ({ ...prev, currentIndex: nextIdx, decisions: newDecisions }))
     }
     setInlineReasonInput(false)
     setInlineSelectedReason('')
@@ -2024,47 +2027,55 @@ export function LiveViewV3({
                       <span className="font-mono text-xs text-text-tertiary">No models available</span>
                     </div>
                   ) : (
-                    availableModels.map(model => (
-                      <button
-                        key={model.id}
-                        onClick={() => handleModelSwitch(model.name)}
-                        disabled={model.name === currentModel}
-                        className={cn(
-                          "w-full px-3 py-2.5 text-left flex items-center gap-3 transition-colors",
-                          model.name === currentModel
-                            ? "bg-purple-500/10 border-l-2 border-l-purple-400"
-                            : "hover:bg-surface-border/30 border-l-2 border-l-transparent"
-                        )}
-                      >
-                        <Brain className={cn(
-                          "w-4 h-4 flex-shrink-0",
-                          model.name === currentModel ? "text-purple-400" : "text-text-tertiary"
-                        )} />
-                        <div className="flex-1 min-w-0">
-                          <p className={cn(
-                            "font-mono text-sm font-bold truncate",
-                            model.name === currentModel ? "text-purple-400" : "text-text-primary"
-                          )}>
-                            {model.name}
-                          </p>
-                          <div className="flex items-center gap-2">
-                            {model.customer?.name && (
-                              <span className="font-mono text-[10px] text-text-tertiary">
-                                {model.customer.name}
-                              </span>
-                            )}
-                            {workOrder?.board?.name === model.name && workOrder?.lotSize > 0 && (
-                              <span className="font-mono text-[10px] text-phosphor-green">
-                                {workOrder.lotSize - (workOrder.completedQty || 0)} remaining
-                              </span>
-                            )}
+                    availableModels.map(model => {
+                      const isWoBoard = workOrder?.board?.name === model.name
+                      const isDisabled = model.name === currentModel || !isWoBoard
+                      return (
+                        <button
+                          key={model.id}
+                          onClick={() => !isDisabled && handleModelSwitch(model.name)}
+                          disabled={isDisabled}
+                          className={cn(
+                            "w-full px-3 py-2.5 text-left flex items-center gap-3 transition-colors",
+                            model.name === currentModel
+                              ? "bg-purple-500/10 border-l-2 border-l-purple-400"
+                              : isWoBoard
+                                ? "hover:bg-surface-border/30 border-l-2 border-l-transparent"
+                                : "opacity-40 cursor-not-allowed border-l-2 border-l-transparent"
+                          )}
+                        >
+                          <Brain className={cn(
+                            "w-4 h-4 flex-shrink-0",
+                            model.name === currentModel ? "text-purple-400" : "text-text-tertiary"
+                          )} />
+                          <div className="flex-1 min-w-0">
+                            <p className={cn(
+                              "font-mono text-sm font-bold truncate",
+                              model.name === currentModel ? "text-purple-400" : "text-text-primary"
+                            )}>
+                              {model.name}
+                            </p>
+                            <div className="flex items-center gap-2">
+                              {model.customer?.name && (
+                                <span className="font-mono text-[10px] text-text-tertiary">
+                                  {model.customer.name}
+                                </span>
+                              )}
+                              {isWoBoard && workOrder?.lotSize > 0 ? (
+                                <span className="font-mono text-[10px] text-phosphor-green">
+                                  {workOrder.lotSize - (workOrder.completedQty || 0)} remaining
+                                </span>
+                              ) : !isWoBoard && (
+                                <span className="font-mono text-[10px] text-phosphor-red">No WO</span>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                        {model.name === currentModel && (
-                          <CheckCircle2 className="w-4 h-4 text-purple-400 flex-shrink-0" />
-                        )}
-                      </button>
-                    ))
+                          {model.name === currentModel && (
+                            <CheckCircle2 className="w-4 h-4 text-purple-400 flex-shrink-0" />
+                          )}
+                        </button>
+                      )
+                    })
                   )}
                 </div>
               )}
@@ -2188,6 +2199,7 @@ export function LiveViewV3({
               reviewingFrameKey={inlineReviewActive && ngFrameReview?.frames[ngFrameReview.currentIndex]
                 ? `${ngFrameReview.frames[ngFrameReview.currentIndex].side}-${ngFrameReview.frames[ngFrameReview.currentIndex].frameIndex}`
                 : undefined}
+              frameDecisions={ngFrameReview?.decisions}
             />
           ) : (
             /* Inspection Stage Progress */
@@ -2472,6 +2484,13 @@ export function LiveViewV3({
           onClose={() => setShowCavityOverlay(false)}
           falseCallReasons={falseCallReasons}
           initialFrameIndex={cavityInitialIndex}
+          initialDecisions={ngFrameReview?.decisions || {}}
+          onDecisionChange={(key, value) => {
+            setNgFrameReview(prev => prev ? {
+              ...prev,
+              decisions: { ...prev.decisions, [key]: value }
+            } : prev)
+          }}
         />
       )}
 

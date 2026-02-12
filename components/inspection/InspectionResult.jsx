@@ -11,7 +11,7 @@ import { cn } from '@/lib/utils'
 import { CheckCircle2, AlertTriangle, Clock } from 'lucide-react'
 import SidePanel from './SidePanel'
 
-export function InspectionResult({ inspection, className, onFrameClick, reviewingFrameKey }) {
+export function InspectionResult({ inspection, className, onFrameClick, reviewingFrameKey, frameDecisions }) {
   if (!inspection) return null
 
   const { results, decision } = inspection
@@ -36,7 +36,7 @@ export function InspectionResult({ inspection, className, onFrameClick, reviewin
     <div className={cn("flex flex-col h-full", className)}>
       {/* Dual Side Images with AI Result Center */}
       <div className={cn(
-        "flex-1 p-3 gap-3 min-h-0",
+        "flex-1 p-3 gap-3 min-h-0 overflow-hidden",
         hasBothSides ? "flex" : "flex justify-center"
       )}>
         {/* TOP Side */}
@@ -46,6 +46,7 @@ export function InspectionResult({ inspection, className, onFrameClick, reviewin
             frames={topFrames}
             onFrameClick={onFrameClick}
             reviewingFrameKey={reviewingFrameKey}
+            frameDecisions={frameDecisions}
             className={cn(
               hasSingleSide ? "max-w-3xl w-full" : "flex-1"
             )}
@@ -94,6 +95,7 @@ export function InspectionResult({ inspection, className, onFrameClick, reviewin
             frames={bottomFrames}
             onFrameClick={onFrameClick}
             reviewingFrameKey={reviewingFrameKey}
+            frameDecisions={frameDecisions}
             className={cn(
               hasSingleSide ? "max-w-3xl w-full" : "flex-1"
             )}

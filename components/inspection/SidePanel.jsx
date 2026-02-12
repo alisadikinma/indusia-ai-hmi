@@ -31,7 +31,7 @@ const DEFECT_COLORS = {
   'default': '#EF4444'
 }
 
-export function SidePanel({ side, frames = [], className, onFrameClick, reviewingFrameKey }) {
+export function SidePanel({ side, frames = [], className, onFrameClick, reviewingFrameKey, frameDecisions = {} }) {
   const [activeFrameIndex, setActiveFrameIndex] = useState(0)
   const [zoom, setZoom] = useState(1)
   const [showFullscreen, setShowFullscreen] = useState(false)
@@ -100,7 +100,7 @@ export function SidePanel({ side, frames = [], className, onFrameClick, reviewin
         <div className="px-4 py-3 bg-terminal">
           <span className="font-display font-bold text-lg text-text-primary">{side} Side</span>
         </div>
-        <div className="flex-1 flex items-center justify-center text-text-tertiary min-h-[250px]">
+        <div className="flex-1 flex items-center justify-center text-text-tertiary min-h-0">
           <p className="font-mono text-sm">No image available</p>
         </div>
       </div>
@@ -166,7 +166,7 @@ export function SidePanel({ side, frames = [], className, onFrameClick, reviewin
       {/* Image Container */}
       <div 
         ref={containerRef}
-        className="flex-1 relative bg-void overflow-hidden min-h-[250px]"
+        className="flex-1 relative bg-void overflow-hidden min-h-0"
       >
         {imageUrl ? (
           <div
@@ -183,7 +183,7 @@ export function SidePanel({ side, frames = [], className, onFrameClick, reviewin
                 ref={imgRef}
                 src={imageUrl}
                 alt={`${side} side inspection frame ${activeFrameIndex + 1}`}
-                className="max-w-full max-h-[300px] object-contain"
+                className="max-w-full max-h-[calc(40vh-2rem)] object-contain"
               />
 
               {/* BBOX overlay removed - AI Backend already renders bbox on images */}
@@ -198,13 +198,16 @@ export function SidePanel({ side, frames = [], className, onFrameClick, reviewin
 
       {/* Thumbnail Carousel Strip */}
       {frameCount > 1 && (
-        <div className="px-3 py-2 bg-terminal border-t border-surface-border">
+        <div className="px-3 py-2 bg-terminal border-t border-surface-border flex-shrink-0">
           <div className="flex items-center gap-2 overflow-x-auto pb-1">
             {frames.map((frame, index) => {
               const frameIsNG = frame.label == true
               const isActive = index === activeFrameIndex
               const frameKey = `${side}-${index}`
               const isReviewing = reviewingFrameKey === frameKey
+              const decision = frameDecisions[frameKey]
+              const isConfirmed = decision != null
+              const confirmedAsNG = decision === 'REAL_NG'
 
               return (
                 <button
@@ -219,9 +222,11 @@ export function SidePanel({ side, frames = [], className, onFrameClick, reviewin
                       ? "border-phosphor-amber ring-2 ring-phosphor-amber/50 animate-pulse"
                       : isActive
                         ? "border-phosphor-amber ring-2 ring-phosphor-amber/30"
-                        : frameIsNG
-                          ? "border-phosphor-red/50 hover:border-phosphor-red"
-                          : "border-surface-border hover:border-phosphor-green/50",
+                        : isConfirmed
+                          ? (confirmedAsNG ? "border-phosphor-red" : "border-phosphor-green")
+                          : frameIsNG
+                            ? "border-phosphor-red/50 hover:border-phosphor-red"
+                            : "border-surface-border hover:border-phosphor-green/50",
                     frameIsNG && onFrameClick && "cursor-pointer"
                   )}
                 >
@@ -233,12 +238,14 @@ export function SidePanel({ side, frames = [], className, onFrameClick, reviewin
                     className="w-full h-full object-cover"
                   />
 
-                  {/* NG/GOOD Badge (based on frame.label) */}
+                  {/* Badge: show operator decision if confirmed, otherwise AI label */}
                   <div className={cn(
                     "absolute top-0.5 right-0.5 w-4 h-4 rounded-full flex items-center justify-center",
-                    frameIsNG ? "bg-phosphor-red" : "bg-phosphor-green"
+                    isConfirmed
+                      ? (confirmedAsNG ? "bg-phosphor-red" : "bg-phosphor-green")
+                      : frameIsNG ? "bg-phosphor-red" : "bg-phosphor-green"
                   )}>
-                    {frameIsNG ? (
+                    {(isConfirmed ? confirmedAsNG : frameIsNG) ? (
                       <AlertCircle className="w-3 h-3 text-white" />
                     ) : (
                       <CheckCircle2 className="w-3 h-3 text-white" />

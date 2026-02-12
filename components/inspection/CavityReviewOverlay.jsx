@@ -18,6 +18,7 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { cn } from '@/lib/utils'
+import { findNextUnreviewedFrame } from '@/lib/utils/inspectionReview'
 import { X, ZoomIn, ZoomOut, CheckCircle2, AlertCircle, Timer, ChevronLeft, ChevronRight } from 'lucide-react'
 
 const AUTO_NG_DELAY_MS = 10000 // 10 seconds per frame
@@ -32,6 +33,8 @@ export function CavityReviewOverlay({
   onClose,          // () => void — manual close (optional)
   falseCallReasons = [],
   initialFrameIndex = 0, // Start at a specific NG frame (for thumbnail click)
+  initialDecisions = {}, // Persisted decisions from parent (survives modal close/reopen)
+  onDecisionChange,      // (key, value) => void — sync each decision to parent immediately
 }) {
   const serialNumber = inspection?.serialNumber || 'N/A'
 
@@ -54,7 +57,7 @@ export function CavityReviewOverlay({
 
   // Per-frame review state
   const [reviewIndex, setReviewIndex] = useState(0)
-  const [decisions, setDecisions] = useState({}) // { 'TOP-0': 'REAL_NG', 'BOTTOM-1': 'some reason' }
+  const [decisions, setDecisions] = useState(initialDecisions) // { 'TOP-0': 'REAL_NG', 'BOTTOM-1': 'some reason' }
   const [showReasonInput, setShowReasonInput] = useState(false)
   const [selectedReason, setSelectedReason] = useState('')
   const [otherText, setOtherText] = useState('')
@@ -72,12 +75,12 @@ export function CavityReviewOverlay({
   // Reset review state when inspection changes
   useEffect(() => {
     setReviewIndex(initialFrameIndex)
-    setDecisions({})
+    setDecisions(initialDecisions)
     setShowReasonInput(false)
     setSelectedReason('')
     setOtherText('')
     setZoom(1)
-  }, [inspection, initialFrameIndex])
+  }, [inspection]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Finalize board decision after all NG frames reviewed
   const completeReview = useCallback((allDecisions) => {
@@ -105,15 +108,15 @@ export function CavityReviewOverlay({
     }
   }, [decisions, totalNGFrames])
 
-  // Advance to next NG frame or finalize
+  // Advance to next unreviewed NG frame.
+  // When ALL frames are reviewed, the useEffect auto-complete above handles
+  // finalization with an 800ms delay (so the user sees the last decision badge).
   const advanceOrComplete = useCallback((allDecisions, nextIndex) => {
-    if (nextIndex < ngFrames.length) {
-      setReviewIndex(nextIndex)
-      setZoom(1)
-    } else {
-      completeReview(allDecisions)
-    }
-  }, [ngFrames.length, completeReview])
+    const nextIdx = findNextUnreviewedFrame(ngFrames, allDecisions, nextIndex)
+    if (nextIdx === -1) return // all reviewed → useEffect handles completion
+    setReviewIndex(nextIdx)
+    setZoom(1)
+  }, [ngFrames])
 
   // Confirm current frame as REAL NG
   const handleFrameNG = useCallback(() => {
@@ -123,10 +126,11 @@ export function CavityReviewOverlay({
     const key = `${currentFrame.side}-${currentFrame.frameIndex}`
     const newDecisions = { ...decisions, [key]: 'REAL_NG' }
     setDecisions(newDecisions)
+    onDecisionChange?.(key, 'REAL_NG')
     setShowReasonInput(false)
     setSelectedReason('')
     advanceOrComplete(newDecisions, reviewIndex + 1)
-  }, [currentFrame, decisions, reviewIndex, advanceOrComplete])
+  }, [currentFrame, decisions, reviewIndex, advanceOrComplete, onDecisionChange])
 
   // Keep ref in sync for auto-NG timer
   useEffect(() => {
@@ -147,11 +151,12 @@ export function CavityReviewOverlay({
     const key = `${currentFrame.side}-${currentFrame.frameIndex}`
     const newDecisions = { ...decisions, [key]: effectiveReason }
     setDecisions(newDecisions)
+    onDecisionChange?.(key, effectiveReason)
     setShowReasonInput(false)
     setSelectedReason('')
     setOtherText('')
     advanceOrComplete(newDecisions, reviewIndex + 1)
-  }, [currentFrame, decisions, reviewIndex, selectedReason, otherText, advanceOrComplete])
+  }, [currentFrame, decisions, reviewIndex, selectedReason, otherText, advanceOrComplete, onDecisionChange])
 
   const handleCancelReason = useCallback(() => {
     setShowReasonInput(false)

@@ -617,6 +617,7 @@ AI_BACKEND_API_KEY=your-secure-api-key-here
 - **localStorage for auth** - Current implementation stores user in localStorage. Will migrate to httpOnly cookies when moving to Supabase Auth.
 - **Service role key naming** - Documentation previously showed incorrect `NEXT_PUBLIC_` prefix pattern. Always use server-only env vars for secrets.
 - **Security headers configured** - `next.config.js` includes comprehensive security headers (CSP, HSTS, X-Frame-Options, etc.). Don't disable these in production.
+- **Dev fallback users must have sections** - `apiAuth.js` dev fallback users need `sections: ['section_smt', 'section_tht', 'section_final']` matching seed data. Without this, `getSectionFilter()` returns `[]` for manager/operator roles, causing all section-filtered queries (overrides, stats) to return empty results.
 
 ### Security Architecture
 
@@ -649,7 +650,7 @@ The app implements defense-in-depth with multiple security layers:
 ### Override Workflow
 
 False call overrides follow this flow:
-1. Operator submits override via `FalseCallOverrideModal` (status: `pending`, images saved to local `storage/false-calls/`)
+1. Operator submits override via LiveViewV3's `submitDecision` flow (status: `pending`, images saved to local `storage/false-calls/`)
 2. Manager reviews in `/inspection/overrides` using `OverrideReviewModal`
 3. Manager approves or rejects (status: `approved` or `rejected`) - **local DB only, no image upload**
 4. System creates event log entry and notification
@@ -657,6 +658,21 @@ False call overrides follow this flow:
 6. Both approved and rejected overrides are synced as DB records, but only approved ones get images uploaded
 
 **Important:** Image upload intentionally does NOT happen during approval. The approval PATCH handler only updates status in the local database. Images are uploaded during `syncToCloud()` which runs in the background with no API timeout constraints.
+
+**Override DB Notes:**
+- `overrides.board_id` stores synthetic inspection IDs (e.g. `WO-20260210-0002-0001`), NOT a FK to `boards` table. Migration `033-fix-overrides-constraints.sql` drops the FK constraint.
+- `override_type` accepts both LiveViewV3 values (`FALSE_POSITIVE`, `MISSED_DEFECT`) and OverrideWizard values (`false_positive_no_defect`, etc.). Migration updates the CHECK constraint.
+- After creating overrides, call `clearOverridesCache()` from `hooks/useOverrides.js` to invalidate the manager's localStorage cache.
+
+### Multi-Frame NG Review (CavityReviewOverlay)
+
+When AI flags multiple NG frames, operator reviews each one via CavityReviewOverlay or inline in LiveViewV3.
+
+**State ownership:** `ngFrameReview` state lives in LiveViewV3 (parent). CavityReviewOverlay receives `initialDecisions` prop and syncs per-frame decisions back via `onDecisionChange` callback. This ensures decisions survive modal close/reopen.
+
+**Completion path:** Only the `useEffect` auto-complete in CavityReviewOverlay calls `completeReview` (with 800ms delay for badge visibility). The `advanceOrComplete` function must NOT call `completeReview` directly — it returns early when all frames are reviewed, letting the effect handle it. Calling from both paths causes duplicate `submitDecision` calls.
+
+**Wrap-around navigation:** `findNextUnreviewedFrame()` in `lib/utils/inspectionReview.js` — shared utility used by CavityReviewOverlay and LiveViewV3 inline handlers. Returns -1 when all frames reviewed.
 
 ### Modal Patterns
 
