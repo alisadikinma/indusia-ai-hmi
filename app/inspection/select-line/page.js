@@ -589,7 +589,7 @@ export default function SelectLinePage() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-void">
         <div className="bg-panel border border-surface-border p-8 max-w-md text-center">
-          <div className="w-8 h-8 border-2 border-phosphor-amber border-t-transparent animate-spin mx-auto mb-4" />
+          <img src="/indusiaai-logo.png" alt="INDUSIA AI" className="w-14 h-14 object-contain animate-pulse-glow mx-auto mb-4" />
           <h2 className="text-xl font-display font-bold text-text-primary mb-3">{t('common.loading')}</h2>
           <p className="text-sm font-mono text-text-tertiary">{t('auth.verifyingCredentials')}</p>
         </div>
@@ -601,7 +601,7 @@ export default function SelectLinePage() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-void">
         <div className="bg-panel border border-surface-border p-8 max-w-md text-center">
-          <div className="w-8 h-8 border-2 border-phosphor-green border-t-transparent animate-spin mx-auto mb-4" />
+          <img src="/indusiaai-logo.png" alt="INDUSIA AI" className="w-14 h-14 object-contain animate-pulse-glow mx-auto mb-4" />
           <h2 className="text-xl font-display font-bold text-phosphor-green mb-3">{t('line.resumingSession')}</h2>
           <p className="text-sm font-mono text-text-tertiary">{t('line.connectingTo', { name: activeLineName })}</p>
         </div>
@@ -766,7 +766,7 @@ export default function SelectLinePage() {
           {dataLoading ? (
             <div className="col-span-full flex items-center justify-center py-12">
               <div className="text-center">
-                <div className="w-8 h-8 border-2 border-phosphor-amber border-t-transparent animate-spin mx-auto mb-4" />
+                <img src="/indusiaai-logo.png" alt="INDUSIA AI" className="w-14 h-14 object-contain animate-pulse-glow mx-auto mb-4" />
                 <p className="font-mono text-sm text-text-tertiary">{t('line.loadingLines')}</p>
               </div>
             </div>

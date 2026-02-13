@@ -32,7 +32,7 @@ function LayoutContent({ children }) {
     return (
       <div className="min-h-screen bg-void flex items-center justify-center">
         <div className="text-center">
-          <div className="w-12 h-12 border-2 border-phosphor-amber border-t-transparent animate-spin mx-auto mb-4" />
+          <img src="/indusiaai-logo.png" alt="INDUSIA AI" className="w-16 h-16 object-contain animate-pulse-glow mx-auto mb-4" />
           <div className="font-mono text-sm text-text-tertiary">INITIALIZING...</div>
         </div>
       </div>
