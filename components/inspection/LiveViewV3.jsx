@@ -1024,6 +1024,7 @@ export function LiveViewV3({
    */
   function computeCounterDeltas(qty, operatorDecision, falseCallData) {
     const pcbCounts = falseCallData?.pcbCounts
+    console.log('[LiveView] computeCounterDeltas:', { qty, operatorDecision, pcbCounts, hasFalseCallData: !!falseCallData })
     if (pcbCounts) {
       const ngQty = pcbCounts.ngPcbs
       const goodQty = qty - ngQty

@@ -31,6 +31,15 @@ const DEFECT_COLORS = {
   'default': '#EF4444'
 }
 
+// Generate a deterministic color from serial number using golden angle rotation.
+// Golden angle (137.508°) guarantees maximum visual separation between consecutive numbers.
+// Same SN always produces the same color — TOP and BOTTOM thumbnails match visually.
+function snToColor(sn) {
+  const num = parseInt(sn.replace(/\D/g, ''), 10) || 0
+  const hue = (num * 137.508) % 360
+  return `hsl(${hue}, 75%, 55%)`
+}
+
 export function SidePanel({ side, frames = [], className, onFrameClick, reviewingFrameKey, frameDecisions = {} }) {
   const [activeFrameIndex, setActiveFrameIndex] = useState(0)
   const [zoom, setZoom] = useState(1)
@@ -173,6 +182,14 @@ export function SidePanel({ side, frames = [], className, onFrameClick, reviewin
             className="absolute inset-0 flex items-center justify-center overflow-auto p-2"
             style={{ cursor: zoom > 1 ? 'grab' : 'default' }}
           >
+            {/* Floating Serial Number Badge */}
+            {activeFrame?.serial_number && (
+              <div className="absolute top-2 left-1/2 -translate-x-1/2 z-10 px-3 py-1 rounded bg-void/85 border border-phosphor-amber/50 backdrop-blur-sm">
+                <span className="font-mono text-xs font-bold text-phosphor-amber">
+                  SN: {activeFrame.serial_number}
+                </span>
+              </div>
+            )}
             <div
               className="relative transition-transform duration-200"
               style={{ transform: `scale(${zoom})`, transformOrigin: 'center' }}
@@ -251,6 +268,14 @@ export function SidePanel({ side, frames = [], className, onFrameClick, reviewin
                       <CheckCircle2 className="w-3 h-3 text-white" />
                     )}
                   </div>
+
+                  {/* SN color bar — same SN on TOP and BOTTOM gets same color */}
+                  {frame.serial_number && (
+                    <div
+                      className="absolute bottom-0 left-0 right-0 h-1.5"
+                      style={{ backgroundColor: snToColor(frame.serial_number) }}
+                    />
+                  )}
                 </button>
               )
             })}
