@@ -60,7 +60,7 @@ import { HeaderInfoBar } from './HeaderInfoBar'
 import { saveInspection } from '@/lib/services/inspectionService'
 import { getInspectionResult } from '@/lib/services/imageService'
 import { authFetch } from '@/lib/utils/authFetch'
-import { findNextUnreviewedFrame } from '@/lib/utils/inspectionReview'
+import { findNextUnreviewedFrame, computePcbCounts } from '@/lib/utils/inspectionReview'
 
 // Constants
 const NG_REVIEW_TIMEOUT_SECONDS = 15 // Timeout for NG review → auto NG
@@ -1016,6 +1016,31 @@ export function LiveViewV3({
   }, [isModelSwitching, currentModel, processStatus, switchModel, lineId])
 
   /**
+   * Compute per-PCB counter deltas using pcbCounts (grouped by serial_number).
+   * TOP and BOTTOM with same SN = 1 physical PCB.
+   * ngQty = unique PCBs with at least one REAL_NG frame.
+   * goodQty = remaining PCBs (total - ngPcbs), including false calls and non-flagged.
+   * Without pcbCounts, all qty goes to the board-level operatorDecision.
+   */
+  function computeCounterDeltas(qty, operatorDecision, falseCallData) {
+    const pcbCounts = falseCallData?.pcbCounts
+    if (pcbCounts) {
+      const ngQty = pcbCounts.ngPcbs
+      const goodQty = qty - ngQty
+      return {
+        goodQty,
+        ngQty,
+        falseCallCount: pcbCounts.goodPcbs,
+      }
+    }
+    return {
+      goodQty: operatorDecision === 'GOOD' ? qty : 0,
+      ngQty: operatorDecision === 'NG' ? qty : 0,
+      falseCallCount: 0,
+    }
+  }
+
+  /**
    * Submit decision to AI Backend
    * (Defined first as other handlers depend on it)
    */
@@ -1108,15 +1133,18 @@ export function LiveViewV3({
 
       // 2.1. Optimistic local counter update — instant UI feedback (real WO path)
       // Multi-cavity panels: 1 board confirmation = N PCBs (cavity_count)
+      // Split GOOD vs NG based on per-PCB counts (TOP+BOTTOM same SN = 1 PCB)
       const qty = activeCavityCount
+      const { goodQty: goodDelta, ngQty: ngDelta, falseCallCount } =
+        computeCounterDeltas(qty, operatorDecision, falseCallData)
       if (fetchedWO) {
         setSessionCounters(prev => ({
           completedQty: prev.completedQty + qty,
-          goodQty: operatorDecision === 'GOOD' ? prev.goodQty + qty : prev.goodQty,
-          ngQty: operatorDecision === 'NG' ? prev.ngQty + qty : prev.ngQty,
-          falseCallQty: shouldCreateOverride ? prev.falseCallQty + qty : prev.falseCallQty,
+          goodQty: prev.goodQty + goodDelta,
+          ngQty: prev.ngQty + ngDelta,
+          falseCallQty: shouldCreateOverride ? prev.falseCallQty + (falseCallCount || qty) : prev.falseCallQty,
         }))
-        console.log('[LiveView] Optimistic counter update applied:', operatorDecision, `qty=${qty} (cavityCount=${activeCavityCount})`)
+        console.log('[LiveView] Optimistic counter update applied:', operatorDecision, `qty=${qty} good=${goodDelta} ng=${ngDelta} fc=${falseCallCount}`)
       }
 
       // 2.5. If false call (board-level OR per-frame): save images + create Override
@@ -1241,12 +1269,14 @@ export function LiveViewV3({
         }
 
         // 4. Update WO counters in DB (cavity_count PCBs per board)
-        const counterUpdate = operatorDecision === 'GOOD'
-          ? { goodQty: qty, completedQty: qty }
-          : { ngQty: qty, completedQty: qty }
-
+        // Uses per-frame split computed earlier (goodDelta/ngDelta)
+        const counterUpdate = {
+          goodQty: goodDelta,
+          ngQty: ngDelta,
+          completedQty: qty,
+        }
         if (shouldCreateOverride) {
-          counterUpdate.falseCallQty = qty
+          counterUpdate.falseCallQty = falseCallCount || qty
         }
 
         let wasAutoCompleted = false
@@ -1410,19 +1440,31 @@ export function LiveViewV3({
   }, [pendingDecision, submitDecision])
 
   /**
-   * Handle cavity overlay NG confirmation (Real NG)
+   * Handle cavity overlay NG confirmation (Real NG or mixed NG+false calls)
+   * @param {Object} info - { reason?, decisions?, pcbCounts }
    */
-  const handleCavityConfirmNG = useCallback(async () => {
+  const handleCavityConfirmNG = useCallback(async (info) => {
     setShowCavityOverlay(false)
-    await submitDecision('NG')
+    if (info?.reason) {
+      // Mixed: some false calls + some real NG → pass per-frame decisions for override + counter splitting
+      await submitDecision('NG', {
+        reason: info.reason,
+        notes: '',
+        perFrameDecisions: info.decisions,
+        pcbCounts: info.pcbCounts,
+      })
+    } else {
+      // Pure NG: all frames confirmed as real NG — still pass pcbCounts for accurate counting
+      await submitDecision('NG', info?.pcbCounts ? { pcbCounts: info.pcbCounts } : null)
+    }
   }, [submitDecision])
 
   /**
    * Handle cavity overlay GOOD confirmation (False Call)
    */
-  const handleCavityConfirmGood = useCallback(async (reason, decisions) => {
+  const handleCavityConfirmGood = useCallback(async (reason, decisions, pcbCounts) => {
     setShowCavityOverlay(false)
-    await submitDecision('GOOD', { reason, notes: '', perFrameDecisions: decisions || null })
+    await submitDecision('GOOD', { reason, notes: '', perFrameDecisions: decisions || null, pcbCounts: pcbCounts || null })
   }, [submitDecision])
 
   // ============================================
@@ -1433,18 +1475,19 @@ export function LiveViewV3({
     const hasRealNG = Object.values(allDecisions).some(d => d === 'REAL_NG')
     const hasFalseCall = Object.values(allDecisions).some(d => d && d !== 'REAL_NG')
     const firstReason = Object.values(allDecisions).find(d => d && d !== 'REAL_NG') || ''
+    // Compute per-PCB counts (TOP+BOTTOM with same SN = 1 PCB)
+    const pcbCounts = ngFrameReview ? computePcbCounts(ngFrameReview.frames, allDecisions) : null
     setNgFrameReview(null)
     setInlineReasonInput(false)
     setInlineSelectedReason('')
     if (hasRealNG) {
-      // Mixed scenario: some frames are real NG, some are false calls
-      // Overall decision is NG (board goes to reject bin), but still pass
-      // perFrameDecisions so overrides can be created for false call frames
-      await submitDecision('NG', hasFalseCall ? { reason: firstReason, notes: '', perFrameDecisions: allDecisions } : undefined)
+      await submitDecision('NG', hasFalseCall
+        ? { reason: firstReason, notes: '', perFrameDecisions: allDecisions, pcbCounts }
+        : { pcbCounts })
     } else {
-      await submitDecision('GOOD', { reason: firstReason, notes: '', perFrameDecisions: allDecisions })
+      await submitDecision('GOOD', { reason: firstReason, notes: '', perFrameDecisions: allDecisions, pcbCounts })
     }
-  }, [submitDecision])
+  }, [submitDecision, ngFrameReview])
 
   const handleInlineFrameNG = useCallback(() => {
     if (!ngFrameReview) return

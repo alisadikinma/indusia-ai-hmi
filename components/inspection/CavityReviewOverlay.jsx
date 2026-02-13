@@ -18,7 +18,7 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { cn } from '@/lib/utils'
-import { findNextUnreviewedFrame } from '@/lib/utils/inspectionReview'
+import { findNextUnreviewedFrame, computePcbCounts } from '@/lib/utils/inspectionReview'
 import { X, ZoomIn, ZoomOut, CheckCircle2, AlertCircle, Timer, ChevronLeft, ChevronRight } from 'lucide-react'
 
 const AUTO_NG_DELAY_MS = 10000 // 10 seconds per frame
@@ -28,7 +28,7 @@ export function CavityReviewOverlay({
   queuePosition,    // e.g. 3
   queueTotal,       // e.g. 6
   autoNgEnabled,
-  onConfirmNG,      // () => void — board-level: at least one REAL NG
+  onConfirmNG,      // (falseCallInfo?) => void — board-level NG; falseCallInfo={reason,decisions} if mixed
   onConfirmGood,    // (reason) => void — board-level: all NG frames were false calls
   onClose,          // () => void — manual close (optional)
   falseCallReasons = [],
@@ -83,16 +83,24 @@ export function CavityReviewOverlay({
   }, [inspection]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Finalize board decision after all NG frames reviewed
+  // Compute per-PCB counts (TOP+BOTTOM with same serial_number = 1 PCB)
   const completeReview = useCallback((allDecisions) => {
     const hasRealNG = Object.values(allDecisions).some(d => d === 'REAL_NG')
+    const pcbCounts = computePcbCounts(ngFrames, allDecisions)
     if (hasRealNG) {
-      onConfirmNG?.()
+      const hasFalseCall = Object.values(allDecisions).some(d => d && d !== 'REAL_NG')
+      const firstReason = Object.values(allDecisions).find(d => d && d !== 'REAL_NG') || ''
+      onConfirmNG?.({
+        reason: hasFalseCall ? firstReason : null,
+        decisions: hasFalseCall ? allDecisions : null,
+        pcbCounts,
+      })
     } else {
       // All NG frames were marked as false calls → board is GOOD
       const firstReason = Object.values(allDecisions).find(d => d !== 'REAL_NG') || ''
-      onConfirmGood?.(firstReason, allDecisions)
+      onConfirmGood?.(firstReason, allDecisions, pcbCounts)
     }
-  }, [onConfirmNG, onConfirmGood])
+  }, [onConfirmNG, onConfirmGood, ngFrames])
 
   // Auto-complete when all NG frames have been reviewed
   const completeReviewRef = useRef(null)
