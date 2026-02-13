@@ -11,7 +11,7 @@ export const users = {
   operator: {
     id: 'user-operator-1',
     name: 'John Operator',
-    email: 'operator@indusia.com',
+    email: 'operator@indusia.ai',
     role_id: 'operator',
     sections: ['section-a', 'section-b'],
     status: 'active',
@@ -21,7 +21,7 @@ export const users = {
   manager: {
     id: 'user-manager-1',
     name: 'Jane Manager',
-    email: 'manager@indusia.com',
+    email: 'manager@indusia.ai',
     role_id: 'manager',
     sections: ['section-a', 'section-b', 'section-c'],
     status: 'active',
@@ -31,7 +31,7 @@ export const users = {
   engineer: {
     id: 'user-engineer-1',
     name: 'Bob Engineer',
-    email: 'engineer@indusia.com',
+    email: 'engineer@indusia.ai',
     role_id: 'engineer',
     sections: [],
     status: 'active',
@@ -41,7 +41,7 @@ export const users = {
   superadmin: {
     id: 'user-admin-1',
     name: 'Alice Admin',
-    email: 'admin@indusia.com',
+    email: 'admin@indusia.ai',
     role_id: 'superadmin',
     sections: [],
     status: 'active',
@@ -51,7 +51,7 @@ export const users = {
   inactive: {
     id: 'user-inactive-1',
     name: 'Inactive User',
-    email: 'inactive@indusia.com',
+    email: 'inactive@indusia.ai',
     role_id: 'operator',
     sections: ['section-a'],
     status: 'inactive',
@@ -368,7 +368,7 @@ export const validInputs = {
   },
 
   login: {
-    email: 'operator@indusia.com',
+    email: 'operator@indusia.ai',
     password: 'password123'
   },
 

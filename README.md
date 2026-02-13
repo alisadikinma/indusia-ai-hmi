@@ -638,10 +638,10 @@ AI_BACKEND_API_KEY=your-secure-api-key
 
 | Role | Email | Password |
 |------|-------|----------|
-| Operator | operator@indusia.com | operator123 |
-| Manager | manager@indusia.com | manager123 |
-| Engineer | engineer@indusia.com | engineer123 |
-| Super Admin | admin@indusia.com | admin123 |
+| Operator | operator@indusia.ai | operator123 |
+| Manager | manager@indusia.ai | manager123 |
+| Engineer | engineer@indusia.ai | engineer123 |
+| Super Admin | admin@indusia.ai | admin123 |
 
 ---
 

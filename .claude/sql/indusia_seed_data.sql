@@ -124,7 +124,7 @@ INSERT INTO users (id, name, email, role_id, sections, password, status)
 VALUES (
   'user_admin',
   'Admin User',
-  'admin@indusia.com',
+  'admin@indusia.ai',
   'role_superadmin',
   ARRAY['section_smt', 'section_tht', 'section_final'],
   'admin123',
@@ -136,7 +136,7 @@ INSERT INTO users (id, name, email, role_id, sections, password, status)
 VALUES (
   'user_manager',
   'Manager User',
-  'manager@indusia.com',
+  'manager@indusia.ai',
   'role_manager',
   ARRAY['section_smt', 'section_tht'],
   'manager123',
@@ -148,7 +148,7 @@ INSERT INTO users (id, name, email, role_id, sections, password, status)
 VALUES (
   'user_operator',
   'Operator User',
-  'operator@indusia.com',
+  'operator@indusia.ai',
   'role_operator',
   ARRAY['section_smt'],
   'operator123',
@@ -160,7 +160,7 @@ INSERT INTO users (id, name, email, role_id, sections, password, status)
 VALUES (
   'user_engineer',
   'Engineer User',
-  'engineer@indusia.com',
+  'engineer@indusia.ai',
   'role_engineer',
   ARRAY['section_smt', 'section_tht', 'section_final'],
   'engineer123',
@@ -225,10 +225,10 @@ ON CONFLICT (section_id, shift_number) DO NOTHING;
 -- ┌─────────────┬───────────────────────┬─────────────┐
 -- │ Role        │ Email                 │ Password    │
 -- ├─────────────┼───────────────────────┼─────────────┤
--- │ Super Admin │ admin@indusia.com     │ admin123    │
--- │ Manager     │ manager@indusia.com   │ manager123  │
--- │ Operator    │ operator@indusia.com  │ operator123 │
--- │ Engineer    │ engineer@indusia.com  │ engineer123 │
+-- │ Super Admin │ admin@indusia.ai     │ admin123    │
+-- │ Manager     │ manager@indusia.ai   │ manager123  │
+-- │ Operator    │ operator@indusia.ai  │ operator123 │
+-- │ Engineer    │ engineer@indusia.ai  │ engineer123 │
 -- └─────────────┴───────────────────────┴─────────────┘
 --
 -- NOTE: Passwords stored as plaintext for development.

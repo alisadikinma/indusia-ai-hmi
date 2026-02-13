@@ -48,10 +48,10 @@ npm run test:e2e:ui           # Interactive Playwright UI mode
 ### Test Credentials
 
 ```
-Email: operator@indusia.com
+Email: operator@indusia.ai
 Password: operator123
 
-Other accounts: manager@indusia.com, engineer@indusia.com, admin@indusia.com
+Other accounts: manager@indusia.ai, engineer@indusia.ai, admin@indusia.ai
 All passwords: {role}123
 ```
 

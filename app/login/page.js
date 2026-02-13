@@ -161,7 +161,7 @@ export default function LoginPage() {
               <div className="relative">
                 <div className="w-16 h-16 border-2 border-phosphor-amber flex items-center justify-center bg-terminal relative overflow-hidden">
                   <div className="absolute inset-0 bg-phosphor-amber/5" />
-                  <span className="font-display font-bold text-2xl text-phosphor-amber text-glow-amber">IN</span>
+                  <img src="/indusiaai-logo.png" alt="INDUSIA AI" className="w-12 h-12 object-contain" />
                 </div>
                 <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-phosphor-green animate-pulse-glow" />
               </div>
@@ -211,7 +211,7 @@ export default function LoginPage() {
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="operator@indusia.com"
+                    placeholder="operator@indusia.ai"
                     className="w-full px-4 py-3 bg-terminal border border-surface-border text-text-primary font-mono text-sm placeholder:text-text-tertiary focus:border-phosphor-amber focus:shadow-glow-amber transition-all"
                     disabled={isLoading}
                     autoComplete="email"

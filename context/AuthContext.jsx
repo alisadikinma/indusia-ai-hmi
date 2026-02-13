@@ -14,10 +14,10 @@ function normalizeRole(roleValue) {
 
 // Mock users for fallback - must match login API mock users
 const mockUsers = [
-  { id: 'user_admin', name: 'Admin User', email: 'admin@indusia.com', password: 'admin123', role: 'superadmin', role_id: 'role_superadmin', status: 'active', sections: ['section_smt', 'section_tht', 'section_final'] },
-  { id: 'user_manager', name: 'Manager User', email: 'manager@indusia.com', password: 'manager123', role: 'manager', role_id: 'role_manager', status: 'active', sections: ['section_smt', 'section_tht'] },
-  { id: 'user_operator', name: 'Operator User', email: 'operator@indusia.com', password: 'operator123', role: 'operator', role_id: 'role_operator', status: 'active', sections: ['section_smt'] },
-  { id: 'user_engineer', name: 'Engineer User', email: 'engineer@indusia.com', password: 'engineer123', role: 'engineer', role_id: 'role_engineer', status: 'active', sections: ['section_smt', 'section_tht', 'section_final'] },
+  { id: 'user_admin', name: 'Admin User', email: 'admin@indusia.ai', password: 'admin123', role: 'superadmin', role_id: 'role_superadmin', status: 'active', sections: ['section_smt', 'section_tht', 'section_final'] },
+  { id: 'user_manager', name: 'Manager User', email: 'manager@indusia.ai', password: 'manager123', role: 'manager', role_id: 'role_manager', status: 'active', sections: ['section_smt', 'section_tht'] },
+  { id: 'user_operator', name: 'Operator User', email: 'operator@indusia.ai', password: 'operator123', role: 'operator', role_id: 'role_operator', status: 'active', sections: ['section_smt'] },
+  { id: 'user_engineer', name: 'Engineer User', email: 'engineer@indusia.ai', password: 'engineer123', role: 'engineer', role_id: 'role_engineer', status: 'active', sections: ['section_smt', 'section_tht', 'section_final'] },
 ];
 
 const AuthContext = createContext(null);

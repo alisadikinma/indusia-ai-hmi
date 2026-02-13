@@ -196,7 +196,7 @@ export default function SideNav() {
         {/* Logo */}
         <div className={cn("flex items-center gap-3 mb-4", isCollapsed && "justify-center")}>
           <div className="w-10 h-10 border border-phosphor-amber flex items-center justify-center bg-void relative flex-shrink-0">
-            <span className="font-display font-bold text-lg text-phosphor-amber">IN</span>
+            <img src="/indusiaai-logo.png" alt="INDUSIA AI" className="w-8 h-8 object-contain" />
             <div className="absolute -top-px -right-px w-2 h-2 bg-phosphor-green animate-pulse-glow" />
           </div>
           {!isCollapsed && (

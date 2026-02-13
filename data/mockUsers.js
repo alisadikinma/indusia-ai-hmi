@@ -9,7 +9,7 @@ export const mockUsers = [
   {
     id: 'user_admin',
     name: 'Admin User',
-    email: 'admin@indusia.com',
+    email: 'admin@indusia.ai',
     password: 'admin123',
     role_id: 'role_superadmin',
     role: 'superadmin',
@@ -19,7 +19,7 @@ export const mockUsers = [
   {
     id: 'user_manager',
     name: 'Manager User',
-    email: 'manager@indusia.com',
+    email: 'manager@indusia.ai',
     password: 'manager123',
     role_id: 'role_manager',
     role: 'manager',
@@ -29,7 +29,7 @@ export const mockUsers = [
   {
     id: 'user_operator',
     name: 'Operator User',
-    email: 'operator@indusia.com',
+    email: 'operator@indusia.ai',
     password: 'operator123',
     role_id: 'role_operator',
     role: 'operator',
@@ -39,7 +39,7 @@ export const mockUsers = [
   {
     id: 'user_engineer',
     name: 'Engineer User',
-    email: 'engineer@indusia.com',
+    email: 'engineer@indusia.ai',
     password: 'engineer123',
     role_id: 'role_engineer',
     role: 'engineer',
