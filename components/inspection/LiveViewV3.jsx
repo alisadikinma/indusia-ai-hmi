@@ -655,8 +655,11 @@ export function LiveViewV3({
   const isSubmittingRef = useRef(false)
   const pendingSubmitRef = useRef(null)
 
-  // Derive cavity count from selected board (must be before boardSequenceRef sync)
-  const activeCavityCount = availableModels.find(m => m.name === currentModel)?.cavityCount || 1
+  // Derive board layout from selected board (must be before boardSequenceRef sync)
+  const activeBoard = availableModels.find(m => m.name === currentModel)
+  const activeCavityCount = activeBoard?.cavityCount || 1
+  const activeTopFrameCount = activeBoard?.topFrameCount || 0
+  const activeBottomFrameCount = activeBoard?.bottomFrameCount || 0
 
   // Board sequence tracks PANEL count (not individual PCB count)
   // For multi-cavity: panel_count = completedQty / cavityCount
@@ -1026,12 +1029,19 @@ export function LiveViewV3({
     const pcbCounts = falseCallData?.pcbCounts
     console.log('[LiveView] computeCounterDeltas:', { qty, operatorDecision, pcbCounts, hasFalseCallData: !!falseCallData })
     if (pcbCounts) {
-      const ngQty = pcbCounts.ngPcbs
+      // Clamp to cavity_count — frame grouping may report more "PCBs" than physical PCBs
+      // when serial_number is null and top/bottom have different frame counts per PCB.
+      const ngQty = Math.min(pcbCounts.ngPcbs, qty)
       const goodQty = qty - ngQty
+      const falseCallCount = Math.min(pcbCounts.goodPcbs, goodQty)
+      if (pcbCounts.ngPcbs > qty || pcbCounts.goodPcbs > goodQty) {
+        console.warn('[LiveView] pcbCounts clamped to cavity_count=%d: ngPcbs %d→%d, goodPcbs %d→%d',
+          qty, pcbCounts.ngPcbs, ngQty, pcbCounts.goodPcbs, falseCallCount)
+      }
       return {
         goodQty,
         ngQty,
-        falseCallCount: pcbCounts.goodPcbs,
+        falseCallCount,
       }
     }
     return {
@@ -1477,7 +1487,14 @@ export function LiveViewV3({
     const hasFalseCall = Object.values(allDecisions).some(d => d && d !== 'REAL_NG')
     const firstReason = Object.values(allDecisions).find(d => d && d !== 'REAL_NG') || ''
     // Compute per-PCB counts (TOP+BOTTOM with same SN = 1 PCB)
-    const pcbCounts = ngFrameReview ? computePcbCounts(ngFrameReview.frames, allDecisions) : null
+    // Pass frame layout so computePcbCounts can correctly group frames when serial_number is null
+    const inspection = activeInspection || falseCallInspectionRef.current
+    const frameLayout = {
+      cavityCount: activeCavityCount,
+      topFrameCount: activeTopFrameCount || inspection?.results?.top?.length || 0,
+      bottomFrameCount: activeBottomFrameCount || inspection?.results?.bottom?.length || 0,
+    }
+    const pcbCounts = ngFrameReview ? computePcbCounts(ngFrameReview.frames, allDecisions, frameLayout) : null
     setNgFrameReview(null)
     setInlineReasonInput(false)
     setInlineSelectedReason('')
@@ -2529,6 +2546,9 @@ export function LiveViewV3({
           falseCallReasons={falseCallReasons}
           initialFrameIndex={cavityInitialIndex}
           initialDecisions={ngFrameReview?.decisions || {}}
+          cavityCount={activeCavityCount}
+          topFrameCount={activeTopFrameCount}
+          bottomFrameCount={activeBottomFrameCount}
           onDecisionChange={(key, value) => {
             setNgFrameReview(prev => prev ? {
               ...prev,

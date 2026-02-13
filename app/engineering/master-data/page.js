@@ -54,7 +54,7 @@ export default function MasterDataPage() {
   const [savingLine, setSavingLine] = useState(false);
 
   const [editingBoard, setEditingBoard] = useState(null);
-  const [boardForm, setBoardForm] = useState({ id: '', name: '', customerId: '', cavityCount: 1 });
+  const [boardForm, setBoardForm] = useState({ id: '', name: '', customerId: '', cavityCount: 1, topFrameCount: 1, bottomFrameCount: 0 });
   const [savingBoard, setSavingBoard] = useState(false);
 
   const [editingUser, setEditingUser] = useState(null);
@@ -249,7 +249,9 @@ export default function MasterDataPage() {
         body: JSON.stringify({
           name: boardForm.name,
           customer_id: boardForm.customerId,
-          cavityCount: parseInt(boardForm.cavityCount) || 1
+          cavityCount: parseInt(boardForm.cavityCount) || 1,
+          topFrameCount: parseInt(boardForm.topFrameCount) || 1,
+          bottomFrameCount: parseInt(boardForm.bottomFrameCount) || 0,
         })
       });
 
@@ -258,7 +260,7 @@ export default function MasterDataPage() {
 
       showToast({ title: `Board ${editingBoard ? 'updated' : 'created'}`, variant: 'success' });
       await refreshMasterData();
-      setBoardForm({ id: '', name: '', customerId: '', cavityCount: 1 });
+      setBoardForm({ id: '', name: '', customerId: '', cavityCount: 1, topFrameCount: 1, bottomFrameCount: 0 });
       setEditingBoard(null);
     } catch (err) {
       showToast({ title: 'Error', description: err.message, variant: 'error' });
@@ -647,6 +649,8 @@ export default function MasterDataPage() {
                     <th className="text-left px-4 py-3 text-xs font-semibold text-indusia-textMuted uppercase">Name</th>
                     <th className="text-left px-4 py-3 text-xs font-semibold text-indusia-textMuted uppercase">Customer</th>
                     <th className="text-left px-4 py-3 text-xs font-semibold text-indusia-textMuted uppercase">Cavity</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-indusia-textMuted uppercase">Top Frames</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-indusia-textMuted uppercase">Btm Frames</th>
                     <th className="text-left px-4 py-3 text-xs font-semibold text-indusia-textMuted uppercase">Actions</th>
                   </tr>
                 </thead>
@@ -658,9 +662,11 @@ export default function MasterDataPage() {
                         <td className="px-4 py-3 text-sm text-indusia-text">{board.name}</td>
                         <td className="px-4 py-3 text-sm text-indusia-textMuted">{customer?.name || '-'}</td>
                         <td className="px-4 py-3 text-sm text-indusia-textMuted font-mono">{board.cavityCount || 1}</td>
+                        <td className="px-4 py-3 text-sm text-indusia-textMuted font-mono">{board.topFrameCount || 1}</td>
+                        <td className="px-4 py-3 text-sm text-indusia-textMuted font-mono">{board.bottomFrameCount || 0}</td>
                         <td className="px-4 py-3">
                           <div className="flex gap-2">
-                            <button onClick={() => { setEditingBoard(board); setBoardForm({ ...board, cavityCount: board.cavityCount || 1 }); }} className="p-1 text-indusia-primary hover:bg-indusia-primary/10 rounded">
+                            <button onClick={() => { setEditingBoard(board); setBoardForm({ ...board, cavityCount: board.cavityCount || 1, topFrameCount: board.topFrameCount || 1, bottomFrameCount: board.bottomFrameCount || 0 }); }} className="p-1 text-indusia-primary hover:bg-indusia-primary/10 rounded">
                               <Edit2 className="w-4 h-4" />
                             </button>
                             <button onClick={() => handleBoardDelete(board.id)} className="p-1 text-indusia-fail hover:bg-indusia-fail/10 rounded">
@@ -711,6 +717,32 @@ export default function MasterDataPage() {
                 />
                 <p className="text-xs text-indusia-textMuted mt-1">Number of physical PCBs (cavities) per panel</p>
               </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-indusia-text mb-2">Top Frame Count</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={boardForm.topFrameCount}
+                    onChange={(e) => setBoardForm(prev => ({ ...prev, topFrameCount: parseInt(e.target.value) || 1 }))}
+                    placeholder="Top frames"
+                    className="w-full px-4 py-2 bg-indusia-bg border border-indusia-border rounded-lg text-indusia-text focus:outline-none focus:ring-2 focus:ring-indusia-primary"
+                  />
+                  <p className="text-xs text-indusia-textMuted mt-1">Camera frames on TOP side</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-indusia-text mb-2">Bottom Frame Count</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={boardForm.bottomFrameCount}
+                    onChange={(e) => setBoardForm(prev => ({ ...prev, bottomFrameCount: parseInt(e.target.value) || 0 }))}
+                    placeholder="Bottom frames"
+                    className="w-full px-4 py-2 bg-indusia-bg border border-indusia-border rounded-lg text-indusia-text focus:outline-none focus:ring-2 focus:ring-indusia-primary"
+                  />
+                  <p className="text-xs text-indusia-textMuted mt-1">Camera frames on BOTTOM side (0 = top only)</p>
+                </div>
+              </div>
               <div className="flex gap-2">
                 <button
                   onClick={handleBoardSave}
@@ -721,7 +753,7 @@ export default function MasterDataPage() {
                   {editingBoard ? 'Update' : 'Add'}
                 </button>
                 {editingBoard && (
-                  <button onClick={() => { setEditingBoard(null); setBoardForm({ id: '', name: '', customerId: '', cavityCount: 1 }); }} className="px-4 py-2 bg-indusia-surfaceMuted text-indusia-text rounded-lg font-medium hover:bg-indusia-border flex items-center gap-2">
+                  <button onClick={() => { setEditingBoard(null); setBoardForm({ id: '', name: '', customerId: '', cavityCount: 1, topFrameCount: 1, bottomFrameCount: 0 }); }} className="px-4 py-2 bg-indusia-surfaceMuted text-indusia-text rounded-lg font-medium hover:bg-indusia-border flex items-center gap-2">
                     <X className="w-4 h-4" /> Cancel
                   </button>
                 )}

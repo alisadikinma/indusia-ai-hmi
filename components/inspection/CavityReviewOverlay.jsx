@@ -35,6 +35,9 @@ export function CavityReviewOverlay({
   initialFrameIndex = 0, // Start at a specific NG frame (for thumbnail click)
   initialDecisions = {}, // Persisted decisions from parent (survives modal close/reopen)
   onDecisionChange,      // (key, value) => void — sync each decision to parent immediately
+  cavityCount = 0,       // Number of physical PCBs per panel (for correct frame-to-PCB grouping)
+  topFrameCount = 0,     // DB-configured TOP frame count (primary source for frame-to-PCB grouping)
+  bottomFrameCount = 0,  // DB-configured BOTTOM frame count (primary source for frame-to-PCB grouping)
 }) {
   const boardSerialNumber = inspection?.serialNumber || 'N/A'
 
@@ -86,7 +89,14 @@ export function CavityReviewOverlay({
   // Compute per-PCB counts (TOP+BOTTOM with same serial_number = 1 PCB)
   const completeReview = useCallback((allDecisions) => {
     const hasRealNG = Object.values(allDecisions).some(d => d === 'REAL_NG')
-    const pcbCounts = computePcbCounts(ngFrames, allDecisions)
+    const topFrames = inspection?.results?.top || []
+    const bottomFrames = inspection?.results?.bottom || []
+    const frameLayout = {
+      cavityCount,
+      topFrameCount: topFrameCount || topFrames.length,
+      bottomFrameCount: bottomFrameCount || bottomFrames.length,
+    }
+    const pcbCounts = computePcbCounts(ngFrames, allDecisions, frameLayout)
     if (hasRealNG) {
       const hasFalseCall = Object.values(allDecisions).some(d => d && d !== 'REAL_NG')
       const firstReason = Object.values(allDecisions).find(d => d && d !== 'REAL_NG') || ''
@@ -100,7 +110,7 @@ export function CavityReviewOverlay({
       const firstReason = Object.values(allDecisions).find(d => d !== 'REAL_NG') || ''
       onConfirmGood?.(firstReason, allDecisions, pcbCounts)
     }
-  }, [onConfirmNG, onConfirmGood, ngFrames])
+  }, [onConfirmNG, onConfirmGood, ngFrames, inspection, cavityCount, topFrameCount, bottomFrameCount])
 
   // Auto-complete when all NG frames have been reviewed
   const completeReviewRef = useRef(null)
