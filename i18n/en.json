@@ -517,6 +517,18 @@
     "maxLength": "Maximum {n} characters",
     "invalidFormat": "Invalid format"
   },
+  "system": {
+    "systemOk": "SYSTEM OK",
+    "uptime": "UPTIME"
+  },
+  "sidebar": {
+    "collapse": "COLLAPSE",
+    "expand": "EXPAND",
+    "navigation": "NAVIGATION",
+    "active": "ACTIVE",
+    "version": "VERSION",
+    "build": "BUILD"
+  },
   "pagination": {
     "page": "Page",
     "of": "of",

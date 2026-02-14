@@ -610,9 +610,9 @@ export default function SelectLinePage() {
   }
 
   return (
-    <div className="min-h-screen bg-void">
+    <div className="h-screen flex flex-col bg-void overflow-hidden">
       {/* Header */}
-      <header className="h-14 bg-panel border-b border-surface-border flex items-center justify-between px-6">
+      <header className="h-14 shrink-0 bg-panel border-b border-surface-border flex items-center justify-between px-6">
         <div className="flex items-center gap-4">
           {/* Hamburger Menu Button */}
           <button
@@ -642,13 +642,13 @@ export default function SelectLinePage() {
         {/* Right: Sync + Notifications + User + Time */}
         <div className="flex items-center gap-4">
           <HeaderInfoBar />
-          
+
           <div className="flex items-center gap-3">
             <div className="w-2 h-2 bg-phosphor-green animate-pulse" />
             <span className="font-mono text-sm text-phosphor-green">{t('auth.online')}</span>
           </div>
           <span className="font-mono text-sm text-phosphor-amber">{currentTime}</span>
-          
+
           {/* User Profile Dropdown */}
           <div className="relative">
             <button
@@ -669,7 +669,7 @@ export default function SelectLinePage() {
                 showUserMenu && "rotate-180"
               )} />
             </button>
-            
+
             {/* Dropdown Menu */}
             {showUserMenu && (
               <div className="absolute right-0 top-full mt-1 w-48 bg-panel border border-surface-border shadow-lg z-50">
@@ -690,192 +690,191 @@ export default function SelectLinePage() {
         </div>
       </header>
 
-      {/* Main Content */}
-      <main className="p-6">
-        {/* Page Title */}
-        <div className="mb-6">
-          <div className="flex items-center justify-between mb-2">
+      {/* Main Content - flex-1 fills remaining space */}
+      <main className="flex-1 flex flex-col overflow-hidden px-6 pt-4">
+        {/* Page Title + Section Filter row */}
+        <div className="shrink-0">
+          <div className="flex items-center justify-between mb-1">
             <div className="flex items-center gap-3">
               <Radio className="w-5 h-5 text-phosphor-amber" />
-              <h2 className="font-display text-2xl font-bold text-text-primary tracking-wide">
+              <h2 className="font-display text-xl font-bold text-text-primary tracking-wide">
                 {t('line.selectTitle')}
               </h2>
+              <p className="font-mono text-sm text-text-tertiary ml-2 hidden sm:block">
+                {isOperator
+                  ? t('line.selectDescription')
+                  : t('line.selectDescriptionViewOnly')}
+              </p>
             </div>
             <button
               onClick={handleRefresh}
               disabled={isRefreshing || dataLoading}
-              className="flex items-center gap-2 px-4 py-2 bg-terminal border border-surface-border hover:border-phosphor-amber/50 transition-colors disabled:opacity-50"
+              className="flex items-center gap-2 px-3 py-1.5 bg-terminal border border-surface-border hover:border-phosphor-amber/50 transition-colors disabled:opacity-50"
             >
-              <RefreshCw size={16} className={cn(
+              <RefreshCw size={14} className={cn(
                 "text-phosphor-amber",
                 isRefreshing && "animate-spin"
               )} />
               <span className="font-mono text-xs text-text-secondary">{t('buttons.refresh')}</span>
             </button>
           </div>
-          <p className="font-mono text-sm text-text-tertiary">
-            {isOperator 
-              ? t('line.selectDescription')
-              : t('line.selectDescriptionViewOnly')}
-          </p>
-          
+
           {!isOperator && (
-            <div className="mt-3 flex items-center gap-2 px-4 py-2 bg-phosphor-cyan/10 border border-phosphor-cyan/30 w-fit">
-              <Eye size={16} className="text-phosphor-cyan" />
+            <div className="mb-2 flex items-center gap-2 px-3 py-1.5 bg-phosphor-cyan/10 border border-phosphor-cyan/30 w-fit">
+              <Eye size={14} className="text-phosphor-cyan" />
               <span className="font-mono text-xs text-phosphor-cyan">
                 {t('line.viewOnlyMode', { role: user.role?.toUpperCase() })}
               </span>
             </div>
           )}
-        </div>
 
-        {/* Section Filter */}
-        <div className="mb-6 flex items-center gap-3 flex-wrap">
-          <span className="font-mono text-xs text-text-tertiary">{t('line.filterBySection')}:</span>
-          <div className="flex items-center gap-2 flex-wrap">
-            <button
-              onClick={() => setSelectedSection('all')}
-              className={cn(
-                "px-4 py-2 font-mono text-xs font-bold border transition-colors",
-                selectedSection === 'all'
-                  ? "bg-phosphor-amber text-void border-phosphor-amber"
-                  : "bg-terminal text-text-secondary border-surface-border hover:border-phosphor-amber/50"
-              )}
-            >
-              {t('line.allLines')}
-            </button>
-            {sections.map(section => (
+          {/* Section Filter */}
+          <div className="mb-3 flex items-center gap-3 flex-wrap">
+            <span className="font-mono text-xs text-text-tertiary">{t('line.filterBySection')}:</span>
+            <div className="flex items-center gap-2 flex-wrap">
               <button
-                key={section.id}
-                onClick={() => setSelectedSection(section.id)}
+                onClick={() => setSelectedSection('all')}
                 className={cn(
-                  "px-4 py-2 font-mono text-xs font-bold border transition-colors",
-                  selectedSection === section.id
+                  "px-3 py-1.5 font-mono text-xs font-bold border transition-colors",
+                  selectedSection === 'all'
                     ? "bg-phosphor-amber text-void border-phosphor-amber"
                     : "bg-terminal text-text-secondary border-surface-border hover:border-phosphor-amber/50"
                 )}
               >
-                {section.name}
+                {t('line.allLines')}
               </button>
-            ))}
+              {sections.map(section => (
+                <button
+                  key={section.id}
+                  onClick={() => setSelectedSection(section.id)}
+                  className={cn(
+                    "px-3 py-1.5 font-mono text-xs font-bold border transition-colors",
+                    selectedSection === section.id
+                      ? "bg-phosphor-amber text-void border-phosphor-amber"
+                      : "bg-terminal text-text-secondary border-surface-border hover:border-phosphor-amber/50"
+                  )}
+                >
+                  {section.name}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
-        {/* Lines Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4 mb-8">
-          {dataLoading ? (
-            <div className="col-span-full flex items-center justify-center py-12">
-              <div className="text-center">
-                <img src="/indusiaai-logo.png" alt="INDUSIA AI" className="w-14 h-14 object-contain animate-pulse-glow mx-auto mb-4" />
-                <p className="font-mono text-sm text-text-tertiary">{t('line.loadingLines')}</p>
+        {/* Lines Grid - scrollable area */}
+        <div className="flex-1 overflow-y-auto min-h-0 pb-2">
+          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+            {dataLoading ? (
+              <div className="col-span-full flex items-center justify-center py-12">
+                <div className="text-center">
+                  <img src="/indusiaai-logo.png" alt="INDUSIA AI" className="w-14 h-14 object-contain animate-pulse-glow mx-auto mb-4" />
+                  <p className="font-mono text-sm text-text-tertiary">{t('line.loadingLines')}</p>
+                </div>
               </div>
-            </div>
-          ) : filteredLines.length === 0 ? (
-            <div className="col-span-full flex items-center justify-center py-12">
-              <div className="text-center">
-                <Factory className="w-12 h-12 text-text-tertiary mx-auto mb-4" />
-                <p className="font-mono text-sm text-text-tertiary">{t('line.noLinesFound')}</p>
-                <p className="font-mono text-xs text-text-tertiary mt-1">{t('line.addLinesHint')}</p>
+            ) : filteredLines.length === 0 ? (
+              <div className="col-span-full flex items-center justify-center py-12">
+                <div className="text-center">
+                  <Factory className="w-12 h-12 text-text-tertiary mx-auto mb-4" />
+                  <p className="font-mono text-sm text-text-tertiary">{t('line.noLinesFound')}</p>
+                  <p className="font-mono text-xs text-text-tertiary mt-1">{t('line.addLinesHint')}</p>
+                </div>
+              </div>
+            ) : (
+              filteredLines.map(line => (
+                <LineCard
+                  key={line.id}
+                  line={line}
+                  section={getSection(line.sectionId)}
+                  isSelected={selectedLine?.id === line.id}
+                  onSelect={(line) => { setSelectedLine(line); setNoWoWarning(null); }}
+                  currentUserId={user?.id}
+                  isOperator={isOperator}
+                  t={t}
+                  models={models}
+                  selectedModel={selectedModels[line.id] || null}
+                  onModelSelect={handleModelSelect}
+                  activeModelName={line.activeModelName}
+                  hasNoActiveWO={!!(selectedLine?.id === line.id && noWoWarning)}
+                />
+              ))
+            )}
+          </div>
+        </div>
+      </main>
+
+      {/* Bottom Action Bar - fixed to bottom of flex layout */}
+      <div className="shrink-0 h-16 bg-panel border-t border-surface-border flex items-center justify-between px-6">
+        <div className="flex items-center gap-4 min-w-0">
+          {selectedLine ? (
+            <div className="flex items-center gap-3 min-w-0">
+              <CheckCircle2 className="w-5 h-5 text-phosphor-green shrink-0" />
+              <div className="min-w-0">
+                <p className="font-display font-bold text-sm text-text-primary truncate">
+                  {selectedLine.name} {t('line.selected')}
+                </p>
+                <p className="font-mono text-xs text-text-tertiary truncate">
+                  {getSection(selectedLine.sectionId)?.name}
+                  {selectedLine.customerName && ` • ${selectedLine.customerName}${selectedLine.customerCode ? ` (${selectedLine.customerCode})` : ''}`}
+                  {selectedLineModel && (
+                    <span className="text-purple-400"> • {selectedLineModel.name} v{selectedLineModel.version}</span>
+                  )}
+                  {isOperator && !selectedLineModel && (
+                    <span className="text-phosphor-amber"> • {t('line.selectModelRequired') || 'Select AI model to continue'}</span>
+                  )}
+                  {!isOperator && ` • ${t('line.viewOnlyMode', { role: '' }).trim()}`}
+                </p>
               </div>
             </div>
           ) : (
-            filteredLines.map(line => (
-              <LineCard
-                key={line.id}
-                line={line}
-                section={getSection(line.sectionId)}
-                isSelected={selectedLine?.id === line.id}
-                onSelect={(line) => { setSelectedLine(line); setNoWoWarning(null); }}
-                currentUserId={user?.id}
-                isOperator={isOperator}
-                t={t}
-                models={models}
-                selectedModel={selectedModels[line.id] || null}
-                onModelSelect={handleModelSelect}
-                activeModelName={line.activeModelName}
-                hasNoActiveWO={!!(selectedLine?.id === line.id && noWoWarning)}
-              />
-            ))
-          )}
-        </div>
-
-        {/* Bottom Action Bar */}
-        <div className="fixed bottom-0 left-0 right-0 h-20 bg-panel border-t border-surface-border flex items-center justify-between px-6">
-          <div className="flex items-center gap-4">
-            {selectedLine ? (
-              <div className="flex items-center gap-4">
-                <CheckCircle2 className="w-6 h-6 text-phosphor-green" />
-                <div>
-                  <p className="font-display font-bold text-text-primary">
-                    {selectedLine.name} {t('line.selected')}
-                  </p>
-                  <p className="font-mono text-xs text-text-tertiary">
-                    {getSection(selectedLine.sectionId)?.name}
-                    {selectedLine.customerName && ` • ${selectedLine.customerName}${selectedLine.customerCode ? ` (${selectedLine.customerCode})` : ''}`}
-                    {selectedLineModel && (
-                      <span className="text-purple-400"> • {selectedLineModel.name} v{selectedLineModel.version}</span>
-                    )}
-                    {isOperator && !selectedLineModel && (
-                      <span className="text-phosphor-amber"> • {t('line.selectModelRequired') || 'Select AI model to continue'}</span>
-                    )}
-                    {!isOperator && ` • ${t('line.viewOnlyMode', { role: '' }).trim()}`}
-                  </p>
-                </div>
+            <div className="flex items-center gap-3">
+              <AlertTriangle className="w-5 h-5 text-phosphor-amber shrink-0" />
+              <div>
+                <p className="font-display font-bold text-sm text-phosphor-amber">
+                  {t('line.noLineSelected')}
+                </p>
+                <p className="font-mono text-xs text-text-tertiary">
+                  {t('line.selectLineToContinue')}
+                </p>
               </div>
-            ) : (
-              <div className="flex items-center gap-4">
-                <AlertTriangle className="w-6 h-6 text-phosphor-amber" />
-                <div>
-                  <p className="font-display font-bold text-phosphor-amber">
-                    {t('line.noLineSelected')}
-                  </p>
-                  <p className="font-mono text-xs text-text-tertiary">
-                    {t('line.selectLineToContinue')}
-                  </p>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {noWoWarning && (
-            <div className="flex items-center gap-3 px-4 py-3 bg-phosphor-red/10 border border-phosphor-red/30">
-              <AlertTriangle className="w-5 h-5 text-phosphor-red shrink-0" />
-              <p className="font-mono text-sm text-phosphor-red">
-                Tidak ada Work Order aktif untuk <span className="font-bold">{noWoWarning}</span>. Hubungi admin/manager untuk membuat Work Order baru.
-              </p>
             </div>
           )}
-
-          <button
-            onClick={handleStartInspection}
-            disabled={!selectedLine || isLoading || (isOperator && !selectedLineModel) || (isOperator && !!noWoWarning)}
-            className={cn(
-              "h-14 px-8 font-display text-lg font-bold tracking-wider flex items-center gap-3 transition-all",
-              selectedLine && (!isOperator || selectedLineModel) && !(isOperator && noWoWarning)
-                ? isOperator
-                  ? "bg-phosphor-green text-void hover:shadow-glow-green"
-                  : "bg-phosphor-cyan text-void hover:shadow-glow-cyan"
-                : "bg-surface-border text-text-tertiary cursor-not-allowed"
-            )}
-          >
-            {isLoading ? (
-              <>
-                <div className="w-5 h-5 border-2 border-void border-t-transparent animate-spin" />
-                <span>{t('line.connecting')}</span>
-              </>
-            ) : (
-              <>
-                {isOperator ? <Zap className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                <span>{isOperator ? t('line.startInspection') : t('line.viewInspection')}</span>
-                <ChevronRight className="w-5 h-5" />
-              </>
-            )}
-          </button>
         </div>
 
-        {/* Spacer for fixed bottom bar */}
-        <div className="h-24" />
-      </main>
+        {noWoWarning && (
+          <div className="flex items-center gap-2 px-3 py-2 bg-phosphor-red/10 border border-phosphor-red/30 mx-4">
+            <AlertTriangle className="w-4 h-4 text-phosphor-red shrink-0" />
+            <p className="font-mono text-xs text-phosphor-red">
+              No WO for <span className="font-bold">{noWoWarning}</span>
+            </p>
+          </div>
+        )}
+
+        <button
+          onClick={handleStartInspection}
+          disabled={!selectedLine || isLoading || (isOperator && !selectedLineModel) || (isOperator && !!noWoWarning)}
+          className={cn(
+            "h-12 px-8 font-display text-base font-bold tracking-wider flex items-center gap-3 transition-all shrink-0",
+            selectedLine && (!isOperator || selectedLineModel) && !(isOperator && noWoWarning)
+              ? isOperator
+                ? "bg-phosphor-green text-void hover:shadow-glow-green"
+                : "bg-phosphor-cyan text-void hover:shadow-glow-cyan"
+              : "bg-surface-border text-text-tertiary cursor-not-allowed"
+          )}
+        >
+          {isLoading ? (
+            <>
+              <div className="w-5 h-5 border-2 border-void border-t-transparent animate-spin" />
+              <span>{t('line.connecting')}</span>
+            </>
+          ) : (
+            <>
+              {isOperator ? <Zap className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+              <span>{isOperator ? t('line.startInspection') : t('line.viewInspection')}</span>
+              <ChevronRight className="w-5 h-5" />
+            </>
+          )}
+        </button>
+      </div>
     </div>
   );
 }

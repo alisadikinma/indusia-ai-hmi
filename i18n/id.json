@@ -516,6 +516,18 @@
     "maxLength": "Maksimal {n} karakter",
     "invalidFormat": "Format tidak valid"
   },
+  "system": {
+    "systemOk": "SISTEM OK",
+    "uptime": "UPTIME"
+  },
+  "sidebar": {
+    "collapse": "CIUTKAN",
+    "expand": "PERLUAS",
+    "navigation": "NAVIGASI",
+    "active": "AKTIF",
+    "version": "VERSI",
+    "build": "BUILD"
+  },
   "pagination": {
     "page": "Halaman",
     "of": "dari",

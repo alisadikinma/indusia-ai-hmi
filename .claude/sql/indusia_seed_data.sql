@@ -73,12 +73,12 @@ INSERT INTO role_menu_permissions (role_id, menu_id) VALUES
   ('role_manager', 'menu_eventlog')
 ON CONFLICT DO NOTHING;
 
--- Operator: inspection, overrides, dashboard, notifications
+-- Operator: inspection, dashboard, notifications, help
 INSERT INTO role_menu_permissions (role_id, menu_id) VALUES
   ('role_operator', 'menu_dashboard'),
   ('role_operator', 'menu_inspection'),
-  ('role_operator', 'menu_overrides'),
-  ('role_operator', 'menu_notifications')
+  ('role_operator', 'menu_notifications'),
+  ('role_operator', 'menu_help')
 ON CONFLICT DO NOTHING;
 
 -- ============================================================
