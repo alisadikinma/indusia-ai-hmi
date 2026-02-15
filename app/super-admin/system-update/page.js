@@ -9,11 +9,12 @@ import SectionHeader from '@/components/common/SectionHeader'
 import UpdateTerminal from '@/components/system-update/UpdateTerminal'
 import PreflightCheck from '@/components/system-update/PreflightCheck'
 import UpdateHistory from '@/components/system-update/UpdateHistory'
+import { authFetch } from '@/lib/utils/authFetch'
 import { RefreshCw, ArrowRight, AlertTriangle, CheckCircle, Download } from 'lucide-react'
 
 export default function SystemUpdatePage() {
   const router = useRouter()
-  const { user } = useAuth()
+  const { user, isSuperAdmin } = useAuth()
   const { t } = useI18n()
   const {
     currentVersion,
@@ -35,28 +36,17 @@ export default function SystemUpdatePage() {
 
   // Preflight checks
   const [preflightChecks, setPreflightChecks] = useState([
-    { name: t('systemUpdate.preflightDatabase'), status: 'checking', message: 'Checking...' },
-    { name: t('systemUpdate.preflightMigrations'), status: 'checking', message: 'Checking...' },
-    { name: t('systemUpdate.preflightProduction'), status: 'checking', message: 'Checking...' },
+    { name: 'Database Connection', status: 'checking', message: 'Checking...' },
+    { name: 'Pending Migrations', status: 'checking', message: 'Checking...' },
+    { name: 'Production Lines', status: 'checking', message: 'Checking...' },
   ])
 
-  // Auth guard
-  if (!user || user.role !== 'superadmin') {
-    return (
-      <div className="min-h-[60vh] flex items-center justify-center">
-        <div className="bg-panel rounded-xl shadow-xl border border-surface-border p-8 max-w-md text-center">
-          <h2 className="text-xl font-bold text-text-primary mb-3">{t('auth.accessDenied')}</h2>
-          <p className="text-sm text-text-secondary mb-6">{t('admin.onlySuperAdmin')}</p>
-          <button onClick={() => router.back()} className="px-6 py-3 bg-phosphor-amber text-void rounded-lg font-medium hover:opacity-90 transition-opacity">
-            {t('buttons.goBack')}
-          </button>
-        </div>
-      </div>
-    )
-  }
+  // isSuperAdmin comes from useAuth() — checks normalized role
 
   // Run preflight checks
   const runPreflightChecks = useCallback(async () => {
+    if (!isSuperAdmin) return
+
     const checks = [
       { name: t('systemUpdate.preflightDatabase'), status: 'checking', message: 'Checking...' },
       { name: t('systemUpdate.preflightMigrations'), status: 'checking', message: 'Checking...' },
@@ -80,9 +70,7 @@ export default function SystemUpdatePage() {
 
     // Check 2: Pending migrations
     try {
-      const res = await fetch('/api/system/migrations/pending', {
-        headers: { 'x-user-id': user?.id || '' },
-      })
+      const res = await authFetch('/api/system/migrations/pending')
       const json = await res.json()
       const pending = json.data?.pending?.length || 0
       checks[1] = {
@@ -99,7 +87,6 @@ export default function SystemUpdatePage() {
 
     // Check 3: Production lines
     try {
-      // Check a known line — if none are running, we're good
       const res = await fetch('/api/system-health')
       const json = await res.json()
       const lineRuntime = json.data?.lineRuntime
@@ -115,41 +102,38 @@ export default function SystemUpdatePage() {
       checks[2] = { ...checks[2], status: 'ok', message: t('systemUpdate.allLinesIdle') }
     }
     setPreflightChecks([...checks])
-  }, [t, user?.id])
+  }, [t, isSuperAdmin])
 
   // Fetch update history
   const fetchHistory = useCallback(async () => {
+    if (!isSuperAdmin) return
     try {
-      const res = await fetch('/api/system/update/history', {
-        headers: { 'x-user-id': user?.id || '' },
-      })
+      const res = await authFetch('/api/system/update/history')
       const json = await res.json()
       if (json.success) {
         setHistory(json.data || [])
       }
     } catch (_) { /* ignore */ }
-  }, [user?.id])
+  }, [isSuperAdmin])
 
   // On mount: run checks + fetch history
   useEffect(() => {
-    runPreflightChecks()
-    fetchHistory()
-  }, [runPreflightChecks, fetchHistory])
+    if (isSuperAdmin) {
+      runPreflightChecks()
+      fetchHistory()
+    }
+  }, [isSuperAdmin, runPreflightChecks, fetchHistory])
 
   // Trigger update via SSE
-  const triggerUpdate = async () => {
+  const triggerUpdate = useCallback(async () => {
     setShowConfirmDialog(false)
     setIsUpdating(true)
     setUpdateComplete(null)
     setLogLines([])
 
     try {
-      const res = await fetch('/api/system/update', {
+      const res = await authFetch('/api/system/update', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-user-id': user?.id || '',
-        },
         body: JSON.stringify({ targetVersion: latestVersion }),
       })
 
@@ -194,6 +178,21 @@ export default function SystemUpdatePage() {
       setUpdateComplete('failed')
       setIsUpdating(false)
     }
+  }, [latestVersion, fetchHistory])
+
+  // Auth guard — AFTER all hooks
+  if (!user || !isSuperAdmin) {
+    return (
+      <div className="min-h-[60vh] flex items-center justify-center">
+        <div className="bg-panel rounded-xl shadow-xl border border-surface-border p-8 max-w-md text-center">
+          <h2 className="text-xl font-bold text-text-primary mb-3">{t('auth.accessDenied')}</h2>
+          <p className="text-sm text-text-secondary mb-6">{t('admin.onlySuperAdmin')}</p>
+          <button onClick={() => router.back()} className="px-6 py-3 bg-phosphor-amber text-void rounded-lg font-medium hover:opacity-90 transition-opacity">
+            {t('buttons.goBack')}
+          </button>
+        </div>
+      </div>
+    )
   }
 
   const hasPreflightErrors = preflightChecks.some(c => c.status === 'error')
@@ -296,7 +295,7 @@ export default function SystemUpdatePage() {
             <button
               onClick={() => setShowConfirmDialog(true)}
               disabled={hasPreflightErrors}
-              className="flex items-center gap-2 px-6 py-3 rounded-lg bg-phosphor-amber text-void font-bold font-mono text-sm hover:bg-phosphor-amber-bright transition-colors shadow-glow-amber disabled:opacity-50 disabled:shadow-none disabled:cursor-not-allowed"
+              className="flex items-center gap-2 px-6 py-3 rounded-lg bg-phosphor-amber text-white font-bold font-mono text-sm hover:bg-phosphor-amber-bright transition-colors shadow-glow-amber disabled:opacity-50 disabled:shadow-none disabled:cursor-not-allowed"
             >
               <Download className="w-4 h-4" />
               {t('systemUpdate.updateTo', { version: `v${latestVersion}` })}
@@ -351,7 +350,7 @@ export default function SystemUpdatePage() {
               </button>
               <button
                 onClick={triggerUpdate}
-                className="px-4 py-2 rounded-lg bg-phosphor-amber text-void font-medium text-sm hover:bg-phosphor-amber-bright transition-colors"
+                className="px-4 py-2 rounded-lg bg-phosphor-amber text-white font-medium text-sm hover:bg-phosphor-amber-bright transition-colors"
               >
                 {t('systemUpdate.updateTo', { version: `v${latestVersion}` })}
               </button>

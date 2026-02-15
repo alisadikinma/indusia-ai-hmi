@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useCallback, useRef, useEffect } from 'react'
+import { authFetch } from '@/lib/utils/authFetch'
 
 const CHECK_INTERVAL = 3600000 // 1 hour
 
@@ -49,7 +50,7 @@ export function useSystemUpdate({ autoCheck = false } = {}) {
     setError(null)
 
     try {
-      const res = await fetch('/api/system/check-update')
+      const res = await authFetch('/api/system/check-update')
       const json = await res.json()
 
       if (json.success) {

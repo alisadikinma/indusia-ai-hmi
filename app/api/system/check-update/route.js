@@ -26,7 +26,10 @@ async function handleGET(request) {
   }
 
   try {
+    // Current version from package.json — this is the "installed" version
+    // Only changes when an update is applied (git pull + npm install)
     const currentVersion = getCurrentVersion()
+    const currentTag = `v${currentVersion}`
 
     // Fetch latest tags from remote
     const fetchResult = gitExec('git fetch origin --tags 2>&1')
@@ -44,23 +47,21 @@ async function handleGET(request) {
       })
     }
 
-    // Get current tag (local)
-    const currentTag = gitExec('git describe --tags --abbrev=0') || `v${currentVersion}`
-
-    // Get latest tag from remote
+    // Get latest tag (highest version number across all fetched tags)
     const latestTag = gitExec('git tag --sort=-v:refname')
     const latestVersion = latestTag ? latestTag.split('\n')[0] : currentTag
 
-    // Count commits between current tag and latest tag
+    // Count commits between current version tag and latest tag
     let commitsBehind = 0
     if (currentTag !== latestVersion) {
+      // Try to count commits; may fail if currentTag doesn't exist as a real tag
       const count = gitExec(`git rev-list ${currentTag}..${latestVersion} --count`)
       commitsBehind = count ? parseInt(count, 10) : 0
     }
 
     // Get changelog between versions
     let changelog = []
-    if (commitsBehind > 0) {
+    if (currentTag !== latestVersion) {
       const log = gitExec(`git log ${currentTag}..${latestVersion} --oneline --format=%s`)
       if (log) {
         changelog = log.split('\n').filter(Boolean)
