@@ -12,6 +12,7 @@ import {
   Eye, EyeOff, Move, Crosshair 
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useI18n } from '@/context/I18nContext';
 
 const ZOOM_LEVELS = [1, 2, 4, 8];
 
@@ -26,10 +27,11 @@ export function DefectViewPanel({
   detection,
   imageWidth = 1024,
   imageHeight = 768,
-  title = 'DEFECT VIEW',
+  title,
   showOverlay = true,
   className,
 }) {
+  const { t } = useI18n();
   const containerRef = useRef(null);
   const imgRef = useRef(null);
   const [zoomLevel, setZoomLevel] = useState(1);
@@ -132,10 +134,10 @@ export function DefectViewPanel({
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-1.5 bg-void border-b border-surface-border">
         <div className="flex items-center gap-2">
-          <Crosshair className="w-4 h-4 text-phosphor-amber" />
-          <span className="font-mono text-xs text-text-tertiary">{title}</span>
+          <Crosshair className="w-4 h-4 text-phosphor-teal" />
+          <span className="font-mono text-xs text-text-tertiary">{title || t('inspection.defectView')}</span>
         </div>
-        <span className="font-mono text-xs text-phosphor-amber">{zoomLevel}x</span>
+        <span className="font-mono text-xs text-phosphor-teal">{zoomLevel}x</span>
       </div>
 
       {/* Image Container */}
@@ -204,7 +206,7 @@ export function DefectViewPanel({
         ) : (
           <div className="text-center">
             <Move className="w-10 h-10 text-text-tertiary/30 mx-auto mb-2" />
-            <p className="font-mono text-sm text-text-tertiary">Waiting for image...</p>
+            <p className="font-mono text-sm text-text-tertiary">{t('inspection.waitingForImage')}</p>
           </div>
         )}
       </div>
@@ -217,7 +219,7 @@ export function DefectViewPanel({
             disabled={zoomIndex === 0}
             className={cn(
               "p-1 border border-surface-border transition-colors",
-              zoomIndex === 0 ? "opacity-30" : "hover:border-phosphor-amber"
+              zoomIndex === 0 ? "opacity-30" : "hover:border-phosphor-teal"
             )}
           >
             <ZoomOut className="w-3.5 h-3.5" />
@@ -230,8 +232,8 @@ export function DefectViewPanel({
               className={cn(
                 "w-6 h-6 font-mono text-xxs border transition-colors",
                 level === zoomLevel
-                  ? "bg-phosphor-amber text-void border-phosphor-amber"
-                  : "border-surface-border text-text-tertiary hover:border-phosphor-amber/50"
+                  ? "bg-phosphor-teal text-void border-phosphor-teal"
+                  : "border-surface-border text-text-tertiary hover:border-phosphor-teal/50"
               )}
             >
               {level}x
@@ -243,7 +245,7 @@ export function DefectViewPanel({
             disabled={zoomIndex === ZOOM_LEVELS.length - 1}
             className={cn(
               "p-1 border border-surface-border transition-colors",
-              zoomIndex === ZOOM_LEVELS.length - 1 ? "opacity-30" : "hover:border-phosphor-amber"
+              zoomIndex === ZOOM_LEVELS.length - 1 ? "opacity-30" : "hover:border-phosphor-teal"
             )}
           >
             <ZoomIn className="w-3.5 h-3.5" />
@@ -253,7 +255,7 @@ export function DefectViewPanel({
         <div className="flex items-center gap-0.5">
           <button
             onClick={handleReset}
-            className="p-1 border border-surface-border hover:border-phosphor-amber transition-colors"
+            className="p-1 border border-surface-border hover:border-phosphor-teal transition-colors"
           >
             <RotateCcw className="w-3.5 h-3.5" />
           </button>
@@ -261,7 +263,7 @@ export function DefectViewPanel({
             onClick={() => setOverlayVisible(!overlayVisible)}
             className={cn(
               "p-1 border transition-colors",
-              overlayVisible ? "border-phosphor-amber text-phosphor-amber" : "border-surface-border"
+              overlayVisible ? "border-phosphor-teal text-phosphor-teal" : "border-surface-border"
             )}
           >
             {overlayVisible ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}

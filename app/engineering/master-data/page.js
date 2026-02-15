@@ -8,15 +8,25 @@ import { useUsers } from '@/hooks/useUsers';
 import { useRoles } from '@/hooks/useRoles';
 import SectionHeader from '@/components/common/SectionHeader';
 import Card from '@/components/common/Card';
-import { Edit2, Trash2, Save, X, Loader2, AlertCircle, RefreshCw } from 'lucide-react';
+import { Edit2, Trash2, Save, X, Loader2, AlertCircle, RefreshCw, CheckCircle, XCircle } from 'lucide-react';
 import { authFetch } from '@/lib/utils/authFetch';
 import { useToast } from '@/hooks/useToast';
+import { useI18n } from '@/context/I18nContext';
+import PageLoading from '@/components/common/PageLoading';
 
 export default function MasterDataPage() {
   const router = useRouter();
   const { user, hasMenuAccess, isLoading: authLoading } = useAuth();
   const { showToast } = useToast();
   const [activeTab, setActiveTab] = useState('customers');
+  const { t } = useI18n();
+
+  // Read ?tab= query param on mount (avoids useSearchParams Suspense issue)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tab = params.get('tab');
+    if (tab) setActiveTab(tab);
+  }, []);
 
   // ALL HOOKS MUST BE CALLED BEFORE ANY CONDITIONAL RETURNS
   const { 
@@ -62,16 +72,16 @@ export default function MasterDataPage() {
   const [savingUser, setSavingUser] = useState(false);
   const [userFilter, setUserFilter] = useState('all');
 
+  // False Call Reasons state
+  const [falseCallReasons, setFalseCallReasons] = useState([]);
+  const [falseCallLoading, setFalseCallLoading] = useState(false);
+  const [editingReason, setEditingReason] = useState(null);
+  const [reasonForm, setReasonForm] = useState({ code: '', name: '', description: '', is_active: true, display_order: 0 });
+  const [savingReason, setSavingReason] = useState(false);
+
   // Show loading while auth is loading
   if (authLoading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-center">
-          <div className="w-8 h-8 border-2 border-phosphor-amber border-t-transparent animate-spin mx-auto mb-4" />
-          <p className="text-text-secondary">Loading...</p>
-        </div>
-      </div>
-    );
+    return <PageLoading message={t('common.loading')} compact />;
   }
 
   // Check access via database permissions
@@ -80,8 +90,8 @@ export default function MasterDataPage() {
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
           <AlertCircle className="w-12 h-12 text-phosphor-red mx-auto mb-4" />
-          <h2 className="text-lg font-semibold text-text-primary mb-2">Access Denied</h2>
-          <p className="text-text-secondary">You don&apos;t have permission to access this page.</p>
+          <h2 className="text-lg font-semibold text-text-primary mb-2">{t('auth.accessDenied')}</h2>
+          <p className="text-text-secondary">{t('auth.noPermission')}</p>
         </div>
       </div>
     );
@@ -91,11 +101,12 @@ export default function MasterDataPage() {
   const userRole = user?.roleId || user?.role_id || user?.role;
 
   const tabs = [
-    { id: 'customers', label: 'Customers' },
-    { id: 'sections', label: 'Sections' },
-    { id: 'lines', label: 'Production Lines' },
-    { id: 'boards', label: 'Boards' },
-    ...(canManageUsers ? [{ id: 'users', label: 'Users' }] : []),
+    { id: 'customers', label: t('masterData.customers') },
+    { id: 'sections', label: t('masterData.sections') },
+    { id: 'lines', label: t('masterData.productionLines') },
+    { id: 'boards', label: t('masterData.boards') },
+    { id: 'false-call-reasons', label: t('masterData.falseCallReasons') },
+    ...(canManageUsers ? [{ id: 'users', label: t('masterData.users') }] : []),
   ];
 
   // Customer CRUD
@@ -128,7 +139,7 @@ export default function MasterDataPage() {
   };
 
   const handleCustomerDelete = async (id) => {
-    if (!confirm('Are you sure you want to delete this customer?')) return;
+    if (!confirm(t('masterData.confirmDeleteCustomer'))) return;
 
     try {
       const res = await authFetch(`/api/master-data/customers/${id}`, { method: 'DELETE' });
@@ -172,7 +183,7 @@ export default function MasterDataPage() {
   };
 
   const handleSectionDelete = async (id) => {
-    if (!confirm('Are you sure you want to delete this section?')) return;
+    if (!confirm(t('masterData.confirmDeleteSection'))) return;
 
     try {
       const res = await authFetch(`/api/master-data/sections/${id}`, { method: 'DELETE' });
@@ -220,7 +231,7 @@ export default function MasterDataPage() {
   };
 
   const handleLineDelete = async (id) => {
-    if (!confirm('Are you sure you want to delete this line?')) return;
+    if (!confirm(t('masterData.confirmDeleteLine'))) return;
 
     try {
       const res = await authFetch(`/api/master-data/lines/${id}`, { method: 'DELETE' });
@@ -270,7 +281,7 @@ export default function MasterDataPage() {
   };
 
   const handleBoardDelete = async (id) => {
-    if (!confirm('Are you sure you want to delete this board?')) return;
+    if (!confirm(t('masterData.confirmDeleteBoard'))) return;
 
     try {
       const res = await authFetch(`/api/master-data/boards/${id}`, { method: 'DELETE' });
@@ -319,7 +330,7 @@ export default function MasterDataPage() {
   };
 
   const handleUserDelete = async (id) => {
-    if (!confirm('Are you sure you want to delete this user?')) return;
+    if (!confirm(t('masterData.confirmDeleteUser'))) return;
 
     try {
       const res = await authFetch(`/api/users/${id}`, { method: 'DELETE' });
@@ -342,6 +353,74 @@ export default function MasterDataPage() {
     }));
   };
 
+  // False Call Reasons CRUD
+  const fetchReasons = async () => {
+    setFalseCallLoading(true);
+    try {
+      const res = await authFetch('/api/master-data/false-call-reasons');
+      const data = await res.json();
+      if (data.success) setFalseCallReasons(data.data || []);
+    } catch (err) {
+      console.error('Failed to fetch reasons:', err);
+    } finally {
+      setFalseCallLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (user && activeTab === 'false-call-reasons') fetchReasons();
+  }, [user, activeTab]);
+
+  const handleReasonSave = async () => {
+    if (!reasonForm.code.trim() || !reasonForm.name.trim()) return;
+    setSavingReason(true);
+    try {
+      const endpoint = editingReason
+        ? `/api/master-data/false-call-reasons/${editingReason.id}`
+        : '/api/master-data/false-call-reasons';
+      const res = await authFetch(endpoint, {
+        method: editingReason ? 'PATCH' : 'POST',
+        body: JSON.stringify(reasonForm)
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || 'Failed to save');
+      showToast({ title: `Reason ${editingReason ? 'updated' : 'created'}`, variant: 'success' });
+      setReasonForm({ code: '', name: '', description: '', is_active: true, display_order: 0 });
+      setEditingReason(null);
+      fetchReasons();
+    } catch (err) {
+      showToast({ title: 'Error', description: err.message, variant: 'error' });
+    } finally {
+      setSavingReason(false);
+    }
+  };
+
+  const handleReasonDelete = async (id) => {
+    if (!confirm(t('masterData.confirmDeleteReason'))) return;
+    try {
+      const res = await authFetch(`/api/master-data/false-call-reasons/${id}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || 'Failed to delete');
+      showToast({ title: 'Reason deleted', variant: 'success' });
+      fetchReasons();
+    } catch (err) {
+      showToast({ title: 'Error', description: err.message, variant: 'error' });
+    }
+  };
+
+  const toggleReasonActive = async (reason) => {
+    try {
+      const res = await authFetch(`/api/master-data/false-call-reasons/${reason.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ is_active: !reason.is_active })
+      });
+      const data = await res.json();
+      if (data.success) fetchReasons();
+    } catch (err) {
+      showToast({ title: 'Error', description: err.message, variant: 'error' });
+    }
+  };
+
   const filteredUsers = users.filter(u => {
     if (userFilter === 'all') return true;
     const role = u.roleId || u.role_id || u.role;
@@ -354,8 +433,8 @@ export default function MasterDataPage() {
   return (
     <div>
       <SectionHeader
-        title="Master Data Console"
-        description="Configure customers, sections, lines, boards, and registered users for the HMI."
+        title={t('masterData.title')}
+        description={t('masterData.description')}
       />
 
       {/* Error Banner */}
@@ -363,13 +442,13 @@ export default function MasterDataPage() {
         <div className="bg-red-500/10 border border-red-500/30 rounded-lg px-4 py-3 mb-6 flex items-center gap-3">
           <AlertCircle className="w-5 h-5 text-red-400" />
           <p className="text-sm text-red-400 flex-1">
-            Error loading data: {masterError || (canManageUsers ? usersError : null)}
+            {t('masterData.errorLoading')}: {masterError || (canManageUsers ? usersError : null)}
           </p>
           <button
             onClick={() => { refreshMasterData(); if (canManageUsers) refreshUsers(); }}
             className="text-sm text-red-400 hover:text-red-300 underline flex items-center gap-1"
           >
-            <RefreshCw className="w-4 h-4" /> Retry
+            <RefreshCw className="w-4 h-4" /> {t('masterData.retry')}
           </button>
         </div>
       )}
@@ -395,25 +474,22 @@ export default function MasterDataPage() {
 
       {/* Loading State */}
       {masterLoading && (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="w-8 h-8 animate-spin text-indusia-primary" />
-          <span className="ml-3 text-indusia-textMuted">Loading data...</span>
-        </div>
+        <PageLoading message={t('masterData.loading')} compact />
       )}
 
       {/* Customers Tab */}
       {!masterLoading && activeTab === 'customers' && (
         <div className="grid grid-cols-2 gap-6">
-          <Card title="Customers" subtitle={`${customers.length} customers`}>
+          <Card title={t('masterData.customers')} subtitle={`${customers.length} customers`}>
             {customers.length === 0 ? (
-              <p className="text-indusia-textMuted text-center py-8">No customers found</p>
+              <p className="text-indusia-textMuted text-center py-8">{t('masterData.noCustomers')}</p>
             ) : (
               <table className="w-full">
                 <thead className="border-b border-indusia-border">
                   <tr>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-indusia-textMuted uppercase">Name</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-indusia-textMuted uppercase">ID</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-indusia-textMuted uppercase">Actions</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-indusia-textMuted uppercase">{t('masterData.name')}</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-indusia-textMuted uppercase">{t('masterData.id')}</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-indusia-textMuted uppercase">{t('common.actions')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -438,15 +514,15 @@ export default function MasterDataPage() {
             )}
           </Card>
 
-          <Card title={editingCustomer ? 'Edit Customer' : 'Add Customer'}>
+          <Card title={editingCustomer ? t('masterData.editCustomer') : t('masterData.addCustomer')}>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-indusia-text mb-2">Customer Name</label>
-                <input 
-                  type="text" 
-                  value={customerForm.name} 
-                  onChange={(e) => setCustomerForm(prev => ({ ...prev, name: e.target.value }))} 
-                  placeholder="Enter customer name" 
+                <label className="block text-sm font-medium text-indusia-text mb-2">{t('masterData.customerName')}</label>
+                <input
+                  type="text"
+                  value={customerForm.name}
+                  onChange={(e) => setCustomerForm(prev => ({ ...prev, name: e.target.value }))}
+                  placeholder={t('masterData.enterCustomerName')}
                   className="w-full px-4 py-2 bg-indusia-bg border border-indusia-border rounded-lg text-indusia-text focus:outline-none focus:ring-2 focus:ring-indusia-primary" 
                 />
               </div>
@@ -457,11 +533,11 @@ export default function MasterDataPage() {
                   className="flex-1 px-4 py-2 bg-indusia-primary text-white rounded-lg font-medium hover:opacity-90 flex items-center justify-center gap-2 disabled:opacity-50"
                 >
                   {savingCustomer ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                  {editingCustomer ? 'Update' : 'Add'}
+                  {editingCustomer ? t('buttons.update') : t('buttons.add')}
                 </button>
                 {editingCustomer && (
                   <button onClick={() => { setEditingCustomer(null); setCustomerForm({ id: '', name: '' }); }} className="px-4 py-2 bg-indusia-surfaceMuted text-indusia-text rounded-lg font-medium hover:bg-indusia-border flex items-center gap-2">
-                    <X className="w-4 h-4" /> Cancel
+                    <X className="w-4 h-4" /> {t('buttons.cancel')}
                   </button>
                 )}
               </div>
@@ -473,16 +549,16 @@ export default function MasterDataPage() {
       {/* Sections Tab */}
       {!masterLoading && activeTab === 'sections' && (
         <div className="grid grid-cols-2 gap-6">
-          <Card title="Sections" subtitle={`${sections.length} sections`}>
+          <Card title={t('masterData.sections')} subtitle={`${sections.length} sections`}>
             {sections.length === 0 ? (
-              <p className="text-indusia-textMuted text-center py-8">No sections found</p>
+              <p className="text-indusia-textMuted text-center py-8">{t('masterData.noSections')}</p>
             ) : (
               <table className="w-full">
                 <thead className="border-b border-indusia-border">
                   <tr>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-indusia-textMuted uppercase">Name</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-indusia-textMuted uppercase">ID</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-indusia-textMuted uppercase">Actions</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-indusia-textMuted uppercase">{t('masterData.name')}</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-indusia-textMuted uppercase">{t('masterData.id')}</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-indusia-textMuted uppercase">{t('common.actions')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -507,15 +583,15 @@ export default function MasterDataPage() {
             )}
           </Card>
 
-          <Card title={editingSection ? 'Edit Section' : 'Add Section'}>
+          <Card title={editingSection ? t('masterData.editSection') : t('masterData.addSection')}>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-indusia-text mb-2">Section Name</label>
-                <input 
-                  type="text" 
-                  value={sectionForm.name} 
-                  onChange={(e) => setSectionForm(prev => ({ ...prev, name: e.target.value }))} 
-                  placeholder="Enter section name" 
+                <label className="block text-sm font-medium text-indusia-text mb-2">{t('masterData.sectionName')}</label>
+                <input
+                  type="text"
+                  value={sectionForm.name}
+                  onChange={(e) => setSectionForm(prev => ({ ...prev, name: e.target.value }))}
+                  placeholder={t('masterData.enterSectionName')}
                   className="w-full px-4 py-2 bg-indusia-bg border border-indusia-border rounded-lg text-indusia-text focus:outline-none focus:ring-2 focus:ring-indusia-primary" 
                 />
               </div>
@@ -526,11 +602,11 @@ export default function MasterDataPage() {
                   className="flex-1 px-4 py-2 bg-indusia-primary text-white rounded-lg font-medium hover:opacity-90 flex items-center justify-center gap-2 disabled:opacity-50"
                 >
                   {savingSection ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                  {editingSection ? 'Update' : 'Add'}
+                  {editingSection ? t('buttons.update') : t('buttons.add')}
                 </button>
                 {editingSection && (
                   <button onClick={() => { setEditingSection(null); setSectionForm({ id: '', name: '' }); }} className="px-4 py-2 bg-indusia-surfaceMuted text-indusia-text rounded-lg font-medium hover:bg-indusia-border flex items-center gap-2">
-                    <X className="w-4 h-4" /> Cancel
+                    <X className="w-4 h-4" /> {t('buttons.cancel')}
                   </button>
                 )}
               </div>
@@ -542,17 +618,17 @@ export default function MasterDataPage() {
       {/* Lines Tab */}
       {!masterLoading && activeTab === 'lines' && (
         <div className="grid grid-cols-2 gap-6">
-          <Card title="Production Lines" subtitle={`${lines.length} lines`}>
+          <Card title={t('masterData.productionLines')} subtitle={`${lines.length} lines`}>
             {lines.length === 0 ? (
-              <p className="text-indusia-textMuted text-center py-8">No lines found</p>
+              <p className="text-indusia-textMuted text-center py-8">{t('masterData.noLines')}</p>
             ) : (
               <table className="w-full">
                 <thead className="border-b border-indusia-border">
                   <tr>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-indusia-textMuted uppercase">Name</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-indusia-textMuted uppercase">Customer</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-indusia-textMuted uppercase">Section</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-indusia-textMuted uppercase">Actions</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-indusia-textMuted uppercase">{t('masterData.name')}</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-indusia-textMuted uppercase">{t('masterData.customer')}</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-indusia-textMuted uppercase">{t('masterData.section')}</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-indusia-textMuted uppercase">{t('common.actions')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -582,37 +658,37 @@ export default function MasterDataPage() {
             )}
           </Card>
 
-          <Card title={editingLine ? 'Edit Line' : 'Add Line'}>
+          <Card title={editingLine ? t('masterData.editLine') : t('masterData.addLine')}>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-indusia-text mb-2">Line Name</label>
-                <input 
-                  type="text" 
-                  value={lineForm.name} 
-                  onChange={(e) => setLineForm(prev => ({ ...prev, name: e.target.value }))} 
-                  placeholder="Enter line name" 
+                <label className="block text-sm font-medium text-indusia-text mb-2">{t('masterData.lineName')}</label>
+                <input
+                  type="text"
+                  value={lineForm.name}
+                  onChange={(e) => setLineForm(prev => ({ ...prev, name: e.target.value }))}
+                  placeholder={t('masterData.enterLineName')}
                   className="w-full px-4 py-2 bg-indusia-bg border border-indusia-border rounded-lg text-indusia-text focus:outline-none focus:ring-2 focus:ring-indusia-primary" 
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-indusia-text mb-2">Customer</label>
-                <select 
-                  value={lineForm.customerId} 
-                  onChange={(e) => setLineForm(prev => ({ ...prev, customerId: e.target.value }))} 
+                <label className="block text-sm font-medium text-indusia-text mb-2">{t('masterData.customer')}</label>
+                <select
+                  value={lineForm.customerId}
+                  onChange={(e) => setLineForm(prev => ({ ...prev, customerId: e.target.value }))}
                   className="w-full px-4 py-2 bg-indusia-bg border border-indusia-border rounded-lg text-indusia-text focus:outline-none focus:ring-2 focus:ring-indusia-primary"
                 >
-                  <option value="">Select customer...</option>
+                  <option value="">{t('masterData.selectCustomer')}</option>
                   {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-indusia-text mb-2">Section</label>
-                <select 
-                  value={lineForm.sectionId} 
-                  onChange={(e) => setLineForm(prev => ({ ...prev, sectionId: e.target.value }))} 
+                <label className="block text-sm font-medium text-indusia-text mb-2">{t('masterData.section')}</label>
+                <select
+                  value={lineForm.sectionId}
+                  onChange={(e) => setLineForm(prev => ({ ...prev, sectionId: e.target.value }))}
                   className="w-full px-4 py-2 bg-indusia-bg border border-indusia-border rounded-lg text-indusia-text focus:outline-none focus:ring-2 focus:ring-indusia-primary"
                 >
-                  <option value="">Select section...</option>
+                  <option value="">{t('masterData.selectSection')}</option>
                   {sections.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                 </select>
               </div>
@@ -623,11 +699,11 @@ export default function MasterDataPage() {
                   className="flex-1 px-4 py-2 bg-indusia-primary text-white rounded-lg font-medium hover:opacity-90 flex items-center justify-center gap-2 disabled:opacity-50"
                 >
                   {savingLine ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                  {editingLine ? 'Update' : 'Add'}
+                  {editingLine ? t('buttons.update') : t('buttons.add')}
                 </button>
                 {editingLine && (
                   <button onClick={() => { setEditingLine(null); setLineForm({ id: '', name: '', customerId: '', sectionId: '' }); }} className="px-4 py-2 bg-indusia-surfaceMuted text-indusia-text rounded-lg font-medium hover:bg-indusia-border flex items-center gap-2">
-                    <X className="w-4 h-4" /> Cancel
+                    <X className="w-4 h-4" /> {t('buttons.cancel')}
                   </button>
                 )}
               </div>
@@ -639,19 +715,19 @@ export default function MasterDataPage() {
       {/* Boards Tab */}
       {!masterLoading && activeTab === 'boards' && (
         <div className="grid grid-cols-2 gap-6">
-          <Card title="Boards / Models" subtitle={`${boards.length} boards`}>
+          <Card title={t('masterData.boardsModels')} subtitle={`${boards.length} boards`}>
             {boards.length === 0 ? (
-              <p className="text-indusia-textMuted text-center py-8">No boards found</p>
+              <p className="text-indusia-textMuted text-center py-8">{t('masterData.noBoards')}</p>
             ) : (
               <table className="w-full">
                 <thead className="border-b border-indusia-border">
                   <tr>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-indusia-textMuted uppercase">Name</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-indusia-textMuted uppercase">Customer</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-indusia-textMuted uppercase">Cavity</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-indusia-textMuted uppercase">Top Frames</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-indusia-textMuted uppercase">Btm Frames</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-indusia-textMuted uppercase">Actions</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-indusia-textMuted uppercase">{t('masterData.name')}</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-indusia-textMuted uppercase">{t('masterData.customer')}</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-indusia-textMuted uppercase">{t('masterData.cavity')}</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-indusia-textMuted uppercase">{t('masterData.topFrames')}</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-indusia-textMuted uppercase">{t('masterData.btmFrames')}</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-indusia-textMuted uppercase">{t('common.actions')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -682,31 +758,31 @@ export default function MasterDataPage() {
             )}
           </Card>
 
-          <Card title={editingBoard ? 'Edit Board' : 'Add Board'}>
+          <Card title={editingBoard ? t('masterData.editBoard') : t('masterData.addBoard')}>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-indusia-text mb-2">Board Name</label>
-                <input 
-                  type="text" 
-                  value={boardForm.name} 
-                  onChange={(e) => setBoardForm(prev => ({ ...prev, name: e.target.value }))} 
-                  placeholder="Enter board name" 
+                <label className="block text-sm font-medium text-indusia-text mb-2">{t('masterData.boardName')}</label>
+                <input
+                  type="text"
+                  value={boardForm.name}
+                  onChange={(e) => setBoardForm(prev => ({ ...prev, name: e.target.value }))}
+                  placeholder={t('masterData.enterBoardName')}
                   className="w-full px-4 py-2 bg-indusia-bg border border-indusia-border rounded-lg text-indusia-text focus:outline-none focus:ring-2 focus:ring-indusia-primary" 
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-indusia-text mb-2">Customer</label>
+                <label className="block text-sm font-medium text-indusia-text mb-2">{t('masterData.customer')}</label>
                 <select
                   value={boardForm.customerId}
                   onChange={(e) => setBoardForm(prev => ({ ...prev, customerId: e.target.value }))}
                   className="w-full px-4 py-2 bg-indusia-bg border border-indusia-border rounded-lg text-indusia-text focus:outline-none focus:ring-2 focus:ring-indusia-primary"
                 >
-                  <option value="">Select customer...</option>
+                  <option value="">{t('masterData.selectCustomer')}</option>
                   {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-indusia-text mb-2">Cavity Count</label>
+                <label className="block text-sm font-medium text-indusia-text mb-2">{t('masterData.cavityCount')}</label>
                 <input
                   type="number"
                   min="1"
@@ -715,11 +791,11 @@ export default function MasterDataPage() {
                   placeholder="Number of PCBs per panel"
                   className="w-full px-4 py-2 bg-indusia-bg border border-indusia-border rounded-lg text-indusia-text focus:outline-none focus:ring-2 focus:ring-indusia-primary"
                 />
-                <p className="text-xs text-indusia-textMuted mt-1">Number of physical PCBs (cavities) per panel</p>
+                <p className="text-xs text-indusia-textMuted mt-1">{t('masterData.cavityCountHelp')}</p>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-indusia-text mb-2">Top Frame Count</label>
+                  <label className="block text-sm font-medium text-indusia-text mb-2">{t('masterData.topFrameCount')}</label>
                   <input
                     type="number"
                     min="1"
@@ -728,10 +804,10 @@ export default function MasterDataPage() {
                     placeholder="Top frames"
                     className="w-full px-4 py-2 bg-indusia-bg border border-indusia-border rounded-lg text-indusia-text focus:outline-none focus:ring-2 focus:ring-indusia-primary"
                   />
-                  <p className="text-xs text-indusia-textMuted mt-1">Camera frames on TOP side</p>
+                  <p className="text-xs text-indusia-textMuted mt-1">{t('masterData.topFrameCountHelp')}</p>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-indusia-text mb-2">Bottom Frame Count</label>
+                  <label className="block text-sm font-medium text-indusia-text mb-2">{t('masterData.bottomFrameCount')}</label>
                   <input
                     type="number"
                     min="0"
@@ -740,7 +816,7 @@ export default function MasterDataPage() {
                     placeholder="Bottom frames"
                     className="w-full px-4 py-2 bg-indusia-bg border border-indusia-border rounded-lg text-indusia-text focus:outline-none focus:ring-2 focus:ring-indusia-primary"
                   />
-                  <p className="text-xs text-indusia-textMuted mt-1">Camera frames on BOTTOM side (0 = top only)</p>
+                  <p className="text-xs text-indusia-textMuted mt-1">{t('masterData.bottomFrameCountHelp')}</p>
                 </div>
               </div>
               <div className="flex gap-2">
@@ -750,11 +826,139 @@ export default function MasterDataPage() {
                   className="flex-1 px-4 py-2 bg-indusia-primary text-white rounded-lg font-medium hover:opacity-90 flex items-center justify-center gap-2 disabled:opacity-50"
                 >
                   {savingBoard ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                  {editingBoard ? 'Update' : 'Add'}
+                  {editingBoard ? t('buttons.update') : t('buttons.add')}
                 </button>
                 {editingBoard && (
                   <button onClick={() => { setEditingBoard(null); setBoardForm({ id: '', name: '', customerId: '', cavityCount: 1, topFrameCount: 1, bottomFrameCount: 0 }); }} className="px-4 py-2 bg-indusia-surfaceMuted text-indusia-text rounded-lg font-medium hover:bg-indusia-border flex items-center gap-2">
-                    <X className="w-4 h-4" /> Cancel
+                    <X className="w-4 h-4" /> {t('buttons.cancel')}
+                  </button>
+                )}
+              </div>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* False Call Reasons Tab */}
+      {!masterLoading && activeTab === 'false-call-reasons' && (
+        <div className="grid grid-cols-2 gap-6">
+          <Card title={t('masterData.falseCallReasons')} subtitle={`${falseCallReasons.length} reasons`}>
+            {falseCallLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="w-6 h-6 animate-spin text-indusia-primary" />
+              </div>
+            ) : falseCallReasons.length === 0 ? (
+              <p className="text-indusia-textMuted text-center py-8">{t('masterData.noReasons')}</p>
+            ) : (
+              <table className="w-full">
+                <thead className="border-b border-indusia-border">
+                  <tr>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-indusia-textMuted uppercase">{t('masterData.code')}</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-indusia-textMuted uppercase">{t('masterData.name')}</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-indusia-textMuted uppercase hidden md:table-cell">{t('masterData.description')}</th>
+                    <th className="text-center px-4 py-3 text-xs font-semibold text-indusia-textMuted uppercase">{t('masterData.status')}</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-indusia-textMuted uppercase">{t('common.actions')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {falseCallReasons.map(reason => (
+                    <tr key={reason.id} className="border-b border-indusia-border hover:bg-indusia-surfaceMuted">
+                      <td className="px-4 py-3">
+                        <code className="px-2 py-1 bg-indusia-bg rounded text-xs text-indusia-primary">{reason.code}</code>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-indusia-text">{reason.name}</td>
+                      <td className="px-4 py-3 text-sm text-indusia-textMuted hidden md:table-cell">{reason.description || '-'}</td>
+                      <td className="px-4 py-3 text-center">
+                        <button
+                          onClick={() => toggleReasonActive(reason)}
+                          className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs ${
+                            reason.is_active ? 'bg-green-500/20 text-green-400' : 'bg-gray-500/20 text-gray-400'
+                          }`}
+                        >
+                          {reason.is_active ? <><CheckCircle className="w-3 h-3" /> {t('masterData.active')}</> : <><XCircle className="w-3 h-3" /> {t('masterData.inactive')}</>}
+                        </button>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex gap-2">
+                          <button onClick={() => { setEditingReason(reason); setReasonForm({ code: reason.code, name: reason.name, description: reason.description || '', is_active: reason.is_active, display_order: reason.display_order || 0 }); }} className="p-1 text-indusia-primary hover:bg-indusia-primary/10 rounded">
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button onClick={() => handleReasonDelete(reason.id)} className="p-1 text-indusia-fail hover:bg-indusia-fail/10 rounded">
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </Card>
+
+          <Card title={editingReason ? t('masterData.editReason') : t('masterData.addReason')}>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-indusia-text mb-2">{t('masterData.code')} <span className="text-red-400">*</span></label>
+                <input
+                  type="text"
+                  value={reasonForm.code}
+                  onChange={(e) => setReasonForm(prev => ({ ...prev, code: e.target.value }))}
+                  placeholder="e.g. REFLECTION"
+                  className="w-full px-4 py-2 bg-indusia-bg border border-indusia-border rounded-lg text-indusia-text focus:outline-none focus:ring-2 focus:ring-indusia-primary"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-indusia-text mb-2">{t('masterData.name')} <span className="text-red-400">*</span></label>
+                <input
+                  type="text"
+                  value={reasonForm.name}
+                  onChange={(e) => setReasonForm(prev => ({ ...prev, name: e.target.value }))}
+                  placeholder="e.g. Lighting Reflection"
+                  className="w-full px-4 py-2 bg-indusia-bg border border-indusia-border rounded-lg text-indusia-text focus:outline-none focus:ring-2 focus:ring-indusia-primary"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-indusia-text mb-2">{t('masterData.description')}</label>
+                <input
+                  type="text"
+                  value={reasonForm.description}
+                  onChange={(e) => setReasonForm(prev => ({ ...prev, description: e.target.value }))}
+                  placeholder={t('masterData.optionalDescription')}
+                  className="w-full px-4 py-2 bg-indusia-bg border border-indusia-border rounded-lg text-indusia-text focus:outline-none focus:ring-2 focus:ring-indusia-primary"
+                />
+              </div>
+              <div className="flex items-center gap-4">
+                <label className="flex items-center gap-2 text-sm text-indusia-text cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={reasonForm.is_active}
+                    onChange={(e) => setReasonForm(prev => ({ ...prev, is_active: e.target.checked }))}
+                    className="w-4 h-4"
+                  />
+                  {t('masterData.active')}
+                </label>
+                <div className="flex items-center gap-2">
+                  <label className="text-sm text-indusia-textMuted">{t('masterData.order')}:</label>
+                  <input
+                    type="number"
+                    value={reasonForm.display_order}
+                    onChange={(e) => setReasonForm(prev => ({ ...prev, display_order: parseInt(e.target.value) || 0 }))}
+                    className="w-16 px-2 py-1 bg-indusia-bg border border-indusia-border rounded text-indusia-text text-sm"
+                  />
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={handleReasonSave}
+                  disabled={savingReason}
+                  className="flex-1 px-4 py-2 bg-indusia-primary text-white rounded-lg font-medium hover:opacity-90 flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  {savingReason ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                  {editingReason ? t('buttons.update') : t('buttons.add')}
+                </button>
+                {editingReason && (
+                  <button onClick={() => { setEditingReason(null); setReasonForm({ code: '', name: '', description: '', is_active: true, display_order: 0 }); }} className="px-4 py-2 bg-indusia-surfaceMuted text-indusia-text rounded-lg font-medium hover:bg-indusia-border flex items-center gap-2">
+                    <X className="w-4 h-4" /> {t('buttons.cancel')}
                   </button>
                 )}
               </div>
@@ -766,7 +970,7 @@ export default function MasterDataPage() {
       {/* Users Tab */}
       {!masterLoading && activeTab === 'users' && (
         <div className="grid grid-cols-2 gap-6">
-          <Card title="Registered Users" subtitle={`${filteredUsers.length} users`}>
+          <Card title={t('masterData.registeredUsers')} subtitle={`${filteredUsers.length} users`}>
             <div className="mb-4 flex gap-2">
               {['all', 'operator', 'manager', 'engineer'].map(filter => (
                 <button 
@@ -783,14 +987,14 @@ export default function MasterDataPage() {
               ))}
             </div>
             {filteredUsers.length === 0 ? (
-              <p className="text-indusia-textMuted text-center py-8">No users found</p>
+              <p className="text-indusia-textMuted text-center py-8">{t('masterData.noUsers')}</p>
             ) : (
               <table className="w-full">
                 <thead className="border-b border-indusia-border">
                   <tr>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-indusia-textMuted uppercase">Name</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-indusia-textMuted uppercase">Role</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-indusia-textMuted uppercase">Actions</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-indusia-textMuted uppercase">{t('masterData.name')}</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-indusia-textMuted uppercase">{t('masterData.role')}</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-indusia-textMuted uppercase">{t('common.actions')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -825,32 +1029,32 @@ export default function MasterDataPage() {
             )}
           </Card>
 
-          <Card title={editingUser ? 'Edit User' : 'Add User'}>
+          <Card title={editingUser ? t('masterData.editUser') : t('masterData.addUser')}>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-indusia-text mb-2">Name</label>
-                <input 
-                  type="text" 
-                  value={userForm.name} 
-                  onChange={(e) => setUserForm(prev => ({ ...prev, name: e.target.value }))} 
-                  placeholder="Enter user name" 
+                <label className="block text-sm font-medium text-indusia-text mb-2">{t('masterData.name')}</label>
+                <input
+                  type="text"
+                  value={userForm.name}
+                  onChange={(e) => setUserForm(prev => ({ ...prev, name: e.target.value }))}
+                  placeholder={t('masterData.enterUserName')}
                   className="w-full px-4 py-2 bg-indusia-bg border border-indusia-border rounded-lg text-indusia-text focus:outline-none focus:ring-2 focus:ring-indusia-primary" 
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-indusia-text mb-2">Email</label>
-                <input 
-                  type="email" 
-                  value={userForm.email} 
-                  onChange={(e) => setUserForm(prev => ({ ...prev, email: e.target.value }))} 
-                  placeholder="Enter email" 
+                <label className="block text-sm font-medium text-indusia-text mb-2">{t('masterData.email')}</label>
+                <input
+                  type="email"
+                  value={userForm.email}
+                  onChange={(e) => setUserForm(prev => ({ ...prev, email: e.target.value }))}
+                  placeholder={t('masterData.enterEmail')}
                   className="w-full px-4 py-2 bg-indusia-bg border border-indusia-border rounded-lg text-indusia-text focus:outline-none focus:ring-2 focus:ring-indusia-primary" 
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-indusia-text mb-2">Role</label>
-                <select 
-                  value={userForm.role} 
+                <label className="block text-sm font-medium text-indusia-text mb-2">{t('masterData.role')}</label>
+                <select
+                  value={userForm.role}
                   onChange={(e) => setUserForm(prev => ({ ...prev, role: e.target.value }))} 
                   className="w-full px-4 py-2 bg-indusia-bg border border-indusia-border rounded-lg text-indusia-text focus:outline-none focus:ring-2 focus:ring-indusia-primary"
                 >
@@ -865,7 +1069,7 @@ export default function MasterDataPage() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-indusia-text mb-2">Sections</label>
+                <label className="block text-sm font-medium text-indusia-text mb-2">{t('masterData.sections')}</label>
                 <div className="flex flex-wrap gap-2">
                   {sections.map(section => (
                     <label 
@@ -890,11 +1094,11 @@ export default function MasterDataPage() {
                   className="flex-1 px-4 py-2 bg-indusia-primary text-white rounded-lg font-medium hover:opacity-90 flex items-center justify-center gap-2 disabled:opacity-50"
                 >
                   {savingUser ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                  {editingUser ? 'Update' : 'Add'}
+                  {editingUser ? t('buttons.update') : t('buttons.add')}
                 </button>
                 {editingUser && (
                   <button onClick={() => { setEditingUser(null); setUserForm({ id: '', name: '', email: '', role: 'operator', sections: [] }); }} className="px-4 py-2 bg-indusia-surfaceMuted text-indusia-text rounded-lg font-medium hover:bg-indusia-border flex items-center gap-2">
-                    <X className="w-4 h-4" /> Cancel
+                    <X className="w-4 h-4" /> {t('buttons.cancel')}
                   </button>
                 )}
               </div>

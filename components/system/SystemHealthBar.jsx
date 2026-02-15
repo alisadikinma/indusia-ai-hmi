@@ -3,11 +3,13 @@
 import { useState } from 'react';
 import { RefreshCw, Info } from 'lucide-react';
 import { useSystemHealth } from '@/hooks/useSystemHealth';
+import { useI18n } from '@/context/I18nContext';
 import SystemStatusChip from './SystemStatusChip';
 import SystemStatusDetailsModal from './SystemStatusDetailsModal';
 
 export default function SystemHealthBar() {
   const { statuses, refreshAll, STATE_TYPES } = useSystemHealth();
+  const { t } = useI18n();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [selectedSystem, setSelectedSystem] = useState(null);
@@ -36,11 +38,11 @@ export default function SystemHealthBar() {
   );
 
   const systemLabels = {
-    aiModel: 'AI Model',
-    camera: 'Camera',
-    cloud: 'Cloud',
-    lineRuntime: 'Line',
-    lastSync: 'Last Sync',
+    aiModel: t('systemHealth.aiModel'),
+    camera: t('systemHealth.cameraShort'),
+    cloud: t('systemHealth.cloudShort'),
+    lineRuntime: t('systemHealth.lineShort'),
+    lastSync: t('systemHealth.lastSyncShort'),
   };
 
   return (
@@ -71,7 +73,7 @@ export default function SystemHealthBar() {
               onClick={handleRefresh}
               disabled={isRefreshing}
               className="p-2 rounded-lg text-indusia-textMuted hover:text-indusia-text hover:bg-indusia-bg transition-colors disabled:opacity-50"
-              title="Refresh system status"
+              title={t('systemHealth.refreshSystemStatus')}
             >
               <RefreshCw className={`w-5 h-5 ${isRefreshing ? 'animate-spin' : ''}`} />
             </button>
@@ -81,10 +83,10 @@ export default function SystemHealthBar() {
                 setShowDetailsModal(true);
               }}
               className="px-4 py-2 rounded-lg text-sm font-medium text-indusia-textMuted hover:text-indusia-text hover:bg-indusia-bg transition-colors flex items-center gap-2"
-              title="View detailed diagnostics"
+              title={t('systemHealth.viewDetailedDiagnostics')}
             >
               <Info className="w-4 h-4" />
-              Details
+              {t('systemHealth.details')}
             </button>
           </div>
         </div>

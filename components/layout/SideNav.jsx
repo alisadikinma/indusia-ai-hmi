@@ -21,11 +21,13 @@ import {
   PanelLeft,
   Zap,
   FileText,
-  LogOut
+  LogOut,
+  Download,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useI18n } from '@/hooks/useI18n';
 import { useSidebar } from '@/context/SidebarContext';
+import { useSystemUpdate } from '@/hooks/useSystemUpdate';
 import { cn } from '@/lib/utils';
 
 /**
@@ -41,7 +43,8 @@ export default function SideNav() {
   const router = useRouter();
   const { user, logout, activeLineId, activeLineName, hasActiveLine, hasMenuAccess } = useAuth();
   const { t } = useI18n();
-  const { isCollapsed, isHidden, toggleCollapse } = useSidebar();
+  const { isCollapsed, isHidden, toggleCollapse, startNavigation } = useSidebar();
+  const { currentVersion } = useSystemUpdate();
   const [currentTime, setCurrentTime] = useState('');
   const [systemUptime, setSystemUptime] = useState('00:00:00');
   
@@ -81,14 +84,12 @@ export default function SideNav() {
   // Custom HMI click handler - operators go directly to active line
   const handleHMIClick = useCallback((e) => {
     e.preventDefault();
-    if (isOperator && hasActiveLine && activeLineId) {
-      // Operator has active session - go directly to live inspection
-      router.push(`/inspection/live/${activeLineId}`);
-    } else {
-      // No active session or non-operator - go to line selection
-      router.push('/inspection/select-line');
-    }
-  }, [isOperator, hasActiveLine, activeLineId, router]);
+    const target = isOperator && hasActiveLine && activeLineId
+      ? `/inspection/live/${activeLineId}`
+      : '/inspection/select-line';
+    startNavigation(target);
+    router.push(target);
+  }, [isOperator, hasActiveLine, activeLineId, router, startNavigation]);
 
   const navItems = [
     {
@@ -127,13 +128,6 @@ export default function SideNav() {
       menuId: 'menu_sync',
       code: 'SYN',
     },
-    {
-      labelKey: 'nav.falseCallReasons',
-      href: '/settings/false-call-reasons',
-      icon: AlertCircle,
-      menuId: 'menu_engineering',
-      code: 'FCR',
-    },
   ];
 
   const superAdminItems = [
@@ -157,6 +151,13 @@ export default function SideNav() {
       icon: Lock,
       menuId: 'menu_permissions',
       code: 'PRM',
+    },
+    {
+      labelKey: 'nav.systemUpdate',
+      href: '/super-admin/system-update',
+      icon: Download,
+      menuId: 'menu_permissions', // reuse superadmin permission
+      code: 'UPD',
     },
   ];
 
@@ -195,7 +196,7 @@ export default function SideNav() {
       <div className="px-3 py-4 border-b border-surface-border bg-terminal">
         {/* Logo */}
         <div className={cn("flex items-center gap-3 mb-4", isCollapsed && "justify-center")}>
-          <div className="w-10 h-10 border border-phosphor-amber flex items-center justify-center bg-void relative flex-shrink-0">
+          <div className="w-10 h-10 border border-phosphor-teal flex items-center justify-center bg-void relative flex-shrink-0">
             <img src="/indusiaai-logo.png" alt="INDUSIA AI" className="w-8 h-8 object-contain" />
             <div className="absolute -top-px -right-px w-2 h-2 bg-phosphor-green animate-pulse-glow" />
           </div>
@@ -204,7 +205,7 @@ export default function SideNav() {
               <h1 className="font-display font-bold text-xl tracking-wider text-text-primary">
                 INDUSIA
               </h1>
-              <p className="font-mono text-xxs text-phosphor-amber tracking-widest">
+              <p className="font-mono text-xxs text-phosphor-teal tracking-widest">
                 HMI CONSOLE
               </p>
             </div>
@@ -223,7 +224,7 @@ export default function SideNav() {
             </div>
             <div className="flex items-center justify-between">
               <span className="font-mono text-xxs text-text-tertiary">{t('system.uptime')}</span>
-              <span className="font-mono text-xxs text-phosphor-amber">{systemUptime}</span>
+              <span className="font-mono text-xxs text-phosphor-teal">{systemUptime}</span>
             </div>
           </div>
         )}
@@ -233,7 +234,7 @@ export default function SideNav() {
           onClick={toggleCollapse}
           className={cn(
             "mt-3 w-full py-2 flex items-center justify-center gap-2 border border-surface-border bg-void",
-            "hover:border-phosphor-amber hover:text-phosphor-amber transition-colors",
+            "hover:border-phosphor-teal hover:text-phosphor-teal transition-colors",
             "text-text-tertiary"
           )}
           title={isCollapsed ? t('sidebar.expand') : t('sidebar.collapse')}
@@ -255,8 +256,8 @@ export default function SideNav() {
         {!isCollapsed && (
           <div className="px-4 mb-2">
             <div className="flex items-center gap-2">
-              <Radio className="w-3 h-3 text-phosphor-amber" />
-              <span className="font-display text-xxs font-semibold tracking-widest text-phosphor-amber">
+              <Radio className="w-3 h-3 text-phosphor-teal" />
+              <span className="font-display text-xxs font-semibold tracking-widest text-phosphor-teal">
                 {t('sidebar.navigation')}
               </span>
             </div>
@@ -285,8 +286,8 @@ export default function SideNav() {
                     active
                       ? isHMIWithSession 
                         ? 'bg-phosphor-green/10 border-phosphor-green text-phosphor-green'
-                        : 'bg-phosphor-amber/10 border-phosphor-amber text-phosphor-amber'
-                      : 'border-transparent text-text-secondary hover:text-phosphor-amber hover:bg-phosphor-amber/5 hover:border-phosphor-amber/50'
+                        : 'bg-phosphor-teal/10 border-phosphor-teal text-phosphor-teal'
+                      : 'border-transparent text-text-secondary hover:text-phosphor-teal hover:bg-phosphor-teal/5 hover:border-phosphor-teal/50'
                   )}
                 >
                   {/* Code badge - hide when collapsed */}
@@ -296,8 +297,8 @@ export default function SideNav() {
                       active
                         ? isHMIWithSession
                           ? 'border-phosphor-green/50 bg-phosphor-green/20 text-phosphor-green'
-                          : 'border-phosphor-amber/50 bg-phosphor-amber/20 text-phosphor-amber'
-                        : 'border-surface-border bg-void text-text-tertiary group-hover:border-phosphor-amber/30 group-hover:text-phosphor-amber'
+                          : 'border-phosphor-teal/50 bg-phosphor-teal/20 text-phosphor-teal'
+                        : 'border-surface-border bg-void text-text-tertiary group-hover:border-phosphor-teal/30 group-hover:text-phosphor-teal'
                     )}>
                       {item.code}
                     </span>
@@ -338,13 +339,14 @@ export default function SideNav() {
               <Link
                 key={item.href}
                 href={item.href}
+                onClick={() => startNavigation(item.href)}
                 title={isCollapsed ? t(item.labelKey) : undefined}
                 className={cn(
                   "group flex items-center gap-3 px-3 py-2.5 border-l-2 transition-all duration-150",
                   isCollapsed && "justify-center px-2",
                   active
-                    ? 'bg-phosphor-amber/10 border-phosphor-amber text-phosphor-amber'
-                    : 'border-transparent text-text-secondary hover:text-phosphor-amber hover:bg-phosphor-amber/5 hover:border-phosphor-amber/50'
+                    ? 'bg-phosphor-teal/10 border-phosphor-teal text-phosphor-teal'
+                    : 'border-transparent text-text-secondary hover:text-phosphor-teal hover:bg-phosphor-teal/5 hover:border-phosphor-teal/50'
                 )}
               >
                 {/* Code badge - hide when collapsed */}
@@ -352,8 +354,8 @@ export default function SideNav() {
                   <span className={cn(
                     "font-mono text-xxs px-1.5 py-0.5 border",
                     active
-                      ? 'border-phosphor-amber/50 bg-phosphor-amber/20 text-phosphor-amber'
-                      : 'border-surface-border bg-void text-text-tertiary group-hover:border-phosphor-amber/30 group-hover:text-phosphor-amber'
+                      ? 'border-phosphor-teal/50 bg-phosphor-teal/20 text-phosphor-teal'
+                      : 'border-surface-border bg-void text-text-tertiary group-hover:border-phosphor-teal/30 group-hover:text-phosphor-teal'
                   )}>
                     {item.code}
                   </span>
@@ -401,6 +403,7 @@ export default function SideNav() {
                   <Link
                     key={item.href}
                     href={item.href}
+                    onClick={() => startNavigation(item.href)}
                     title={isCollapsed ? t(item.labelKey) : undefined}
                     className={cn(
                       "group flex items-center gap-3 px-3 py-2.5 border-l-2 transition-all duration-150",
@@ -445,11 +448,11 @@ export default function SideNav() {
             <div className="grid grid-cols-2 gap-2">
               <div className="bg-void border border-surface-border p-2">
                 <p className="font-mono text-xxs text-text-tertiary">{t('sidebar.version')}</p>
-                <p className="font-mono text-xs text-phosphor-amber">v1.0.0</p>
+                <p className="font-mono text-xs text-phosphor-teal">v{currentVersion || '...'}</p>
               </div>
               <div className="bg-void border border-surface-border p-2">
                 <p className="font-mono text-xxs text-text-tertiary">{t('sidebar.build')}</p>
-                <p className="font-mono text-xs text-phosphor-amber">2026.01</p>
+                <p className="font-mono text-xs text-phosphor-teal">{new Date().getFullYear()}.{String(new Date().getMonth() + 1).padStart(2, '0')}</p>
               </div>
             </div>
           </div>

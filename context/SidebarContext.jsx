@@ -22,6 +22,7 @@ export function SidebarProvider({ children }) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isHidden, setIsHidden] = useState(false);
   const [isFullscreenMode, setIsFullscreenMode] = useState(false);
+  const [navigatingTo, setNavigatingTo] = useState(null);
 
   // Check if current route should be fullscreen
   const shouldBeFullscreen = useCallback(() => {
@@ -38,6 +39,14 @@ export function SidebarProvider({ children }) {
       setIsHidden(false);
     }
   }, [pathname, shouldBeFullscreen]);
+
+  // Clear navigation loading when pathname changes (page has loaded)
+  useEffect(() => {
+    if (navigatingTo) {
+      setNavigatingTo(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname]);
 
   // Listen for closeSidebar event (from backdrop click)
   useEffect(() => {
@@ -75,18 +84,26 @@ export function SidebarProvider({ children }) {
     setIsCollapsed(true);
   }, []);
 
+  const startNavigation = useCallback((href) => {
+    if (pathname !== href) {
+      setNavigatingTo(href);
+    }
+  }, [pathname]);
+
   return (
     <SidebarContext.Provider
       value={{
         isCollapsed,
         isHidden,
         isFullscreenMode,
+        navigatingTo,
         toggleCollapse,
         toggleHidden,
         showSidebar,
         hideSidebar,
         expand,
         collapse,
+        startNavigation,
       }}
     >
       {children}

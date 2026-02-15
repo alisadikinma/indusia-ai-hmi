@@ -37,13 +37,13 @@ import {
 // ============================================
 
 const VISUAL_PHASES = [
-  { key: 'pcb_in',         label: 'PCB IN',       icon: ArrowRightToLine },
-  { key: 'camera_move',    label: 'CAMERA MOVE',  icon: Move },
-  { key: 'capture_top',    label: 'CAPTURE TOP',  icon: Scan },
-  { key: 'flip',           label: 'FLIP',         icon: FlipHorizontal2 },
-  { key: 'capture_bottom', label: 'CAPTURE BTM',  icon: ScanLine },
-  { key: 'ai_inspect',     label: 'AI INSPECT',   icon: Brain },
-  { key: 'result',         label: 'RESULT',       icon: ClipboardCheck },
+  { key: 'pcb_in',         labelKey: 'inspection.phasePcbIn',       icon: ArrowRightToLine },
+  { key: 'camera_move',    labelKey: 'inspection.phaseCameraMove',  icon: Move },
+  { key: 'capture_top',    labelKey: 'inspection.phaseCaptureTop',  icon: Scan },
+  { key: 'flip',           labelKey: 'inspection.phaseFlip',        icon: FlipHorizontal2 },
+  { key: 'capture_bottom', labelKey: 'inspection.phaseCaptureBtm',  icon: ScanLine },
+  { key: 'ai_inspect',     labelKey: 'inspection.phaseAiInspect',   icon: Brain },
+  { key: 'result',         labelKey: 'inspection.phaseResult',      icon: ClipboardCheck },
 ]
 
 // ============================================
@@ -105,7 +105,7 @@ function getActivePhaseIndex(stage) {
 // Step Card Component
 // ============================================
 
-function StepCard({ phase, index, activePhaseIndex, isIdle }) {
+function StepCard({ phase, index, activePhaseIndex, isIdle, t }) {
   const isCompleted = !isIdle && index < activePhaseIndex
   const isActive = !isIdle && index === activePhaseIndex
   const isFuture = isIdle || index > activePhaseIndex
@@ -118,28 +118,28 @@ function StepCard({ phase, index, activePhaseIndex, isIdle }) {
         "relative w-full aspect-square flex flex-col items-center justify-center",
         "rounded-lg border-2 transition-all duration-300",
         isCompleted && "bg-phosphor-green/10 border-phosphor-green/40",
-        isActive && "bg-phosphor-amber/15 border-phosphor-amber/60 shadow-[0_0_20px_rgba(245,158,11,0.15)]",
+        isActive && "bg-phosphor-teal/15 border-phosphor-teal/60 shadow-[0_0_20px_rgba(245,158,11,0.15)]",
         isFuture && "bg-terminal/40 border-surface-border/40"
       )}>
         {/* Active pulse overlay */}
         {isActive && (
-          <div className="absolute inset-0 rounded-lg border-2 border-phosphor-amber/30 animate-pulse" />
+          <div className="absolute inset-0 rounded-lg border-2 border-phosphor-teal/30 animate-pulse" />
         )}
 
         <Icon className={cn(
           "w-7 h-7 mb-1.5 transition-all duration-300",
           isCompleted && "text-phosphor-green",
-          isActive && "text-phosphor-amber drop-shadow-[0_0_8px_rgba(245,158,11,0.5)]",
+          isActive && "text-phosphor-teal drop-shadow-[0_0_8px_rgba(245,158,11,0.5)]",
           isFuture && "text-text-tertiary/40"
         )} />
 
         <span className={cn(
           "font-display text-[9px] font-bold tracking-wider text-center leading-tight px-1",
           isCompleted && "text-phosphor-green/90",
-          isActive && "text-phosphor-amber",
+          isActive && "text-phosphor-teal",
           isFuture && "text-text-tertiary/40"
         )}>
-          {phase.label}
+          {t(phase.labelKey)}
         </span>
 
         {/* Completed checkmark badge */}
@@ -182,12 +182,12 @@ export function InspectionStage({ stage, stageDefinitions, processStatus, onResu
     return (
       <div className={cn("flex flex-col items-center justify-center h-full", className)}>
         <div className="relative mb-8">
-          <div className="absolute inset-[-8px] w-[144px] h-[144px] rounded-full border-2 border-phosphor-amber/30 animate-pulse" />
-          <div className="relative w-32 h-32 border-2 border-phosphor-amber/50 rounded-full flex items-center justify-center bg-phosphor-amber/10 backdrop-blur-sm">
-            <Pause className="w-14 h-14 text-phosphor-amber" />
+          <div className="absolute inset-[-8px] w-[144px] h-[144px] rounded-full border-2 border-phosphor-teal/30 animate-pulse" />
+          <div className="relative w-32 h-32 border-2 border-phosphor-teal/50 rounded-full flex items-center justify-center bg-phosphor-teal/10 backdrop-blur-sm">
+            <Pause className="w-14 h-14 text-phosphor-teal" />
           </div>
         </div>
-        <p className="text-2xl text-phosphor-amber font-display font-bold tracking-wider mb-2">
+        <p className="text-2xl text-phosphor-teal font-display font-bold tracking-wider mb-2">
           {t('hmi.machinePaused')}
         </p>
         <p className="text-sm text-text-tertiary font-mono mb-6">
@@ -302,8 +302,8 @@ export function InspectionStage({ stage, stageDefinitions, processStatus, onResu
                 <CheckCircle className="w-8 h-8 text-phosphor-green" />
               </div>
             ) : (
-              <div className="w-16 h-16 rounded-full border-2 border-phosphor-amber/40 flex items-center justify-center bg-phosphor-amber/10">
-                <Loader2 className="w-8 h-8 text-phosphor-amber animate-spin" />
+              <div className="w-16 h-16 rounded-full border-2 border-phosphor-teal/40 flex items-center justify-center bg-phosphor-teal/10">
+                <Loader2 className="w-8 h-8 text-phosphor-teal animate-spin" />
               </div>
             )}
           </div>
@@ -312,10 +312,10 @@ export function InspectionStage({ stage, stageDefinitions, processStatus, onResu
             "text-xl font-display font-bold tracking-wider mb-1",
             isComplete ? "text-phosphor-green" : "text-text-primary"
           )}>
-            {message || 'Processing...'}
+            {message || t('hmi.processing')}
           </p>
           <p className="text-sm font-mono text-text-tertiary mb-6">
-            Stage {stageIndex} / {actualTotalStages}
+            {t('inspection.stage')} {stageIndex} / {actualTotalStages}
           </p>
         </>
       )}
@@ -332,6 +332,7 @@ export function InspectionStage({ stage, stageDefinitions, processStatus, onResu
               index={i}
               activePhaseIndex={activePhaseIndex}
               isIdle={isWaitingForBoard}
+              t={t}
             />
           </Fragment>
         ))}
@@ -361,7 +362,7 @@ export function InspectionStage({ stage, stageDefinitions, processStatus, onResu
             "font-mono text-sm font-bold tracking-wider",
             isComplete ? "text-phosphor-green" : isWaitingForBoard ? "text-text-tertiary/50" : "text-text-secondary"
           )}>
-            PROGRESS: {isWaitingForBoard ? '0' : Math.round(progress)}%
+            {t('inspection.progressLabel')}: {isWaitingForBoard ? '0' : Math.round(progress)}%
           </span>
         </div>
       </div>

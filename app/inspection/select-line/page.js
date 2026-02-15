@@ -65,9 +65,9 @@ function LineCard({ line, section, isSelected, onSelect, currentUserId, isOperat
     paused: { 
       label: t('lineStatus.paused'), 
       icon: Pause,
-      bgClass: 'bg-phosphor-amber/10 border-phosphor-amber/50',
-      textClass: 'text-phosphor-amber',
-      dotClass: 'bg-phosphor-amber'
+      bgClass: 'bg-phosphor-teal/10 border-phosphor-teal/50',
+      textClass: 'text-phosphor-teal',
+      dotClass: 'bg-phosphor-teal'
     },
     stopped: { 
       label: t('lineStatus.stopped'), 
@@ -119,8 +119,8 @@ function LineCard({ line, section, isSelected, onSelect, currentUserId, isOperat
         "w-full text-left p-4 border-2 transition-all duration-200",
         "bg-panel hover:bg-terminal",
         isSelected 
-          ? "border-phosphor-amber bg-phosphor-amber/5" 
-          : "border-surface-border hover:border-phosphor-amber/50",
+          ? "border-phosphor-teal bg-phosphor-teal/5" 
+          : "border-surface-border hover:border-phosphor-teal/50",
         isDisabled && "opacity-50 cursor-not-allowed hover:bg-panel hover:border-surface-border"
       )}
     >
@@ -129,17 +129,17 @@ function LineCard({ line, section, isSelected, onSelect, currentUserId, isOperat
         <div className="flex items-center gap-3">
           <div className={cn(
             "w-10 h-10 border flex items-center justify-center",
-            isSelected ? "border-phosphor-amber bg-phosphor-amber/10" : "border-surface-border bg-terminal"
+            isSelected ? "border-phosphor-teal bg-phosphor-teal/10" : "border-surface-border bg-terminal"
           )}>
             <Factory className={cn(
               "w-5 h-5",
-              isSelected ? "text-phosphor-amber" : "text-text-secondary"
+              isSelected ? "text-phosphor-teal" : "text-text-secondary"
             )} />
           </div>
           <div>
             <h3 className={cn(
               "font-display font-bold tracking-wide",
-              isSelected ? "text-phosphor-amber" : "text-text-primary"
+              isSelected ? "text-phosphor-teal" : "text-text-primary"
             )}>
               {line.name}
               {line.customerName && (
@@ -191,8 +191,8 @@ function LineCard({ line, section, isSelected, onSelect, currentUserId, isOperat
           {/* WO Number Row */}
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
-              <Package size={14} className="text-phosphor-amber" />
-              <span className="font-mono text-xs text-phosphor-amber font-medium">WO: {line.woNumber}</span>
+              <Package size={14} className="text-phosphor-teal" />
+              <span className="font-mono text-xs text-phosphor-teal font-medium">WO: {line.woNumber}</span>
             </div>
             {line.startedAt && (
               <div className="flex items-center gap-1.5">
@@ -222,7 +222,7 @@ function LineCard({ line, section, isSelected, onSelect, currentUserId, isOperat
                     "h-full transition-all duration-500",
                     (line.inspected / line.lotSize) >= 0.9 ? "bg-phosphor-green" :
                     (line.inspected / line.lotSize) >= 0.5 ? "bg-phosphor-cyan" :
-                    "bg-phosphor-amber"
+                    "bg-phosphor-teal"
                   )}
                   style={{ width: `${Math.min((line.inspected / line.lotSize) * 100, 100)}%` }}
                 />
@@ -237,7 +237,7 @@ function LineCard({ line, section, isSelected, onSelect, currentUserId, isOperat
         <div className="grid grid-cols-4 gap-2 mb-3">
           <div className="bg-terminal border border-surface-border p-2 text-center">
             <p className="font-mono text-xxs text-text-tertiary">{t('lineStats.inspected')}</p>
-            <p className="font-mono text-lg font-bold text-phosphor-amber">{line.inspected?.toLocaleString() || 0}</p>
+            <p className="font-mono text-lg font-bold text-phosphor-teal">{line.inspected?.toLocaleString() || 0}</p>
           </div>
           <div className="bg-terminal border border-surface-border p-2 text-center">
             <p className="font-mono text-xxs text-text-tertiary">{t('lineStats.pass')}</p>
@@ -252,7 +252,7 @@ function LineCard({ line, section, isSelected, onSelect, currentUserId, isOperat
             <p className={cn(
               "font-mono text-lg font-bold",
               line.yield >= 98 ? "text-phosphor-green" : 
-              line.yield >= 95 ? "text-phosphor-amber" : "text-phosphor-red"
+              line.yield >= 95 ? "text-phosphor-teal" : "text-phosphor-red"
             )}>
               {line.yield?.toFixed(1) || 0}%
             </p>
@@ -296,7 +296,7 @@ function LineCard({ line, section, isSelected, onSelect, currentUserId, isOperat
               })}
             </select>
           ) : (
-            <div className="px-3 py-2 border border-phosphor-amber/30 bg-phosphor-amber/5 font-mono text-xs text-phosphor-amber">
+            <div className="px-3 py-2 border border-phosphor-teal/30 bg-phosphor-teal/5 font-mono text-xs text-phosphor-teal">
               {t('line.noModelsAvailable') || 'No boards registered. Add boards via Master Data.'}
             </div>
           )}
@@ -345,7 +345,7 @@ function LineCard({ line, section, isSelected, onSelect, currentUserId, isOperat
             isSelected && hasNoActiveWO
               ? "bg-phosphor-red/20 text-phosphor-red"
               : isSelected
-                ? "bg-phosphor-amber text-void"
+                ? "bg-phosphor-teal text-void"
                 : "bg-surface-border/50 text-text-secondary"
           )}>
             {!isOperator && <Eye size={12} />}
@@ -617,22 +617,22 @@ export default function SelectLinePage() {
           {/* Hamburger Menu Button */}
           <button
             onClick={showSidebar}
-            className="w-10 h-10 border border-surface-border bg-terminal flex items-center justify-center hover:border-phosphor-amber hover:bg-phosphor-amber/10 transition-colors"
+            className="w-10 h-10 border border-surface-border bg-terminal flex items-center justify-center hover:border-phosphor-teal hover:bg-phosphor-teal/10 transition-colors"
             title={t('nav.settings')}
           >
-            <Menu className="w-5 h-5 text-phosphor-amber" />
+            <Menu className="w-5 h-5 text-phosphor-teal" />
           </button>
 
           {/* Logo */}
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 border border-phosphor-amber flex items-center justify-center bg-terminal">
-              <span className="font-display font-bold text-lg text-phosphor-amber">IN</span>
+            <div className="w-10 h-10 border border-phosphor-teal flex items-center justify-center bg-terminal">
+              <span className="font-display font-bold text-lg text-phosphor-teal">IN</span>
             </div>
             <div>
               <h1 className="font-display font-bold text-lg tracking-wider text-text-primary">
                 INDUSIA
               </h1>
-              <p className="font-mono text-xxs text-phosphor-amber tracking-widest">
+              <p className="font-mono text-xxs text-phosphor-teal tracking-widest">
                 {t('nav.lineSelection')}
               </p>
             </div>
@@ -647,16 +647,16 @@ export default function SelectLinePage() {
             <div className="w-2 h-2 bg-phosphor-green animate-pulse" />
             <span className="font-mono text-sm text-phosphor-green">{t('auth.online')}</span>
           </div>
-          <span className="font-mono text-sm text-phosphor-amber">{currentTime}</span>
+          <span className="font-mono text-sm text-phosphor-teal">{currentTime}</span>
 
           {/* User Profile Dropdown */}
           <div className="relative">
             <button
               onClick={() => setShowUserMenu(!showUserMenu)}
-              className="flex items-center gap-3 px-4 py-2 bg-terminal border border-surface-border hover:border-phosphor-amber/50 transition-colors"
+              className="flex items-center gap-3 px-4 py-2 bg-terminal border border-surface-border hover:border-phosphor-teal/50 transition-colors"
             >
-              <div className="w-8 h-8 border border-phosphor-amber/50 bg-void flex items-center justify-center">
-                <span className="font-mono text-xs text-phosphor-amber">
+              <div className="w-8 h-8 border border-phosphor-teal/50 bg-void flex items-center justify-center">
+                <span className="font-mono text-xs text-phosphor-teal">
                   {user.name?.charAt(0).toUpperCase() || 'U'}
                 </span>
               </div>
@@ -696,7 +696,7 @@ export default function SelectLinePage() {
         <div className="shrink-0">
           <div className="flex items-center justify-between mb-1">
             <div className="flex items-center gap-3">
-              <Radio className="w-5 h-5 text-phosphor-amber" />
+              <Radio className="w-5 h-5 text-phosphor-teal" />
               <h2 className="font-display text-xl font-bold text-text-primary tracking-wide">
                 {t('line.selectTitle')}
               </h2>
@@ -709,10 +709,10 @@ export default function SelectLinePage() {
             <button
               onClick={handleRefresh}
               disabled={isRefreshing || dataLoading}
-              className="flex items-center gap-2 px-3 py-1.5 bg-terminal border border-surface-border hover:border-phosphor-amber/50 transition-colors disabled:opacity-50"
+              className="flex items-center gap-2 px-3 py-1.5 bg-terminal border border-surface-border hover:border-phosphor-teal/50 transition-colors disabled:opacity-50"
             >
               <RefreshCw size={14} className={cn(
-                "text-phosphor-amber",
+                "text-phosphor-teal",
                 isRefreshing && "animate-spin"
               )} />
               <span className="font-mono text-xs text-text-secondary">{t('buttons.refresh')}</span>
@@ -737,8 +737,8 @@ export default function SelectLinePage() {
                 className={cn(
                   "px-3 py-1.5 font-mono text-xs font-bold border transition-colors",
                   selectedSection === 'all'
-                    ? "bg-phosphor-amber text-void border-phosphor-amber"
-                    : "bg-terminal text-text-secondary border-surface-border hover:border-phosphor-amber/50"
+                    ? "bg-phosphor-teal text-void border-phosphor-teal"
+                    : "bg-terminal text-text-secondary border-surface-border hover:border-phosphor-teal/50"
                 )}
               >
                 {t('line.allLines')}
@@ -750,8 +750,8 @@ export default function SelectLinePage() {
                   className={cn(
                     "px-3 py-1.5 font-mono text-xs font-bold border transition-colors",
                     selectedSection === section.id
-                      ? "bg-phosphor-amber text-void border-phosphor-amber"
-                      : "bg-terminal text-text-secondary border-surface-border hover:border-phosphor-amber/50"
+                      ? "bg-phosphor-teal text-void border-phosphor-teal"
+                      : "bg-terminal text-text-secondary border-surface-border hover:border-phosphor-teal/50"
                   )}
                 >
                   {section.name}
@@ -819,7 +819,7 @@ export default function SelectLinePage() {
                     <span className="text-purple-400"> • {selectedLineModel.name} v{selectedLineModel.version}</span>
                   )}
                   {isOperator && !selectedLineModel && (
-                    <span className="text-phosphor-amber"> • {t('line.selectModelRequired') || 'Select AI model to continue'}</span>
+                    <span className="text-phosphor-teal"> • {t('line.selectModelRequired') || 'Select AI model to continue'}</span>
                   )}
                   {!isOperator && ` • ${t('line.viewOnlyMode', { role: '' }).trim()}`}
                 </p>
@@ -827,9 +827,9 @@ export default function SelectLinePage() {
             </div>
           ) : (
             <div className="flex items-center gap-3">
-              <AlertTriangle className="w-5 h-5 text-phosphor-amber shrink-0" />
+              <AlertTriangle className="w-5 h-5 text-phosphor-teal shrink-0" />
               <div>
-                <p className="font-display font-bold text-sm text-phosphor-amber">
+                <p className="font-display font-bold text-sm text-phosphor-teal">
                   {t('line.noLineSelected')}
                 </p>
                 <p className="font-mono text-xs text-text-tertiary">

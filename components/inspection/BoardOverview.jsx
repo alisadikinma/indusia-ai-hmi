@@ -11,6 +11,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Crop, AlertTriangle, ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useI18n } from '@/context/I18nContext';
 
 // Severity colors
 const SEVERITY_COLORS = {
@@ -20,9 +21,9 @@ const SEVERITY_COLORS = {
     bg: 'bg-phosphor-red/10',
   },
   major: { 
-    border: 'border-phosphor-amber',
-    text: 'text-phosphor-amber',
-    bg: 'bg-phosphor-amber/10',
+    border: 'border-phosphor-teal',
+    text: 'text-phosphor-teal',
+    bg: 'bg-phosphor-teal/10',
   },
   minor: { 
     border: 'border-yellow-400',
@@ -40,6 +41,7 @@ export function BoardOverview({
   onDefectSelect,
   className,
 }) {
+  const { t } = useI18n();
   const canvasRef = useRef(null);
   const [croppedImageUrl, setCroppedImageUrl] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -156,7 +158,7 @@ export function BoardOverview({
       <div className="flex items-center justify-between px-3 py-1.5 bg-void border-b border-surface-border flex-shrink-0">
         <div className="flex items-center gap-2">
           <Crop className="w-4 h-4 text-text-tertiary" />
-          <span className="font-mono text-xs text-text-tertiary">BOARD OVERVIEW</span>
+          <span className="font-mono text-xs text-text-tertiary">{t('inspection.boardOverview')}</span>
         </div>
         {defectCount > 0 && (
           <div className="flex items-center gap-1.5">
@@ -175,8 +177,8 @@ export function BoardOverview({
         
         {isLoading ? (
           <div className="text-center">
-            <div className="w-8 h-8 border-2 border-phosphor-amber border-t-transparent rounded-full animate-spin mx-auto mb-2" />
-            <p className="font-mono text-xxs text-text-tertiary">Loading...</p>
+            <div className="w-8 h-8 border-2 border-phosphor-teal border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+            <p className="font-mono text-xxs text-text-tertiary">{t('common.loading')}</p>
           </div>
         ) : croppedImageUrl ? (
           <div className={cn(
@@ -204,12 +206,12 @@ export function BoardOverview({
         ) : imageSrc ? (
           <div className="text-center">
             <Crop className="w-8 h-8 text-text-tertiary/30 mx-auto mb-2" />
-            <p className="font-mono text-xxs text-text-tertiary">No defect bbox</p>
+            <p className="font-mono text-xxs text-text-tertiary">{t('inspection.noDefectBbox')}</p>
           </div>
         ) : (
           <div className="text-center">
             <Crop className="w-8 h-8 text-text-tertiary/30 mx-auto mb-2" />
-            <p className="font-mono text-xxs text-text-tertiary">Waiting for image...</p>
+            <p className="font-mono text-xxs text-text-tertiary">{t('inspection.waitingForImage')}</p>
           </div>
         )}
 
@@ -221,7 +223,7 @@ export function BoardOverview({
               disabled={currentDefectIndex === 0}
               className={cn(
                 "absolute left-1 top-1/2 -translate-y-1/2 p-1 bg-void/80 border border-surface-border",
-                "hover:border-phosphor-amber hover:text-phosphor-amber transition-colors",
+                "hover:border-phosphor-teal hover:text-phosphor-teal transition-colors",
                 currentDefectIndex === 0 && "opacity-30 cursor-not-allowed"
               )}
             >
@@ -232,7 +234,7 @@ export function BoardOverview({
               disabled={currentDefectIndex === defectCount - 1}
               className={cn(
                 "absolute right-1 top-1/2 -translate-y-1/2 p-1 bg-void/80 border border-surface-border",
-                "hover:border-phosphor-amber hover:text-phosphor-amber transition-colors",
+                "hover:border-phosphor-teal hover:text-phosphor-teal transition-colors",
                 currentDefectIndex === defectCount - 1 && "opacity-30 cursor-not-allowed"
               )}
             >
@@ -252,7 +254,7 @@ export function BoardOverview({
             "uppercase font-bold",
             severityStyle.text
           )}>
-            {currentDefect?.class_name?.replace(/_/g, ' ') || 'NO DEFECT'}
+            {currentDefect?.class_name?.replace(/_/g, ' ') || t('inspection.noDefect')}
           </span>
         </div>
       </div>

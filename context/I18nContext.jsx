@@ -33,7 +33,7 @@ export function I18nProvider({ children }) {
   }, [isClient]);
 
   const t = useCallback(
-    (key) => {
+    (key, params) => {
       const keys = key.split('.');
       let value = translations[lang];
 
@@ -45,7 +45,16 @@ export function I18nProvider({ children }) {
         }
       }
 
-      return typeof value === 'string' ? value : key;
+      if (typeof value !== 'string') return key;
+
+      // Support interpolation: replace {paramName} with params.paramName
+      if (params && typeof params === 'object') {
+        return value.replace(/\{(\w+)\}/g, (_, paramName) =>
+          params[paramName] !== undefined ? String(params[paramName]) : `{${paramName}}`
+        );
+      }
+
+      return value;
     },
     [lang]
   );

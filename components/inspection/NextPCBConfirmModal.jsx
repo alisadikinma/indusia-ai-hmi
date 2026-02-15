@@ -9,6 +9,7 @@
 import { useEffect, useCallback } from 'react';
 import { AlertTriangle, ArrowRight, Package } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useI18n } from '@/context/I18nContext';
 
 export function NextPCBConfirmModal({
   isOpen,
@@ -16,6 +17,8 @@ export function NextPCBConfirmModal({
   onConfirm,
   isProcessing = false,
 }) {
+  const { t } = useI18n();
+
   // Handle Enter key to confirm
   const handleKeyDown = useCallback((e) => {
     if (e.key === 'Enter' && isOpen && !isProcessing) {
@@ -47,10 +50,10 @@ export function NextPCBConfirmModal({
             </div>
             <div>
               <h2 className="font-display text-xl font-bold text-phosphor-red tracking-wide">
-                BOARD REJECTED
+                {t('inspection.boardRejected')}
               </h2>
               <p className="font-mono text-xs text-text-tertiary">
-                NG Signal sent to PLC
+                {t('inspection.ngSignalSent')}
               </p>
             </div>
           </div>
@@ -61,25 +64,25 @@ export function NextPCBConfirmModal({
             <div className="flex items-center gap-3 p-3 bg-terminal border border-surface-border">
               <Package className="w-5 h-5 text-text-tertiary" />
               <div>
-                <span className="font-mono text-xs text-text-tertiary">Board ID:</span>
+                <span className="font-mono text-xs text-text-tertiary">{t('inspection.boardId')}:</span>
                 <p className="font-mono text-lg font-bold text-text-primary">{boardId}</p>
               </div>
             </div>
 
             {/* Instructions */}
-            <div className="p-4 bg-phosphor-amber/10 border border-phosphor-amber/30">
-              <p className="font-display text-sm text-phosphor-amber mb-2">
-                ⚠️ ACTION REQUIRED
+            <div className="p-4 bg-phosphor-teal/10 border border-phosphor-teal/30">
+              <p className="font-display text-sm text-phosphor-teal mb-2">
+                ⚠️ {t('inspection.actionRequired')}
               </p>
               <p className="font-mono text-sm text-text-secondary leading-relaxed">
-                Please <span className="text-phosphor-amber font-bold">REMOVE THE PCB</span> from 
+                Please <span className="text-phosphor-teal font-bold">REMOVE THE PCB</span> from 
                 the conveyor before continuing to the next board.
               </p>
             </div>
 
             {/* Warning */}
             <p className="font-mono text-xs text-text-tertiary text-center">
-              Pressing continue will send NEXT signal to PLC
+              {t('inspection.nextSignal')}
             </p>
           </div>
 
@@ -99,18 +102,18 @@ export function NextPCBConfirmModal({
               {isProcessing ? (
                 <>
                   <div className="w-5 h-5 border-2 border-void border-t-transparent animate-spin" />
-                  <span>SENDING SIGNAL...</span>
+                  <span>{t('inspection.sendingSignal')}</span>
                 </>
               ) : (
                 <>
-                  <span>CONTINUE TO NEXT PCB</span>
+                  <span>{t('inspection.continueNextPCB')}</span>
                   <ArrowRight className="w-5 h-5" />
                 </>
               )}
             </button>
             
             <p className="font-mono text-xs text-text-tertiary text-center mt-3">
-              Press <span className="px-1.5 py-0.5 bg-void border border-surface-border text-phosphor-amber">ENTER</span> to confirm
+              Press <span className="px-1.5 py-0.5 bg-void border border-surface-border text-phosphor-teal">ENTER</span> to confirm
             </p>
           </div>
         </div>

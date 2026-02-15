@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { useLiveInspection } from '@/hooks/useLiveInspection';
 import { useSidebar } from '@/context/SidebarContext';
+import { useI18n } from '@/context/I18nContext';
 import { DetectionOverlay } from './DetectionOverlay';
 import FalseCallOverrideModal from './FalseCallOverrideModal';
 import { cn } from '@/lib/utils';
@@ -72,8 +73,8 @@ function AutoApproveTimer({
   const getColor = () => {
     if (disabled) return 'var(--text-tertiary)';
     if (!isActive) return 'var(--text-tertiary)';
-    if (timeLeft > 5) return 'var(--phosphor-amber)';
-    if (timeLeft > 2) return 'var(--phosphor-amber-bright)';
+    if (timeLeft > 5) return 'var(--phosphor-teal)';
+    if (timeLeft > 2) return 'var(--phosphor-teal-bright)';
     return 'var(--phosphor-red)';
   };
 
@@ -132,6 +133,7 @@ function AutoApproveTimer({
  * Detection Legend Overlay
  */
 function DetectionLegend({ detections = [] }) {
+  const { t } = useI18n();
   const counts = {
     critical: detections.filter(d => d.severity === 'critical' || d.class_name?.includes('bridge') || d.class_name?.includes('short')).length,
     warning: detections.filter(d => d.severity === 'warning' || d.class_name?.includes('bite')).length,
@@ -144,25 +146,25 @@ function DetectionLegend({ detections = [] }) {
   return (
     <div className="absolute top-14 right-4 z-10 bg-panel/95 border border-surface-border p-3 backdrop-blur">
       <div className="font-display text-xs font-bold text-text-tertiary tracking-wider mb-2">
-        DETECTED
+        {t('inspection.detected')}
       </div>
       <div className="space-y-2">
         {counts.critical > 0 && (
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 bg-phosphor-red" />
-            <span className="font-mono text-xs text-text-primary">Critical ({counts.critical})</span>
+            <span className="font-mono text-xs text-text-primary">{t('inspection.critical')} ({counts.critical})</span>
           </div>
         )}
         {counts.warning > 0 && (
           <div className="flex items-center gap-2">
-            <div className="w-3 h-3 bg-phosphor-amber" />
-            <span className="font-mono text-xs text-text-primary">Warning ({counts.warning})</span>
+            <div className="w-3 h-3 bg-phosphor-teal" />
+            <span className="font-mono text-xs text-text-primary">{t('inspection.warningLevel')} ({counts.warning})</span>
           </div>
         )}
         {counts.info > 0 && (
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 bg-phosphor-cyan" />
-            <span className="font-mono text-xs text-text-primary">Info ({counts.info})</span>
+            <span className="font-mono text-xs text-text-primary">{t('inspection.infoLevel')} ({counts.info})</span>
           </div>
         )}
       </div>
@@ -179,6 +181,9 @@ export function LiveView({
   onExit,
   isOperator = false, // Only operators can perform actions
 }) {
+  // i18n
+  const { t } = useI18n();
+
   // Sidebar context
   const { isHidden, toggleHidden } = useSidebar();
 
@@ -306,10 +311,10 @@ export function LiveView({
 
   // Status config
   const getStatusConfig = () => {
-    if (isPaused) return { color: 'phosphor-cyan', label: 'PAUSED', icon: Pause };
-    if (connected) return { color: 'phosphor-green', label: isOperator ? 'INSPECTING' : 'VIEWING', icon: isOperator ? Activity : Eye };
-    if (connecting) return { color: 'phosphor-amber', label: 'CONNECTING', icon: Radio };
-    return { color: 'phosphor-red', label: 'OFFLINE', icon: AlertTriangle };
+    if (isPaused) return { color: 'phosphor-cyan', label: t('inspection.paused'), icon: Pause };
+    if (connected) return { color: 'phosphor-green', label: isOperator ? t('inspection.inspecting') : t('inspection.viewing'), icon: isOperator ? Activity : Eye };
+    if (connecting) return { color: 'phosphor-teal', label: t('inspection.connecting'), icon: Radio };
+    return { color: 'phosphor-red', label: t('inspection.offline'), icon: AlertTriangle };
   };
 
   const statusConfig = getStatusConfig();
@@ -323,8 +328,8 @@ export function LiveView({
         <div className="flex items-center gap-4">
           <button
             onClick={toggleHidden}
-            className="p-2 border border-surface-border bg-terminal hover:border-phosphor-amber hover:text-phosphor-amber transition-colors"
-            title={isHidden ? "Show Menu" : "Hide Menu"}
+            className="p-2 border border-surface-border bg-terminal hover:border-phosphor-teal hover:text-phosphor-teal transition-colors"
+            title={isHidden ? t('inspection.showMenu') : t('inspection.hideMenu')}
           >
             {isHidden ? (
               <PanelLeft size={18} className="text-text-secondary" />
@@ -334,7 +339,7 @@ export function LiveView({
           </button>
 
           <div className="flex items-center gap-3">
-            <span className="font-mono text-sm font-bold text-phosphor-amber">
+            <span className="font-mono text-sm font-bold text-phosphor-teal">
               {boardId}
             </span>
             <span className="text-text-tertiary">|</span>
@@ -347,7 +352,7 @@ export function LiveView({
           {!isOperator && (
             <div className="flex items-center gap-2 px-3 py-1 bg-phosphor-cyan/10 border border-phosphor-cyan/50">
               <Eye size={14} className="text-phosphor-cyan" />
-              <span className="font-mono text-xs font-bold text-phosphor-cyan">VIEW ONLY</span>
+              <span className="font-mono text-xs font-bold text-phosphor-cyan">{t('hmi.viewOnly')}</span>
             </div>
           )}
         </div>
@@ -357,43 +362,43 @@ export function LiveView({
           <div className={cn(
             "flex items-center gap-2 px-4 py-1.5 border",
             statusConfig.color === 'phosphor-green' && "border-phosphor-green/50 bg-phosphor-green/10",
-            statusConfig.color === 'phosphor-amber' && "border-phosphor-amber/50 bg-phosphor-amber/10",
+            statusConfig.color === 'phosphor-teal' && "border-phosphor-teal/50 bg-phosphor-teal/10",
             statusConfig.color === 'phosphor-red' && "border-phosphor-red/50 bg-phosphor-red/10",
             statusConfig.color === 'phosphor-cyan' && "border-phosphor-cyan/50 bg-phosphor-cyan/10",
           )}>
             <div className={cn(
               "w-2 h-2",
               statusConfig.color === 'phosphor-green' && "bg-phosphor-green",
-              statusConfig.color === 'phosphor-amber' && "bg-phosphor-amber",
+              statusConfig.color === 'phosphor-teal' && "bg-phosphor-teal",
               statusConfig.color === 'phosphor-red' && "bg-phosphor-red",
               statusConfig.color === 'phosphor-cyan' && "bg-phosphor-cyan",
               connected && !isPaused && "animate-pulse"
             )} />
             <StatusIcon size={14} className={cn(
               statusConfig.color === 'phosphor-green' && "text-phosphor-green",
-              statusConfig.color === 'phosphor-amber' && "text-phosphor-amber",
+              statusConfig.color === 'phosphor-teal' && "text-phosphor-teal",
               statusConfig.color === 'phosphor-red' && "text-phosphor-red",
               statusConfig.color === 'phosphor-cyan' && "text-phosphor-cyan",
             )} />
             <span className={cn(
               "font-display text-xs font-bold tracking-widest",
               statusConfig.color === 'phosphor-green' && "text-phosphor-green",
-              statusConfig.color === 'phosphor-amber' && "text-phosphor-amber",
+              statusConfig.color === 'phosphor-teal' && "text-phosphor-teal",
               statusConfig.color === 'phosphor-red' && "text-phosphor-red",
               statusConfig.color === 'phosphor-cyan' && "text-phosphor-cyan",
             )}>
               {statusConfig.label}
             </span>
           </div>
-          <span className="font-mono text-sm text-phosphor-amber">{currentTime}</span>
+          <span className="font-mono text-sm text-phosphor-teal">{currentTime}</span>
         </div>
 
         {/* Right: System icons */}
         <div className="flex items-center gap-2">
-          <button className="p-2 border border-surface-border bg-terminal hover:border-phosphor-amber transition-colors">
+          <button className="p-2 border border-surface-border bg-terminal hover:border-phosphor-teal transition-colors">
             <Settings size={16} className="text-text-tertiary" />
           </button>
-          <button className="p-2 border border-surface-border bg-terminal hover:border-phosphor-amber transition-colors">
+          <button className="p-2 border border-surface-border bg-terminal hover:border-phosphor-teal transition-colors">
             <Sun size={16} className="text-text-tertiary" />
           </button>
           {error && (
@@ -402,7 +407,7 @@ export function LiveView({
               <span className="font-display text-xs font-bold text-phosphor-red">LINE</span>
             </div>
           )}
-          <button className="p-2 border border-surface-border bg-terminal hover:border-phosphor-amber transition-colors">
+          <button className="p-2 border border-surface-border bg-terminal hover:border-phosphor-teal transition-colors">
             <HelpCircle size={16} className="text-text-tertiary" />
           </button>
         </div>
@@ -416,7 +421,7 @@ export function LiveView({
           <div className="p-4 border-b border-surface-border">
             <div className="panel-header mb-3">
               <Eye className="w-4 h-4" />
-              <span>AI Detection</span>
+              <span>{t('manager.aiDetection')}</span>
             </div>
 
             {/* Defect Type */}
@@ -439,11 +444,11 @@ export function LiveView({
               {/* Confidence */}
               <div className="mb-2">
                 <div className="flex items-center justify-between mb-1">
-                  <span className="font-mono text-xs text-text-tertiary">Confidence</span>
+                  <span className="font-mono text-xs text-text-tertiary">{t('inspection.confidence')}</span>
                   <span className={cn(
                     "font-mono text-2xl font-bold",
                     confidence >= 85 ? 'text-phosphor-green' :
-                    confidence >= 60 ? 'text-phosphor-amber' :
+                    confidence >= 60 ? 'text-phosphor-teal' :
                     'text-phosphor-red'
                   )}>
                     {confidence}%
@@ -454,7 +459,7 @@ export function LiveView({
                     className={cn(
                       "h-full transition-all",
                       confidence >= 85 ? 'bg-phosphor-green' :
-                      confidence >= 60 ? 'bg-phosphor-amber' :
+                      confidence >= 60 ? 'bg-phosphor-teal' :
                       'bg-phosphor-red'
                     )}
                     style={{ width: `${confidence}%` }}
@@ -463,7 +468,7 @@ export function LiveView({
               </div>
 
               <span className="font-mono text-xxs text-text-tertiary">
-                Historically correct {historicalAccuracy}% of the time
+                {t('inspection.historicallyCorrect')} {historicalAccuracy}{t('inspection.ofTheTime')}
               </span>
             </div>
 
@@ -472,7 +477,7 @@ export function LiveView({
               <div className="flex items-center gap-2 px-3 py-2 bg-phosphor-green/10 border border-phosphor-green/30">
                 <div className="w-2 h-2 bg-phosphor-green" />
                 <span className="font-display text-xs font-semibold text-phosphor-green tracking-wide">
-                  High Confidence - Auto-proceed available
+                  {t('inspection.highConfidence')}
                 </span>
               </div>
             )}
@@ -483,10 +488,10 @@ export function LiveView({
             <div className="flex items-center justify-between mb-3">
               <div>
                 <span className="data-label">
-                  {isOperator ? 'AUTO-APPROVE IN' : 'AUTO-APPROVE'}
+                  {isOperator ? t('inspection.autoApproveIn') : t('inspection.autoApprove')}
                 </span>
                 <p className="font-mono text-xs text-text-tertiary mt-0.5">
-                  {isOperator ? 'Take action or wait' : 'Disabled in view mode'}
+                  {isOperator ? t('inspection.takeActionOrWait') : t('inspection.disabledInViewMode')}
                 </p>
               </div>
               <AutoApproveTimer
@@ -502,10 +507,10 @@ export function LiveView({
 
             {/* Warning when active - only for operators */}
             {isOperator && confidence >= 85 && !isPaused && connected && (
-              <div className="flex items-center gap-2 px-3 py-2 bg-phosphor-amber/10 border border-phosphor-amber/30 animate-pulse">
-                <AlertTriangle size={14} className="text-phosphor-amber" />
-                <span className="font-mono text-xs text-phosphor-amber">
-                  Auto-approving soon!
+              <div className="flex items-center gap-2 px-3 py-2 bg-phosphor-teal/10 border border-phosphor-teal/30 animate-pulse">
+                <AlertTriangle size={14} className="text-phosphor-teal" />
+                <span className="font-mono text-xs text-phosphor-teal">
+                  {t('inspection.autoApprovingSoon')}
                 </span>
               </div>
             )}
@@ -515,7 +520,7 @@ export function LiveView({
               <div className="flex items-center gap-2 px-3 py-2 bg-phosphor-cyan/10 border border-phosphor-cyan/30">
                 <Eye size={14} className="text-phosphor-cyan" />
                 <span className="font-mono text-xs text-phosphor-cyan">
-                  View-only mode active
+                  {t('inspection.viewOnlyActive')}
                 </span>
               </div>
             )}
@@ -525,9 +530,9 @@ export function LiveView({
           <div className="p-4 flex-1">
             <div className="panel-header mb-3">
               <Radio className="w-4 h-4" />
-              <span>Operator Action</span>
+              <span>{t('inspection.operatorAction')}</span>
               {!isOperator && (
-                <span className="ml-auto text-phosphor-cyan font-mono text-xxs">DISABLED</span>
+                <span className="ml-auto text-phosphor-cyan font-mono text-xxs">{t('inspection.disabled')}</span>
               )}
             </div>
 
@@ -544,7 +549,7 @@ export function LiveView({
                 )}
               >
                 <Check size={28} strokeWidth={3} />
-                <span className="font-display text-2xl font-bold tracking-wider">APPROVE</span>
+                <span className="font-display text-2xl font-bold tracking-wider">{t('inspection.approve')}</span>
               </button>
 
               {/* REJECT */}
@@ -559,7 +564,7 @@ export function LiveView({
                 )}
               >
                 <X size={28} strokeWidth={3} />
-                <span className="font-display text-2xl font-bold tracking-wider">REJECT</span>
+                <span className="font-display text-2xl font-bold tracking-wider">{t('inspection.reject')}</span>
               </button>
 
               {/* FALSE CALL */}
@@ -568,13 +573,13 @@ export function LiveView({
                 disabled={actionsDisabled}
                 className={cn(
                   "w-full py-4 flex items-center justify-center gap-3 transition-all",
-                  "bg-phosphor-amber/10 border-2 border-phosphor-amber/50 text-phosphor-amber",
-                  "hover:bg-phosphor-amber/20 hover:border-phosphor-amber",
+                  "bg-phosphor-teal/10 border-2 border-phosphor-teal/50 text-phosphor-teal",
+                  "hover:bg-phosphor-teal/20 hover:border-phosphor-teal",
                   "disabled:opacity-30 disabled:cursor-not-allowed"
                 )}
               >
                 <Flag size={20} />
-                <span className="font-display text-lg font-bold tracking-wider">FALSE CALL</span>
+                <span className="font-display text-lg font-bold tracking-wider">{t('inspection.falseCallBtn')}</span>
               </button>
             </div>
 
@@ -583,21 +588,21 @@ export function LiveView({
               <div className="mt-4 flex items-center justify-center gap-4 text-text-tertiary">
                 <div className="flex items-center gap-1">
                   <span className="px-2 py-0.5 bg-void border border-surface-border font-mono text-xs">A</span>
-                  <span className="font-mono text-xxs">Approve</span>
+                  <span className="font-mono text-xxs">{t('inspection.approve')}</span>
                 </div>
                 <div className="flex items-center gap-1">
                   <span className="px-2 py-0.5 bg-void border border-surface-border font-mono text-xs">R</span>
-                  <span className="font-mono text-xxs">Reject</span>
+                  <span className="font-mono text-xxs">{t('inspection.reject')}</span>
                 </div>
                 <div className="flex items-center gap-1">
                   <span className="px-2 py-0.5 bg-void border border-surface-border font-mono text-xs">F</span>
-                  <span className="font-mono text-xxs">False</span>
+                  <span className="font-mono text-xxs">{t('inspection.falseCallBtn')}</span>
                 </div>
               </div>
             ) : (
               <div className="mt-4 p-3 bg-phosphor-cyan/5 border border-phosphor-cyan/20">
                 <p className="font-mono text-xs text-phosphor-cyan text-center">
-                  Actions disabled for {user?.role?.toUpperCase() || 'NON-OPERATOR'}
+                  {t('inspection.actionsDisabledFor')} {user?.role?.toUpperCase() || t('inspection.nonOperator')}
                 </p>
               </div>
             )}
@@ -623,14 +628,14 @@ export function LiveView({
                   connected ? "text-phosphor-red" :
                   "text-text-tertiary"
                 )}>
-                  {isPaused ? 'PAUSED' : connected ? 'REC' : 'OFFLINE'}
+                  {isPaused ? t('inspection.paused') : connected ? t('inspection.rec') : t('inspection.offline')}
                 </span>
                 <span className="font-mono text-xs text-text-tertiary">CAM-01</span>
               </div>
               <div className="flex items-center gap-2">
-                <Video size={14} className="text-phosphor-amber" />
+                <Video size={14} className="text-phosphor-teal" />
                 <span className="font-display text-xs font-semibold text-text-primary tracking-wider">
-                  LIVE CAMERA FEED
+                  {t('inspection.liveCameraFeed')}
                 </span>
               </div>
               <span className="font-mono text-xs text-text-tertiary">1920×1080 @ 30fps</span>
@@ -649,10 +654,10 @@ export function LiveView({
                       <Pause size={48} className="text-phosphor-cyan" />
                     </div>
                     <p className="font-display text-2xl font-bold text-phosphor-cyan tracking-wider">
-                      INSPECTION PAUSED
+                      {t('inspection.inspectionPaused')}
                     </p>
                     <p className="font-mono text-sm text-text-tertiary mt-2">
-                      PRESS [SPACE] TO RESUME
+                      {t('inspection.pressSpaceResume')}
                     </p>
                   </div>
                 </div>
@@ -673,29 +678,29 @@ export function LiveView({
             <div className="absolute bottom-4 right-4 flex flex-col gap-2 z-10">
               <button
                 onClick={() => setZoomLevel(Math.min(200, zoomLevel + 10))}
-                className="p-3 bg-panel/90 border border-surface-border hover:border-phosphor-amber transition-colors backdrop-blur"
+                className="p-3 bg-panel/90 border border-surface-border hover:border-phosphor-teal transition-colors backdrop-blur"
               >
                 <ZoomIn size={20} className="text-text-primary" />
               </button>
               <button
                 onClick={() => setZoomLevel(Math.max(50, zoomLevel - 10))}
-                className="p-3 bg-panel/90 border border-surface-border hover:border-phosphor-amber transition-colors backdrop-blur"
+                className="p-3 bg-panel/90 border border-surface-border hover:border-phosphor-teal transition-colors backdrop-blur"
               >
                 <ZoomOut size={20} className="text-text-primary" />
               </button>
-              <button className="p-3 bg-panel/90 border border-surface-border hover:border-phosphor-amber transition-colors backdrop-blur">
+              <button className="p-3 bg-panel/90 border border-surface-border hover:border-phosphor-teal transition-colors backdrop-blur">
                 <Move size={20} className="text-text-primary" />
               </button>
               <div className="px-3 py-2 bg-panel/90 border border-surface-border text-center backdrop-blur">
-                <span className="font-mono text-sm text-phosphor-amber">{zoomLevel}%</span>
+                <span className="font-mono text-sm text-phosphor-teal">{zoomLevel}%</span>
               </div>
             </div>
 
             {/* Technical corners */}
-            <div className="absolute top-12 left-2 w-8 h-8 border-l-2 border-t-2 border-phosphor-amber/30" />
-            <div className="absolute top-12 right-2 w-8 h-8 border-r-2 border-t-2 border-phosphor-amber/30" />
-            <div className="absolute bottom-2 left-2 w-8 h-8 border-l-2 border-b-2 border-phosphor-amber/30" />
-            <div className="absolute bottom-2 right-2 w-8 h-8 border-r-2 border-b-2 border-phosphor-amber/30" />
+            <div className="absolute top-12 left-2 w-8 h-8 border-l-2 border-t-2 border-phosphor-teal/30" />
+            <div className="absolute top-12 right-2 w-8 h-8 border-r-2 border-t-2 border-phosphor-teal/30" />
+            <div className="absolute bottom-2 left-2 w-8 h-8 border-l-2 border-b-2 border-phosphor-teal/30" />
+            <div className="absolute bottom-2 right-2 w-8 h-8 border-r-2 border-b-2 border-phosphor-teal/30" />
           </div>
         </div>
       </main>
@@ -714,7 +719,7 @@ export function LiveView({
             )}
           >
             <Square size={16} fill="currentColor" />
-            {isOperator ? 'STOP' : 'EXIT'}
+            {isOperator ? t('inspection.stop') : t('inspection.exit')}
           </button>
 
           <button
@@ -729,12 +734,12 @@ export function LiveView({
             {isPaused ? (
               <>
                 <Play size={20} />
-                RESUME
+                {t('inspection.resume')}
               </>
             ) : (
               <>
                 <Pause size={20} />
-                PAUSE
+                {t('inspection.pause')}
               </>
             )}
           </button>
@@ -744,16 +749,16 @@ export function LiveView({
         <div className="flex items-center gap-3">
           <button
             disabled={!isOperator || isPaused}
-            className="h-12 px-6 bg-terminal border border-surface-border text-text-secondary font-display font-bold tracking-wider flex items-center gap-2 hover:border-phosphor-amber hover:text-phosphor-amber transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+            className="h-12 px-6 bg-terminal border border-surface-border text-text-secondary font-display font-bold tracking-wider flex items-center gap-2 hover:border-phosphor-teal hover:text-phosphor-teal transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
           >
             <ChevronLeft size={20} />
-            PREV
+            {t('inspection.prev')}
           </button>
           <button
             disabled={!isOperator || isPaused}
-            className="h-12 px-8 bg-phosphor-amber text-void font-display text-lg font-bold tracking-wider flex items-center gap-2 hover:shadow-glow-amber transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+            className="h-12 px-8 bg-phosphor-teal text-void font-display text-lg font-bold tracking-wider flex items-center gap-2 hover:shadow-glow-teal transition-all disabled:opacity-30 disabled:cursor-not-allowed"
           >
-            NEXT
+            {t('inspection.next')}
             <ChevronRight size={20} />
           </button>
         </div>
@@ -769,12 +774,12 @@ export function LiveView({
             <span className="font-mono text-xl font-bold text-phosphor-red">{stats.fail}</span>
           </div>
           <div className="h-8 w-px bg-surface-border" />
-          <div className="px-4 py-2 bg-phosphor-amber/10 border border-phosphor-amber/30">
-            <span className="font-mono text-xl font-bold text-phosphor-amber">{yieldRate}%</span>
+          <div className="px-4 py-2 bg-phosphor-teal/10 border border-phosphor-teal/30">
+            <span className="font-mono text-xl font-bold text-phosphor-teal">{yieldRate}%</span>
           </div>
           <button
             onClick={toggleFullscreen}
-            className="p-3 bg-terminal border border-surface-border hover:border-phosphor-amber transition-colors"
+            className="p-3 bg-terminal border border-surface-border hover:border-phosphor-teal transition-colors"
           >
             {isFullscreen ? (
               <Minimize2 size={20} className="text-text-primary" />

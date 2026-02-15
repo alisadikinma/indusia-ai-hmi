@@ -126,12 +126,14 @@ The app uses Next.js 13.5 with App Router. Pages are in `app/` with the followin
 - `/inspection/live/[lineId]` - Live inspection view (operator + manager)
 - `/inspection/result/[id]` - Inspection result details
 - `/inspection/overrides` - Manager review queue for false call overrides
-- `/engineering/master-data` - Engineering console for dataset/model management
+- `/engineering/master-data` - Engineering console for boards, lines, sections, customers, false-call-reasons (tabbed)
 - `/engineering/work-orders` - Work order management
 - `/super-admin/*` - Admin panel for users, roles, permissions
 - `/event-log` - System event tracking
 - `/settings/sync` - Sync configuration
-- `/settings/false-call-reasons` - False call reason configuration
+- `/settings/false-call-reasons` - Redirects to `/engineering/master-data?tab=false-call-reasons`
+
+Each route directory has a `loading.js` file using the shared `PageLoading` component (`components/common/PageLoading.jsx`) for Next.js Suspense-based loading states.
 
 ### Context Architecture
 
@@ -142,26 +144,40 @@ AuthProvider (outermost)
   └─ I18nProvider
       └─ HelpOverlayProvider
           └─ NotificationProvider
-              └─ SystemHealthProvider (innermost)
+              └─ SystemHealthProvider
+                  └─ SidebarProvider (innermost)
 ```
 
 All contexts are client-side only. The root layout (`app/layout.js`) wraps everything in `ToastProvider` and `LayoutClient`.
 
 **Authentication Flow**: `AuthContext` stores user in localStorage as `indusia_user`. The `LayoutClient` redirects unauthenticated users to `/login`. Auth is currently mock-based and will be migrated to Supabase Auth.
 
+**CSRF Protection**: `AuthContext` provides `apiRequest()` wrapper that auto-injects CSRF token for POST/PUT/PATCH/DELETE. On 403 CSRF errors, it auto-refreshes the token and retries once. Use `apiRequest()` instead of raw `fetch()` for authenticated API calls.
+
+**Active Line Session**: `AuthContext` tracks `activeLineId`/`activeLineName` in state + localStorage (`indusia_active_line`). SideNav uses this to route operators directly to their active live inspection instead of select-line.
+
+**Layout Modes**: `SidebarProvider` supports two modes via `layout-client.jsx`:
+- **Normal**: Sidebar shifts content (margin-left adjusts)
+- **Fullscreen**: Sidebar overlays content with backdrop blur (used by live inspection view)
+
 ### Role-Based Access Control (RBAC)
 
 User roles are: `operator`, `manager`, `engineer`, `superadmin`
 
-Navigation items in `SideNav.jsx` are filtered by role. Each route should check `user.role` for authorization. Use the `useAuth()` hook which provides:
+Navigation items in `SideNav.jsx` are filtered by database-driven menu permissions. Pages use `hasMenuAccess('menu_engineering')` instead of hardcoded role checks. Permission matrix managed via `/super-admin/permissions`.
+
+Use the `useAuth()` hook which provides:
 - `user` - Current user object
 - `isSuperAdmin` - Boolean helper
 - `loginWithProfile()`, `logout()`, `updateSelections()`, `updateSelectedBoard()`
+- `apiRequest(url, options)` - Fetch wrapper with auto CSRF injection + retry
+- `activeLineId`, `activeLineName`, `setActiveLine()`, `clearActiveLine()`, `hasActiveLine`
+- `hasMenuAccess(menuId)` - Database-driven permission check
 
 ### Component Organization
 
 - `components/ui/` - shadcn/ui primitives (Radix UI + Tailwind)
-- `components/common/` - Reusable UI components (Card, Badge, StatusBadge, EmptyState, etc.)
+- `components/common/` - Reusable UI components (Card, Badge, StatusBadge, EmptyState, PageLoading, etc.)
 - `components/layout/` - SideNav, TopNav
 - `components/system/` - SystemHealthBar, SystemStatusChip, SystemStatusDetailsModal
 - `components/notifications/` - NotificationBell, NotificationDrawer, NotificationFilters
@@ -207,11 +223,13 @@ elevated: '#161B22',        // Elevated surfaces
 'text-tertiary': '#484F58',  // Muted text
 ```
 
-**Legacy `indusia.*` tokens** exist for backwards compatibility but map to the new Phosphor values. Use the Phosphor system for new code.
+**Legacy `indusia.*` tokens** exist for backwards compatibility but map to the new Phosphor values. Use the Phosphor system for new code. Note: `phosphor-teal` in tailwind.config maps to `#FFAA00` (amber), not teal — this is the primary accent color.
+
+**CRT Effects** (globals.css): Scanline overlay (`body::before`) and vignette gradient (`body::after`) create terminal-style aesthetic.
 
 **Glow effects:** `shadow-glow-amber`, `shadow-glow-green`, `shadow-glow-red`, `shadow-glow-cyan`
 
-**Animations:** `animate-pulse-glow`, `animate-flicker`, `animate-scan`, `animate-typing-cursor`, `animate-fade-in`, `animate-slide-up`
+**Animations:** `animate-pulse-glow`, `animate-flicker`, `animate-scan`, `animate-typing-cursor`, `animate-fade-in`, `animate-slide-up`, plus 14 inspection stage animations (`animate-stage-glow-pulse`, `animate-stage-scanning`, `animate-stage-shimmer`, etc.)
 
 ### Data Layer Architecture
 
@@ -224,7 +242,7 @@ Hooks (hooks/) → API Routes (app/api/) → Repositories (lib/repos/) → Supab
 **Repository Layer** (`lib/repos/`):
 - Direct Supabase queries with error handling
 - Case conversion utilities: `toCamelCase()`, `toSnakeCase()` in `lib/repos/index.js`
-- Key repos: `overridesRepo`, `usersRepo`, `rolesRepo`, `masterDataRepo`, `notificationsRepo`, `modelsRepo`, `eventLogRepo`, `dashboardRepo`, `inspectionFramesRepo`
+- Key repos: `overridesRepo`, `usersRepo`, `rolesRepo`, `masterDataRepo`, `notificationsRepo`, `modelsRepo`, `eventLogRepo`, `dashboardRepo`, `inspectionFramesRepo`, `systemHealthRepo`
 
 **API Routes** (`app/api/`):
 - RESTful endpoints with authentication/authorization via `withAuth()` middleware
@@ -328,26 +346,36 @@ GET /api/work-orders/active/{lineId}    ← Manager polls every 5s (slow, DB que
 - In-memory `Map` cache for fast reads (loaded from `.line-state.json` once on startup)
 - `PUT` writes to memory + async file backup (non-blocking)
 - `GET` reads from memory only (no file I/O)
-- Stores: processStatus, stage, hardware, currentInspection, autoNgEnabled
+- Stores: processStatus, stage, hardware, currentInspection, autoNgEnabled, workOrderCounters, cycleTime
+
+**Session Counters** (operator-side optimistic updates):
+- `sessionCounters` state in LiveViewV3 tracks completed/good/ng/falseCall deltas locally
+- Persisted to localStorage with 24h expiry + synced to line-state API for manager visibility
+- Server reconciliation: subtracts delta when DB catches up to avoid double-counting
+- Reset detection: clears if server counters drop (admin reset or lot_size change)
+
+**Decision Submission Serialization:**
+- `isSubmittingRef` prevents concurrent `submitDecision` calls (race condition protection)
+- `pendingSubmitRef` queues next call, executed via `setTimeout(0)` after current finishes
 
 **Stage Definitions:**
 - Fetched from AI Backend via `GET /api/model/stages` (returns 20 stages)
 - `useLiveInspection` hook fetches stages on mount for ALL roles (operator + manager)
-- `InspectionStage.jsx` groups 20 stages into 5 phases: TOP, FLIP, BTM, AI TOP, AI BTM
-- Grouping logic in `groupStagesByPhase()` uses the `type` field from stage definitions
+- `InspectionStage.jsx` groups 20 stages into 7 visual phases: PCB IN → CAMERA MOVE → CAPTURE TOP → FLIP → CAPTURE BTM → AI INSPECT → RESULT
+- Phase detection uses `stage.message` string matching with proportional fallback
 
 ### System Health Monitoring
 
-`SystemHealthContext` provides real-time system status monitoring with these components:
-- `aiModel` - AI model status and performance
-- `camera` - Camera connectivity
-- `cloud` - Cloud service connectivity
-- `lineRuntime` - Production line status
-- `lastSync` - Last sync operation status
+`SystemHealthContext` provides real-time system status monitoring backed by `systemHealthRepo.getSystemHealth()`:
+- `database` - PostgreSQL/PostgREST connectivity (queries `users` table)
+- `aiModel` - Latest deployed model status (queries `models` table)
+- `camera` - Camera hardware status (queries `system_status` table)
+- `cloud` - Mirrors database connectivity state
+- `lastSync` - Last sync session details (queries `sync_history` table, includes `syncedRecords`, `failedRecords`, `durationMs`, `minutesAgo`)
 
 States: `ok`, `warning`, `error`, `offline`, `degraded`, `unknown`, `in-progress`
 
-The context auto-refreshes every 15 seconds and simulates random state changes for demo purposes. Remove the simulation logic when integrating with real system health APIs.
+Auto-refreshes every 60 seconds via `/api/system-health` endpoint (2s delay on initial load). Shows toast notifications on status transitions (service recovery or degradation). TopNav reads sync status from this context (no separate API call).
 
 ### Event Log System
 
@@ -378,6 +406,42 @@ const { t, language, setLanguage } = useI18n();
 ```
 
 Translation files are in `i18n/en.json` and `i18n/id.json`. Always add keys to both files when adding new translatable strings.
+
+### OTA Update System
+
+Self-updating mechanism for production deployments. Only superadmin can trigger.
+
+**Branch Strategy:** `main` (UAT) → `production` (factory). Version tags on production branch.
+
+**Update Flow:**
+1. HMI checks for new tags via `GET /api/system/check-update` (superadmin only, hourly auto-check)
+2. Superadmin sees amber dot in TopNav VersionBadge + toast notification on login
+3. Update page at `/super-admin/system-update` shows preflight checks (DB, migrations, production lines)
+4. `POST /api/system/update` runs pipeline: safety check → git pull → npm install → migrations → build → restart signal
+5. Progress streamed via SSE to UpdateTerminal component (CRT-styled terminal)
+6. `restart-watcher.ps1` detects `.restart-trigger` file and restarts Node.js
+
+**Key Files:**
+- `scripts/run-migrations.js` — SQL migration runner (direct pg connection for DDL)
+- `scripts/restart-watcher.ps1` — PowerShell file watcher for auto-restart
+- `scripts/start-hmi.ps1` — Production startup (starts watcher + Next.js)
+- `lib/services/updatePipeline.js` — Orchestrates update steps with SSE progress
+- `lib/services/lineStateStore.js` — Shared line-state Map (used by update safety check + line-state API)
+- `lib/repos/updateRepo.js` — update_log + schema_migrations queries via PostgREST
+- `lib/utils/version.js` — Version utilities (getCurrentVersion, getBuildInfo, compareVersions)
+- `migrations/` — Numbered SQL files (001_xxx.sql, 002_xxx.sql, ...)
+
+**API Endpoints:**
+- `GET /api/system/version` — Public, returns current version + build info
+- `GET /api/system/check-update` — Superadmin, fetches remote tags and compares
+- `POST /api/system/update` — Superadmin, triggers update pipeline, returns SSE stream
+- `GET /api/system/update/history` — Superadmin, returns update_log entries
+- `GET /api/system/update/progress` — Superadmin, fallback status for reconnection
+- `GET /api/system/migrations/pending` — Superadmin, lists pending SQL files
+
+**DB Tables:** `schema_migrations` (tracks applied migrations), `update_log` (update attempt history)
+
+**Production startup:** `npm run start:production` or `powershell scripts/start-hmi.ps1`
 
 ### Cloud Sync System
 
@@ -731,10 +795,14 @@ Permission strings follow the format `resource:action` (e.g., `users:read`, `ove
 
 The full schema is in `indusia_schema_v1.md`. Key tables:
 - `users`, `roles`, `role_menu_permissions` - RBAC
-- `customers`, `sections`, `lines`, `boards` - Master data hierarchy
+- `customers`, `sections`, `lines`, `boards` - Master data hierarchy (boards include `top_frame_count`, `bottom_frame_count`)
+- `system_status` - Hardware component statuses (camera, PLC)
+- `sync_history` - Cloud sync session logs
 - `overrides` - False call override submissions
 - `notifications`, `event_log` - Activity tracking
 - `system_events` - System health events
+- `schema_migrations` - Tracks applied SQL migrations (version, filename, applied_at)
+- `update_log` - OTA update attempt history (from/to version, status, migrations, commits)
 
 When implementing Supabase queries, use Row Level Security (RLS) policies based on user roles.
 

@@ -16,16 +16,16 @@ const config = {
       colors: {
         // === PHOSPHOR COLOR SYSTEM ===
         phosphor: {
-          amber: '#FFAA00',
-          'amber-bright': '#FFD93D',
-          'amber-dim': '#CC8800',
+          teal: '#09A8A4',
+          'teal-bright': '#3DBFBC',
+          'teal-dim': '#078682',
           green: '#00FF66',
           'green-bright': '#66FFAA',
           'green-dim': '#00CC52',
           red: '#FF4444',
           'red-bright': '#FF6B6B',
-          cyan: '#00DDFF',
-          'cyan-dim': '#0099BB',
+          cyan: '#5B9DFF',
+          'cyan-dim': '#3D7BE0',
         },
         // === BACKGROUND SYSTEM ===
         void: '#050608',
@@ -42,12 +42,12 @@ const config = {
           bg: '#050608',
           surface: '#0D1117',
           surfaceMuted: '#0A0E14',
-          primary: '#FFAA00',
+          primary: '#09A8A4',
           text: '#E6EDF3',
           textMuted: '#8B949E',
           pass: '#00FF66',
           fail: '#FF4444',
-          warning: '#FFAA00',
+          warning: '#E6A817',
           border: '#21262D',
         },
       },
@@ -85,17 +85,17 @@ const config = {
         'xl': '12px',
       },
       boxShadow: {
-        'glow-amber': '0 0 20px rgba(255, 170, 0, 0.3), 0 0 40px rgba(255, 170, 0, 0.1)',
+        'glow-teal': '0 0 20px rgba(9, 168, 164, 0.3), 0 0 40px rgba(9, 168, 164, 0.1)',
         'glow-green': '0 0 20px rgba(0, 255, 102, 0.3), 0 0 40px rgba(0, 255, 102, 0.1)',
         'glow-red': '0 0 20px rgba(255, 68, 68, 0.3), 0 0 40px rgba(255, 68, 68, 0.1)',
-        'glow-cyan': '0 0 20px rgba(0, 221, 255, 0.3), 0 0 40px rgba(0, 221, 255, 0.1)',
-        'inner-glow-amber': 'inset 0 0 20px rgba(255, 170, 0, 0.1)',
+        'glow-cyan': '0 0 20px rgba(91, 157, 255, 0.3), 0 0 40px rgba(91, 157, 255, 0.1)',
+        'inner-glow-teal': 'inset 0 0 20px rgba(9, 168, 164, 0.1)',
         'panel': '0 4px 24px rgba(0, 0, 0, 0.4)',
       },
       backgroundImage: {
         'grid-pattern': `
-          linear-gradient(rgba(255, 170, 0, 0.06) 1px, transparent 1px),
-          linear-gradient(90deg, rgba(255, 170, 0, 0.06) 1px, transparent 1px)
+          linear-gradient(rgba(9, 168, 164, 0.06) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(9, 168, 164, 0.06) 1px, transparent 1px)
         `,
         'gradient-radial': 'radial-gradient(ellipse at center, var(--tw-gradient-stops))',
         'scan-line': 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0, 0, 0, 0.03) 2px, rgba(0, 0, 0, 0.03) 4px)',

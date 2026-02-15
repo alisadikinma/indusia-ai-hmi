@@ -18,7 +18,7 @@ function LayoutContent({ children }) {
   const pathname = usePathname();
   const router = useRouter();
   const { user, isLoading } = useAuth();
-  const { isCollapsed, isHidden, isFullscreenMode } = useSidebar();
+  const { isCollapsed, isHidden, isFullscreenMode, navigatingTo } = useSidebar();
 
   const isLoginPage = pathname === '/login';
 
@@ -32,7 +32,7 @@ function LayoutContent({ children }) {
     return (
       <div className="min-h-screen bg-void flex items-center justify-center">
         <div className="text-center">
-          <img src="/indusiaai-logo.png" alt="INDUSIA AI" className="w-16 h-16 object-contain animate-pulse-glow mx-auto mb-4" />
+          <img src="/indusiaai-logo.png" alt="INDUSIA AI" className="w-48 h-48 object-contain animate-pulse-glow mx-auto mb-4" />
           <div className="font-mono text-sm text-text-tertiary">INITIALIZING...</div>
         </div>
       </div>
@@ -40,7 +40,7 @@ function LayoutContent({ children }) {
   }
 
   if (isLoginPage) {
-    return children;
+    return <I18nProvider>{children}</I18nProvider>;
   }
 
   if (!user) {
@@ -55,7 +55,7 @@ function LayoutContent({ children }) {
           </p>
           <button
             onClick={() => router.push('/login')}
-            className="px-6 py-3 bg-phosphor-amber text-void font-display font-bold tracking-wider hover:shadow-glow-amber transition-all"
+            className="px-6 py-3 bg-phosphor-teal text-void font-display font-bold tracking-wider hover:shadow-glow-teal transition-all"
           >
             AUTHENTICATE
           </button>
@@ -145,9 +145,18 @@ function LayoutContent({ children }) {
                     "flex-1 overflow-y-auto",
                     !isHidden && "px-8 py-6"
                   )}>
-                    <ErrorBoundary>
-                      {children}
-                    </ErrorBoundary>
+                    {navigatingTo ? (
+                      <div className="flex items-center justify-center h-full">
+                        <div className="text-center">
+                          <img src="/indusiaai-logo.png" alt="Loading" className="w-48 h-48 object-contain animate-pulse-glow mx-auto mb-4" />
+                          <div className="font-mono text-xs text-text-tertiary tracking-wider">Loading...</div>
+                        </div>
+                      </div>
+                    ) : (
+                      <ErrorBoundary>
+                        {children}
+                      </ErrorBoundary>
+                    )}
                   </main>
                 </div>
               </div>

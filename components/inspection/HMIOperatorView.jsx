@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { useHMILayout } from '@/hooks/useHMILayout';
 import { useLiveInspection } from '@/hooks/useLiveInspection';
+import { useI18n } from '@/context/I18nContext';
 import { HMIActionPanel } from './HMIActionPanel';
 import { DetectionOverlay } from './DetectionOverlay';
 import FalseCallOverrideModal from './FalseCallOverrideModal';
@@ -30,6 +31,9 @@ export function HMIOperatorView({
   user,
   onExit,
 }) {
+  // i18n
+  const { t } = useI18n();
+
   // Layout hook
   const {
     layout,
@@ -130,10 +134,10 @@ export function HMIOperatorView({
 
   // Status configuration
   const getStatusConfig = () => {
-    if (isPaused) return { color: 'phosphor-cyan', label: 'PAUSED', icon: Pause };
-    if (connected) return { color: 'phosphor-green', label: 'INSPECTING', icon: Activity };
-    if (connecting) return { color: 'phosphor-amber', label: 'CONNECTING', icon: Radio };
-    return { color: 'phosphor-red', label: 'OFFLINE', icon: AlertTriangle };
+    if (isPaused) return { color: 'phosphor-cyan', label: t('inspection.paused'), icon: Pause };
+    if (connected) return { color: 'phosphor-green', label: t('inspection.inspecting'), icon: Activity };
+    if (connecting) return { color: 'phosphor-teal', label: t('inspection.connecting'), icon: Radio };
+    return { color: 'phosphor-red', label: t('inspection.offline'), icon: AlertTriangle };
   };
 
   const statusConfig = getStatusConfig();
@@ -146,14 +150,14 @@ export function HMIOperatorView({
         <div className="flex items-center gap-4">
           <button
             onClick={onExit}
-            className="p-2 border border-surface-border bg-terminal hover:border-phosphor-amber hover:text-phosphor-amber transition-colors"
+            className="p-2 border border-surface-border bg-terminal hover:border-phosphor-teal hover:text-phosphor-teal transition-colors"
           >
             <Menu size={18} className="text-text-secondary" />
           </button>
 
           <div className="flex items-center gap-3">
-            <div className="px-3 py-1 bg-terminal border border-phosphor-amber/50">
-              <span className="font-mono text-sm font-bold text-phosphor-amber">
+            <div className="px-3 py-1 bg-terminal border border-phosphor-teal/50">
+              <span className="font-mono text-sm font-bold text-phosphor-teal">
                 {boardIdDisplay}
               </span>
             </div>
@@ -190,11 +194,11 @@ export function HMIOperatorView({
           {error && (
             <div className="flex items-center gap-2 px-3 py-1 bg-phosphor-red/10 border border-phosphor-red/50">
               <AlertTriangle size={14} className="text-phosphor-red" />
-              <span className="font-mono text-xs text-phosphor-red">ALERT</span>
+              <span className="font-mono text-xs text-phosphor-red">{t('inspection.alert')}</span>
             </div>
           )}
-          <span className="font-mono text-sm text-phosphor-amber">{currentTime}</span>
-          <button className="p-2 border border-surface-border bg-terminal hover:border-phosphor-amber transition-colors">
+          <span className="font-mono text-sm text-phosphor-teal">{currentTime}</span>
+          <button className="p-2 border border-surface-border bg-terminal hover:border-phosphor-teal transition-colors">
             <HelpCircle size={16} className="text-text-tertiary" />
           </button>
         </div>
@@ -208,13 +212,13 @@ export function HMIOperatorView({
           <div className="p-4 border-b border-surface-border">
             <div className="panel-header mb-3">
               <Eye className="w-4 h-4" />
-              <span>Detection Analysis</span>
+              <span>{t('inspection.detectionAnalysis')}</span>
             </div>
 
             <div className="space-y-3">
               {/* Defect Type */}
               <div className="bg-terminal border border-surface-border p-3">
-                <span className="data-label">DETECTED CLASS</span>
+                <span className="data-label">{t('inspection.detectedClass')}</span>
                 <p className={cn(
                   "font-mono text-xl font-bold mt-1",
                   defectType === 'PASS' ? 'text-phosphor-green' :
@@ -227,9 +231,9 @@ export function HMIOperatorView({
 
               {/* Confidence */}
               <div className="bg-terminal border border-surface-border p-3">
-                <span className="data-label">CONFIDENCE SCORE</span>
+                <span className="data-label">{t('inspection.confidenceScore')}</span>
                 <div className="flex items-end gap-2 mt-1">
-                  <span className="font-mono text-3xl font-bold text-phosphor-amber">
+                  <span className="font-mono text-3xl font-bold text-phosphor-teal">
                     {confidence}
                   </span>
                   <span className="font-mono text-sm text-text-tertiary mb-1">%</span>
@@ -239,7 +243,7 @@ export function HMIOperatorView({
                     className={cn(
                       "h-full transition-all",
                       confidence >= 90 ? 'bg-phosphor-green' :
-                      confidence >= 70 ? 'bg-phosphor-amber' :
+                      confidence >= 70 ? 'bg-phosphor-teal' :
                       'bg-phosphor-red'
                     )}
                     style={{ width: `${confidence}%` }}
@@ -253,7 +257,7 @@ export function HMIOperatorView({
           <div className="p-4 flex-1">
             <div className="panel-header mb-3">
               <Radio className="w-4 h-4" />
-              <span>Operator Actions</span>
+              <span>{t('inspection.operatorActions')}</span>
             </div>
 
             <div className="space-y-3">
@@ -269,7 +273,7 @@ export function HMIOperatorView({
                 )}
               >
                 <Check size={28} strokeWidth={3} />
-                <span className="font-display text-2xl font-bold tracking-wider">APPROVE</span>
+                <span className="font-display text-2xl font-bold tracking-wider">{t('inspection.approve')}</span>
                 <span className="font-mono text-xs opacity-60">[A]</span>
               </button>
 
@@ -285,7 +289,7 @@ export function HMIOperatorView({
                 )}
               >
                 <X size={28} strokeWidth={3} />
-                <span className="font-display text-2xl font-bold tracking-wider">REJECT</span>
+                <span className="font-display text-2xl font-bold tracking-wider">{t('inspection.reject')}</span>
                 <span className="font-mono text-xs opacity-60">[R]</span>
               </button>
 
@@ -295,13 +299,13 @@ export function HMIOperatorView({
                 disabled={isPaused || !connected}
                 className={cn(
                   "w-full py-4 flex items-center justify-center gap-3 transition-all",
-                  "bg-phosphor-amber/10 border-2 border-phosphor-amber/50 text-phosphor-amber",
-                  "hover:bg-phosphor-amber/20 hover:border-phosphor-amber",
+                  "bg-phosphor-teal/10 border-2 border-phosphor-teal/50 text-phosphor-teal",
+                  "hover:bg-phosphor-teal/20 hover:border-phosphor-teal",
                   "disabled:opacity-30 disabled:cursor-not-allowed"
                 )}
               >
                 <Flag size={20} />
-                <span className="font-display text-lg font-bold tracking-wider">FALSE CALL</span>
+                <span className="font-display text-lg font-bold tracking-wider">{t('inspection.falseCallBtn')}</span>
                 <span className="font-mono text-xs opacity-60">[F]</span>
               </button>
             </div>
@@ -311,16 +315,16 @@ export function HMIOperatorView({
           <div className="p-4 border-t border-surface-border bg-terminal">
             <div className="grid grid-cols-3 gap-3">
               <div className="text-center">
-                <span className="data-label">PASSED</span>
+                <span className="data-label">{t('inspection.passed')}</span>
                 <p className="font-mono text-2xl font-bold text-phosphor-green">{stats.pass}</p>
               </div>
               <div className="text-center">
-                <span className="data-label">FAILED</span>
+                <span className="data-label">{t('inspection.failed')}</span>
                 <p className="font-mono text-2xl font-bold text-phosphor-red">{stats.fail}</p>
               </div>
               <div className="text-center">
-                <span className="data-label">YIELD</span>
-                <p className="font-mono text-2xl font-bold text-phosphor-amber">{yieldRate}%</p>
+                <span className="data-label">{t('inspection.yield')}</span>
+                <p className="font-mono text-2xl font-bold text-phosphor-teal">{yieldRate}%</p>
               </div>
             </div>
           </div>
@@ -345,14 +349,14 @@ export function HMIOperatorView({
                   connected ? "text-phosphor-red" :
                   "text-text-tertiary"
                 )}>
-                  {isPaused ? 'PAUSED' : connected ? 'REC' : 'OFFLINE'}
+                  {isPaused ? t('inspection.paused') : connected ? t('inspection.rec') : t('inspection.offline')}
                 </span>
                 <span className="font-mono text-xs text-text-tertiary">CAM-01</span>
               </div>
               <div className="flex items-center gap-2">
-                <Video size={14} className="text-phosphor-amber" />
+                <Video size={14} className="text-phosphor-teal" />
                 <span className="font-display text-xs font-semibold text-text-primary tracking-wider">
-                  LIVE FEED
+                  {t('inspection.liveFeed')}
                 </span>
               </div>
               <span className="font-mono text-xs text-text-tertiary">1920x1080 @ 30fps</span>
@@ -368,10 +372,10 @@ export function HMIOperatorView({
                       <Pause size={48} className="text-phosphor-cyan" />
                     </div>
                     <p className="font-display text-2xl font-bold text-phosphor-cyan tracking-wider">
-                      INSPECTION PAUSED
+                      {t('inspection.inspectionPaused')}
                     </p>
                     <p className="font-mono text-sm text-text-tertiary mt-2">
-                      PRESS [SPACE] TO RESUME
+                      {t('inspection.pressSpaceResume')}
                     </p>
                   </div>
                 </div>
@@ -392,29 +396,29 @@ export function HMIOperatorView({
             <div className="absolute bottom-4 right-4 flex flex-col gap-2 z-10">
               <button
                 onClick={() => setZoomLevel(Math.min(200, zoomLevel + 10))}
-                className="p-3 bg-panel/90 border border-surface-border hover:border-phosphor-amber transition-colors backdrop-blur"
+                className="p-3 bg-panel/90 border border-surface-border hover:border-phosphor-teal transition-colors backdrop-blur"
               >
                 <ZoomIn size={20} className="text-text-primary" />
               </button>
               <button
                 onClick={() => setZoomLevel(Math.max(50, zoomLevel - 10))}
-                className="p-3 bg-panel/90 border border-surface-border hover:border-phosphor-amber transition-colors backdrop-blur"
+                className="p-3 bg-panel/90 border border-surface-border hover:border-phosphor-teal transition-colors backdrop-blur"
               >
                 <ZoomOut size={20} className="text-text-primary" />
               </button>
-              <button className="p-3 bg-panel/90 border border-surface-border hover:border-phosphor-amber transition-colors backdrop-blur">
+              <button className="p-3 bg-panel/90 border border-surface-border hover:border-phosphor-teal transition-colors backdrop-blur">
                 <Move size={20} className="text-text-primary" />
               </button>
               <div className="px-3 py-2 bg-panel/90 border border-surface-border text-center backdrop-blur">
-                <span className="font-mono text-sm text-phosphor-amber">{zoomLevel}%</span>
+                <span className="font-mono text-sm text-phosphor-teal">{zoomLevel}%</span>
               </div>
             </div>
 
             {/* Technical corners */}
-            <div className="absolute top-12 left-2 w-8 h-8 border-l-2 border-t-2 border-phosphor-amber/30" />
-            <div className="absolute top-12 right-2 w-8 h-8 border-r-2 border-t-2 border-phosphor-amber/30" />
-            <div className="absolute bottom-2 left-2 w-8 h-8 border-l-2 border-b-2 border-phosphor-amber/30" />
-            <div className="absolute bottom-2 right-2 w-8 h-8 border-r-2 border-b-2 border-phosphor-amber/30" />
+            <div className="absolute top-12 left-2 w-8 h-8 border-l-2 border-t-2 border-phosphor-teal/30" />
+            <div className="absolute top-12 right-2 w-8 h-8 border-r-2 border-t-2 border-phosphor-teal/30" />
+            <div className="absolute bottom-2 left-2 w-8 h-8 border-l-2 border-b-2 border-phosphor-teal/30" />
+            <div className="absolute bottom-2 right-2 w-8 h-8 border-r-2 border-b-2 border-phosphor-teal/30" />
           </div>
         </div>
       </main>
@@ -428,7 +432,7 @@ export function HMIOperatorView({
             className="h-12 px-6 bg-phosphor-red text-white font-display text-lg font-bold tracking-wider flex items-center gap-2 hover:shadow-glow-red transition-all"
           >
             <div className="w-3 h-3 bg-white" />
-            STOP
+            {t('inspection.stop')}
           </button>
 
           <button
@@ -443,12 +447,12 @@ export function HMIOperatorView({
             {isPaused ? (
               <>
                 <Play size={20} />
-                RESUME
+                {t('inspection.resume')}
               </>
             ) : (
               <>
                 <Pause size={20} />
-                PAUSE
+                {t('inspection.pause')}
               </>
             )}
           </button>
@@ -458,16 +462,16 @@ export function HMIOperatorView({
         <div className="flex items-center gap-3">
           <button
             disabled={isPaused}
-            className="h-12 px-6 bg-terminal border border-surface-border text-text-secondary font-display font-bold tracking-wider flex items-center gap-2 hover:border-phosphor-amber hover:text-phosphor-amber transition-colors disabled:opacity-30"
+            className="h-12 px-6 bg-terminal border border-surface-border text-text-secondary font-display font-bold tracking-wider flex items-center gap-2 hover:border-phosphor-teal hover:text-phosphor-teal transition-colors disabled:opacity-30"
           >
             <ChevronLeft size={20} />
-            PREV
+            {t('inspection.prev')}
           </button>
           <button
             disabled={isPaused}
-            className="h-12 px-8 bg-phosphor-amber text-void font-display text-lg font-bold tracking-wider flex items-center gap-2 hover:shadow-glow-amber transition-all disabled:opacity-30"
+            className="h-12 px-8 bg-phosphor-teal text-void font-display text-lg font-bold tracking-wider flex items-center gap-2 hover:shadow-glow-teal transition-all disabled:opacity-30"
           >
-            NEXT
+            {t('inspection.next')}
             <ChevronRight size={20} />
           </button>
         </div>
@@ -492,7 +496,7 @@ export function HMIOperatorView({
 
           <button
             onClick={toggleFullscreen}
-            className="p-3 bg-terminal border border-surface-border hover:border-phosphor-amber transition-colors"
+            className="p-3 bg-terminal border border-surface-border hover:border-phosphor-teal transition-colors"
           >
             {layout.fullscreen ? (
               <Minimize2 size={20} className="text-text-primary" />

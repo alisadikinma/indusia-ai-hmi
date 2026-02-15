@@ -14,6 +14,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { cn } from '@/lib/utils'
 import { ZoomIn, ZoomOut, Maximize2, AlertCircle, CheckCircle2 } from 'lucide-react'
+import { useI18n } from '@/context/I18nContext'
 
 // Defect type color mapping
 const DEFECT_COLORS = {
@@ -47,7 +48,8 @@ export function SidePanel({ side, frames = [], className, onFrameClick, reviewin
   const [imageSize, setImageSize] = useState({ natural: { w: 0, h: 0 }, rendered: { w: 0, h: 0 } })
   const imgRef = useRef(null)
   const containerRef = useRef(null)
-  
+  const { t } = useI18n()
+
   // Current active frame — prefer url (with bbox) but fall back to raw_url
   const activeFrame = frames[activeFrameIndex] || null
   const imageUrl = activeFrame?.image_url || activeFrame?.image_raw_url
@@ -107,10 +109,10 @@ export function SidePanel({ side, frames = [], className, onFrameClick, reviewin
         className
       )}>
         <div className="px-4 py-3 bg-terminal">
-          <span className="font-display font-bold text-lg text-text-primary">{side} Side</span>
+          <span className="font-display font-bold text-lg text-text-primary">{t('inspection.side', { side })}</span>
         </div>
         <div className="flex-1 flex items-center justify-center text-text-tertiary min-h-0">
-          <p className="font-mono text-sm">No image available</p>
+          <p className="font-mono text-sm">{t('inspection.noImageAvailable')}</p>
         </div>
       </div>
     )
@@ -128,7 +130,7 @@ export function SidePanel({ side, frames = [], className, onFrameClick, reviewin
         hasDefects ? "bg-phosphor-red/10" : "bg-phosphor-green/10"
       )}>
         <div className="flex items-center gap-3">
-          <span className="font-display font-bold text-lg text-text-primary">{side} Side</span>
+          <span className="font-display font-bold text-lg text-text-primary">{t('inspection.side', { side })}</span>
           <span className={cn(
             "text-sm font-mono font-medium px-2 py-0.5 rounded",
             hasDefects
@@ -141,7 +143,7 @@ export function SidePanel({ side, frames = [], className, onFrameClick, reviewin
           {/* Frame Indicator */}
           {frameCount > 1 && (
             <span className="text-xs font-mono text-text-tertiary bg-terminal px-2 py-1 rounded">
-              Frame {activeFrameIndex + 1}/{frameCount}
+              {t('inspection.frame')} {activeFrameIndex + 1}/{frameCount}
             </span>
           )}
         </div>
@@ -150,7 +152,7 @@ export function SidePanel({ side, frames = [], className, onFrameClick, reviewin
         <div className="flex items-center gap-2">
           <button
             onClick={() => setZoom(z => Math.max(0.5, z - 0.25))}
-            className="p-1.5 rounded bg-terminal border border-surface-border hover:border-phosphor-amber/50 transition-colors"
+            className="p-1.5 rounded bg-terminal border border-surface-border hover:border-phosphor-teal/50 transition-colors"
           >
             <ZoomOut className="w-4 h-4 text-text-tertiary" />
           </button>
@@ -159,13 +161,13 @@ export function SidePanel({ side, frames = [], className, onFrameClick, reviewin
           </span>
           <button
             onClick={() => setZoom(z => Math.min(3, z + 0.25))}
-            className="p-1.5 rounded bg-terminal border border-surface-border hover:border-phosphor-amber/50 transition-colors"
+            className="p-1.5 rounded bg-terminal border border-surface-border hover:border-phosphor-teal/50 transition-colors"
           >
             <ZoomIn className="w-4 h-4 text-text-tertiary" />
           </button>
           <button
             onClick={() => setShowFullscreen(true)}
-            className="p-1.5 rounded bg-terminal border border-surface-border hover:border-phosphor-amber/50 transition-colors ml-2"
+            className="p-1.5 rounded bg-terminal border border-surface-border hover:border-phosphor-teal/50 transition-colors ml-2"
           >
             <Maximize2 className="w-4 h-4 text-text-tertiary" />
           </button>
@@ -184,8 +186,8 @@ export function SidePanel({ side, frames = [], className, onFrameClick, reviewin
           >
             {/* Floating Serial Number Badge */}
             {activeFrame?.serial_number && (
-              <div className="absolute top-2 left-1/2 -translate-x-1/2 z-10 px-3 py-1 rounded bg-void/85 border border-phosphor-amber/50 backdrop-blur-sm">
-                <span className="font-mono text-xs font-bold text-phosphor-amber">
+              <div className="absolute top-2 left-1/2 -translate-x-1/2 z-10 px-3 py-1 rounded bg-void/85 border border-phosphor-teal/50 backdrop-blur-sm">
+                <span className="font-mono text-xs font-bold text-phosphor-teal">
                   SN: {activeFrame.serial_number}
                 </span>
               </div>
@@ -208,7 +210,7 @@ export function SidePanel({ side, frames = [], className, onFrameClick, reviewin
           </div>
         ) : (
           <div className="flex items-center justify-center h-full text-text-tertiary">
-            <p className="font-mono text-sm">No image available</p>
+            <p className="font-mono text-sm">{t('inspection.noImageAvailable')}</p>
           </div>
         )}
       </div>
@@ -236,9 +238,9 @@ export function SidePanel({ side, frames = [], className, onFrameClick, reviewin
                   className={cn(
                     "relative flex-shrink-0 w-16 h-12 rounded overflow-hidden border-2 transition-all",
                     isReviewing
-                      ? "border-phosphor-amber ring-2 ring-phosphor-amber/50 animate-pulse"
+                      ? "border-phosphor-teal ring-2 ring-phosphor-teal/50 animate-pulse"
                       : isActive
-                        ? "border-phosphor-amber ring-2 ring-phosphor-amber/30"
+                        ? "border-phosphor-teal ring-2 ring-phosphor-teal/30"
                         : isConfirmed
                           ? (confirmedAsNG ? "border-phosphor-red" : "border-phosphor-green")
                           : frameIsNG
@@ -290,15 +292,15 @@ export function SidePanel({ side, frames = [], className, onFrameClick, reviewin
           onClick={() => setShowFullscreen(false)}
         >
           <button
-            className="absolute top-4 right-4 p-3 bg-panel border border-surface-border rounded hover:border-phosphor-amber transition-colors"
+            className="absolute top-4 right-4 p-3 bg-panel border border-surface-border rounded hover:border-phosphor-teal transition-colors"
             onClick={() => setShowFullscreen(false)}
           >
             <span className="text-text-primary text-xl font-bold">&times;</span>
           </button>
           <div className="text-center">
-            <p className="text-phosphor-amber font-display font-bold text-lg mb-2">{side} Side</p>
+            <p className="text-phosphor-teal font-display font-bold text-lg mb-2">{t('inspection.side', { side })}</p>
             {frameCount > 1 && (
-              <p className="text-text-tertiary font-mono text-sm mb-4">Frame {activeFrameIndex + 1}/{frameCount}</p>
+              <p className="text-text-tertiary font-mono text-sm mb-4">{t('inspection.frame')} {activeFrameIndex + 1}/{frameCount}</p>
             )}
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img

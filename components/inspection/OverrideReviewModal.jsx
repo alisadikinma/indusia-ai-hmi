@@ -208,8 +208,8 @@ export default function OverrideReviewModal({
         {/* Header */}
         <div className="px-5 py-3 border-b border-surface-border flex items-start justify-between bg-terminal">
           <div className="flex items-start gap-3">
-            <div className="w-9 h-9 rounded-full bg-phosphor-amber/20 flex items-center justify-center flex-shrink-0">
-              <FileText className="w-4 h-4 text-phosphor-amber" />
+            <div className="w-9 h-9 rounded-full bg-phosphor-teal/20 flex items-center justify-center flex-shrink-0">
+              <FileText className="w-4 h-4 text-phosphor-teal" />
             </div>
             <div>
               <h2 className="text-lg font-display font-bold text-text-primary">
@@ -269,7 +269,7 @@ export default function OverrideReviewModal({
                       className={cn(
                         "flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm font-mono transition-all flex-shrink-0",
                         idx === activeSN
-                          ? "border-phosphor-amber bg-phosphor-amber/10 text-phosphor-amber"
+                          ? "border-phosphor-teal bg-phosphor-teal/10 text-phosphor-teal"
                           : "border-surface-border bg-elevated text-text-secondary hover:border-text-tertiary"
                       )}
                     >
@@ -284,7 +284,7 @@ export default function OverrideReviewModal({
               {/* Single SN header when only 1 */}
               {dedupedSnGroups.length === 1 && currentGroup && (
                 <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-elevated border border-surface-border">
-                  <Hash className="w-4 h-4 text-phosphor-amber" />
+                  <Hash className="w-4 h-4 text-phosphor-teal" />
                   <span className="font-mono text-sm text-text-primary">{currentGroup.sn}</span>
                   <span className="text-xs text-text-tertiary font-mono">
                     {currentGroup.frames.length} false call frame{currentGroup.frames.length > 1 ? 's' : ''}
@@ -304,7 +304,7 @@ export default function OverrideReviewModal({
                           className={cn(
                             "relative flex-shrink-0 w-20 h-14 rounded overflow-hidden border-2 transition-all",
                             idx === activeFrameInGroup
-                              ? "border-phosphor-amber ring-2 ring-phosphor-amber/30"
+                              ? "border-phosphor-teal ring-2 ring-phosphor-teal/30"
                               : "border-surface-border hover:border-text-tertiary"
                           )}
                         >
@@ -341,7 +341,7 @@ export default function OverrideReviewModal({
                             onClick={() => setShowRawImage(false)}
                             className={cn(
                               "px-2 py-1 text-xs font-mono flex items-center gap-1 transition-colors",
-                              !showRawImage ? "bg-phosphor-amber/20 text-phosphor-amber" : "text-text-tertiary hover:text-text-secondary"
+                              !showRawImage ? "bg-phosphor-teal/20 text-phosphor-teal" : "text-text-tertiary hover:text-text-secondary"
                             )}
                           >
                             <Layers className="w-3 h-3" />
@@ -367,14 +367,14 @@ export default function OverrideReviewModal({
                             <button
                               onClick={() => { setActiveFrameInGroup(i => Math.max(0, i - 1)); setImageError(false) }}
                               disabled={activeFrameInGroup === 0}
-                              className="absolute left-2 top-1/2 -translate-y-1/2 z-10 p-1.5 rounded-full bg-void/70 border border-surface-border text-text-secondary hover:text-phosphor-amber disabled:opacity-20 disabled:cursor-not-allowed transition-all"
+                              className="absolute left-2 top-1/2 -translate-y-1/2 z-10 p-1.5 rounded-full bg-void/70 border border-surface-border text-text-secondary hover:text-phosphor-teal disabled:opacity-20 disabled:cursor-not-allowed transition-all"
                             >
                               <ChevronLeft className="w-5 h-5" />
                             </button>
                             <button
                               onClick={() => { setActiveFrameInGroup(i => Math.min(currentGroup.frames.length - 1, i + 1)); setImageError(false) }}
                               disabled={activeFrameInGroup === currentGroup.frames.length - 1}
-                              className="absolute right-2 top-1/2 -translate-y-1/2 z-10 p-1.5 rounded-full bg-void/70 border border-surface-border text-text-secondary hover:text-phosphor-amber disabled:opacity-20 disabled:cursor-not-allowed transition-all"
+                              className="absolute right-2 top-1/2 -translate-y-1/2 z-10 p-1.5 rounded-full bg-void/70 border border-surface-border text-text-secondary hover:text-phosphor-teal disabled:opacity-20 disabled:cursor-not-allowed transition-all"
                             >
                               <ChevronRight className="w-5 h-5" />
                             </button>
@@ -521,7 +521,7 @@ export default function OverrideReviewModal({
                 placeholder={t('manager.addNotes')}
                 rows={2}
                 disabled={isProcessing}
-                className="w-full px-3 py-2 bg-elevated border border-surface-border rounded text-sm text-text-primary placeholder-text-tertiary focus:outline-none focus:ring-1 focus:ring-phosphor-amber resize-none disabled:opacity-50"
+                className="w-full px-3 py-2 bg-elevated border border-surface-border rounded text-sm text-text-primary placeholder-text-tertiary focus:outline-none focus:ring-1 focus:ring-phosphor-teal resize-none disabled:opacity-50"
               />
             </div>
           )}
@@ -580,12 +580,12 @@ function MetaCell({ label, value, highlight }) {
   return (
     <div className={cn(
       "rounded border px-2 py-1.5 text-center",
-      highlight ? "bg-phosphor-amber/5 border-phosphor-amber/20" : "bg-elevated border-surface-border"
+      highlight ? "bg-phosphor-teal/5 border-phosphor-teal/20" : "bg-elevated border-surface-border"
     )}>
       <div className="text-xxs text-text-tertiary font-mono uppercase">{label}</div>
       <div className={cn(
         "text-sm font-mono truncate",
-        highlight ? "text-phosphor-amber" : "text-text-primary"
+        highlight ? "text-phosphor-teal" : "text-text-primary"
       )}>{value}</div>
     </div>
   );

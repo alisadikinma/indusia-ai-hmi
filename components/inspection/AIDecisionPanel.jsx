@@ -7,6 +7,7 @@
 
 import { cn } from '@/lib/utils'
 import { AlertTriangle, CheckCircle, Cpu } from 'lucide-react'
+import { useI18n } from '@/context/I18nContext'
 
 export function AIDecisionPanel({
   decision,
@@ -15,6 +16,7 @@ export function AIDecisionPanel({
   modelName,
   className
 }) {
+  const { t } = useI18n()
   const isPassing = decision === 'PASS'
 
   return (
@@ -49,11 +51,11 @@ export function AIDecisionPanel({
 
           {/* Confidence */}
           <div className="text-center px-3 py-1 bg-terminal border border-surface-border rounded">
-            <div className="text-xxs text-text-tertiary font-mono">Confidence</div>
+            <div className="text-xxs text-text-tertiary font-mono">{t('inspection.confidence')}</div>
             <div className={cn(
               "text-lg font-mono font-bold",
               confidence >= 0.85 ? "text-phosphor-green" :
-              confidence >= 0.70 ? "text-phosphor-amber" :
+              confidence >= 0.70 ? "text-phosphor-teal" :
               "text-phosphor-red"
             )}>
               {(confidence * 100).toFixed(0)}%
@@ -62,7 +64,7 @@ export function AIDecisionPanel({
 
           {/* Defect Count */}
           <div className="text-center px-3 py-1 bg-terminal border border-surface-border rounded">
-            <div className="text-xxs text-text-tertiary font-mono">Defects</div>
+            <div className="text-xxs text-text-tertiary font-mono">{t('inspection.defects')}</div>
             <div className={cn(
               "text-lg font-mono font-bold",
               totalDefects === 0 ? "text-phosphor-green" : "text-phosphor-red"

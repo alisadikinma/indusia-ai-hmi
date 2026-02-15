@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
+import { useI18n } from '@/hooks/useI18n';
 import { useEventLog } from '@/hooks/useEventLog';
 import SectionHeader from '@/components/common/SectionHeader';
 import EventLogSummaryCards from '@/components/event-log/EventLogSummaryCards';
@@ -13,6 +14,7 @@ import EventLogDetailDrawer from '@/components/event-log/EventLogDetailDrawer';
 export default function EventLogPage() {
   const router = useRouter();
   const { user } = useAuth();
+  const { t } = useI18n();
   const {
     events,
     paginatedEvents,
@@ -37,7 +39,7 @@ export default function EventLogPage() {
     return (
       <div className="min-h-[60vh] flex items-center justify-center">
         <div className="bg-indusia-surface rounded-xl shadow-xl border border-indusia-border p-8 max-w-md text-center">
-          <h2 className="text-xl font-bold text-indusia-text mb-3">Loading...</h2>
+          <h2 className="text-xl font-bold text-indusia-text mb-3">{t('common.loading')}</h2>
         </div>
       </div>
     );
@@ -47,15 +49,15 @@ export default function EventLogPage() {
     return (
       <div className="min-h-[60vh] flex items-center justify-center">
         <div className="bg-indusia-surface rounded-xl shadow-xl border border-indusia-border p-8 max-w-md text-center">
-          <h2 className="text-xl font-bold text-indusia-text mb-3">Access Denied</h2>
+          <h2 className="text-xl font-bold text-indusia-text mb-3">{t('auth.accessDenied')}</h2>
           <p className="text-sm text-indusia-textMuted mb-6">
-            You do not have permission to access the Event Log.
+            {t('auth.noPermissionEventLog')}
           </p>
           <button
             onClick={() => router.back()}
             className="px-6 py-3 bg-indusia-primary text-white rounded-lg font-medium hover:opacity-90 transition-opacity"
           >
-            Go Back
+            {t('buttons.goBack')}
           </button>
         </div>
       </div>
@@ -70,8 +72,8 @@ export default function EventLogPage() {
   return (
     <div className="space-y-6">
       <SectionHeader
-        title="Event Log / Audit Trail"
-        subtitle="Track and review all system activities and user actions"
+        title={t('eventLog.title')}
+        subtitle={t('eventLog.trackAndReview')}
       />
 
       <EventLogSummaryCards events={events} />

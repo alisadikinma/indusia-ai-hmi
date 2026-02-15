@@ -21,14 +21,16 @@ import {
   useDashboardTrend,
   useDashboardPareto,
 } from '@/hooks/useDashboard'
+import { useI18n } from '@/context/I18nContext'
+import PageLoading from '@/components/common/PageLoading'
 
 // Data Readout Component
 function DataReadout({ label, value, unit, status, size = 'default', loading }) {
   const statusColors = {
     ok: 'text-phosphor-green',
-    warning: 'text-phosphor-amber',
+    warning: 'text-phosphor-teal',
     error: 'text-phosphor-red',
-    neutral: 'text-phosphor-amber'
+    neutral: 'text-phosphor-teal'
   }
 
   const sizeClasses = {
@@ -60,9 +62,9 @@ function DataReadout({ label, value, unit, status, size = 'default', loading }) 
 function KPICard({ title, code, value, subtitle, icon: Icon, status, loading }) {
   const statusConfig = {
     ok: { border: 'border-phosphor-green/30', glow: 'shadow-glow-green', text: 'text-phosphor-green', bg: 'bg-phosphor-green/5' },
-    warning: { border: 'border-phosphor-amber/30', glow: '', text: 'text-phosphor-amber', bg: 'bg-phosphor-amber/5' },
+    warning: { border: 'border-phosphor-teal/30', glow: '', text: 'text-phosphor-teal', bg: 'bg-phosphor-teal/5' },
     error: { border: 'border-phosphor-red/30', glow: 'shadow-glow-red', text: 'text-phosphor-red', bg: 'bg-phosphor-red/5' },
-    neutral: { border: 'border-surface-border', glow: '', text: 'text-phosphor-amber', bg: '' }
+    neutral: { border: 'border-surface-border', glow: '', text: 'text-phosphor-teal', bg: '' }
   }
 
   const config = statusConfig[status || 'neutral']
@@ -81,7 +83,7 @@ function KPICard({ title, code, value, subtitle, icon: Icon, status, loading }) 
             {loading ? (
               <Loader2 className="w-8 h-8 text-text-tertiary animate-spin" />
             ) : (
-              <div className={`font-mono text-4xl font-bold ${config.text} text-glow-amber`}>
+              <div className={`font-mono text-4xl font-bold ${config.text} text-glow-teal`}>
                 {value}
               </div>
             )}
@@ -104,6 +106,7 @@ function KPICard({ title, code, value, subtitle, icon: Icon, status, loading }) 
 function SystemStatusBar({ loading }) {
   const { statuses, STATE_TYPES } = useSystemHealth()
   const [currentTime, setCurrentTime] = useState('')
+  const { t } = useI18n()
 
   useEffect(() => {
     const updateTime = () => {
@@ -128,12 +131,12 @@ function SystemStatusBar({ loading }) {
   const overallStatus = () => {
     const states = Object.values(statuses || {}).map(s => s.state)
     if (states.includes(STATE_TYPES?.ERROR) || states.includes(STATE_TYPES?.OFFLINE)) {
-      return { text: 'DEGRADED', class: 'text-phosphor-red' }
+      return { text: t('dashboard.degraded'), class: 'text-phosphor-red' }
     }
     if (states.includes(STATE_TYPES?.WARNING)) {
-      return { text: 'WARNING', class: 'text-phosphor-amber' }
+      return { text: t('dashboard.warning'), class: 'text-phosphor-teal' }
     }
-    return { text: 'SYSTEM ONLINE', class: 'text-phosphor-green' }
+    return { text: t('dashboard.systemOnline'), class: 'text-phosphor-green' }
   }
 
   const status = overallStatus()
@@ -148,27 +151,27 @@ function SystemStatusBar({ loading }) {
         <div className="flex items-center gap-4 text-xs font-mono">
           <div className="flex items-center gap-1.5">
             <div className={`status-indicator ${getStatusClass(statuses?.aiModel?.state)}`} />
-            <span className="text-text-tertiary">AI MODEL</span>
+            <span className="text-text-tertiary">{t('dashboard.aiModel')}</span>
           </div>
           <div className="flex items-center gap-1.5">
             <div className={`status-indicator ${getStatusClass(statuses?.camera?.state)}`} />
-            <span className="text-text-tertiary">CAMERA</span>
+            <span className="text-text-tertiary">{t('dashboard.camera')}</span>
           </div>
           <div className="flex items-center gap-1.5">
             <div className={`status-indicator ${getStatusClass(statuses?.database?.state)}`} />
-            <span className="text-text-tertiary">DATABASE</span>
+            <span className="text-text-tertiary">{t('dashboard.database')}</span>
           </div>
           <div className="flex items-center gap-1.5">
             <div className={`status-indicator ${getStatusClass(statuses?.cloud?.state)}`} />
-            <span className="text-text-tertiary">CLOUD</span>
+            <span className="text-text-tertiary">{t('dashboard.cloud')}</span>
           </div>
         </div>
       </div>
       <div className="flex items-center gap-4">
         <span className="font-mono text-xs text-text-tertiary">
-          LAST UPDATE: {loading ? '...' : 'NOW'}
+          {t('dashboard.lastUpdate')}: {loading ? '...' : t('dashboard.now')}
         </span>
-        <span className="font-mono text-sm text-phosphor-amber">{currentTime}</span>
+        <span className="font-mono text-sm text-phosphor-teal">{currentTime}</span>
       </div>
     </div>
   )
@@ -184,7 +187,7 @@ function MiniBarChart({ data, maxValue }) {
       {data.slice(-12).map((item, i) => (
         <div key={i} className="flex-1 flex flex-col items-center gap-1">
           <div
-            className="w-full bg-phosphor-amber/80 min-h-[2px] transition-all"
+            className="w-full bg-phosphor-teal/80 min-h-[2px] transition-all"
             style={{ height: `${(item.value / max) * 100}%` }}
           />
           <span className="font-mono text-xxs text-text-tertiary">{item.label}</span>
@@ -202,11 +205,11 @@ function DefectTypeRow({ rank, name, count, percentage, maxCount }) {
       <div className="flex-1">
         <div className="flex items-center justify-between mb-1">
           <span className="font-display text-sm text-text-primary">{name}</span>
-          <span className="font-mono text-sm text-phosphor-amber">{count}</span>
+          <span className="font-mono text-sm text-phosphor-teal">{count}</span>
         </div>
         <div className="h-1.5 bg-void border border-surface-border">
           <div
-            className="h-full bg-phosphor-amber transition-all"
+            className="h-full bg-phosphor-teal transition-all"
             style={{ width: `${(count / maxCount) * 100}%` }}
           />
         </div>
@@ -222,6 +225,7 @@ export default function DashboardPage() {
   const [sectionId, setSectionId] = useState(null)
   const [lineId, setLineId] = useState(null)
   const [trendDays, setTrendDays] = useState(7)
+  const { t } = useI18n()
 
   const {
     data: summary,
@@ -246,14 +250,7 @@ export default function DashboardPage() {
   })
 
   if (!user) {
-    return (
-      <div className="min-h-[60vh] flex items-center justify-center">
-        <div className="panel p-8 text-center">
-          <div className="w-8 h-8 border-2 border-phosphor-amber border-t-transparent animate-spin mx-auto mb-4" />
-          <p className="font-mono text-sm text-text-tertiary">LOADING DASHBOARD...</p>
-        </div>
-      </div>
-    )
+    return <PageLoading message={t('dashboard.loading')} />
   }
 
   // Calculate derived values from API data
@@ -274,25 +271,25 @@ export default function DashboardPage() {
       <div className="flex items-center justify-between">
         <div>
           <div className="flex items-center gap-3 mb-1">
-            <Radio className="w-5 h-5 text-phosphor-amber" />
+            <Radio className="w-5 h-5 text-phosphor-teal" />
             <h1 className="font-display text-2xl font-bold tracking-wider text-text-primary">
-              COMMAND DASHBOARD
+              {t('dashboard.title')}
             </h1>
           </div>
           <p className="font-mono text-sm text-text-tertiary">
-            SYS://INDUSIA.HMI.DASHBOARD // REAL-TIME ANALYTICS
+            SYS://INDUSIA.HMI.DASHBOARD // {t('dashboard.subtitle')}
           </p>
         </div>
 
         <div className="flex items-center gap-3">
           <select
-            className="bg-terminal border border-surface-border px-3 py-2 font-mono text-sm text-text-primary focus:border-phosphor-amber transition-colors"
+            className="bg-terminal border border-surface-border px-3 py-2 font-mono text-sm text-text-primary focus:border-phosphor-teal transition-colors"
             value={trendDays}
             onChange={(e) => setTrendDays(Number(e.target.value))}
           >
-            <option value={7}>LAST 7 DAYS</option>
-            <option value={14}>LAST 14 DAYS</option>
-            <option value={30}>LAST 30 DAYS</option>
+            <option value={7}>{t('dashboard.last7Days')}</option>
+            <option value={14}>{t('dashboard.last14Days')}</option>
+            <option value={30}>{t('dashboard.last30Days')}</option>
           </select>
 
           <button
@@ -301,7 +298,7 @@ export default function DashboardPage() {
             title="Refresh data"
           >
             <RefreshCw className={`w-4 h-4 ${summaryLoading ? 'animate-spin' : ''}`} />
-            <span className="font-display text-xs tracking-wider">REFRESH</span>
+            <span className="font-display text-xs tracking-wider">{t('dashboard.refresh')}</span>
           </button>
         </div>
       </div>
@@ -312,37 +309,37 @@ export default function DashboardPage() {
       {/* KPI Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <KPICard
-          title="TOTAL INSPECTED"
+          title={t('dashboard.totalInspected')}
           code="INS"
           value={totalInspected.toLocaleString()}
-          subtitle="boards processed"
+          subtitle={t('dashboard.boardsProcessed')}
           icon={Target}
           status="neutral"
           loading={summaryLoading}
         />
         <KPICard
-          title="YIELD RATE"
+          title={t('dashboard.yieldRate')}
           code="YLD"
           value={`${yieldRate}%`}
-          subtitle="pass rate"
+          subtitle={t('dashboard.passRate')}
           icon={CheckCircle2}
           status={yieldStatus}
           loading={summaryLoading}
         />
         <KPICard
-          title="DEFECTS FOUND"
+          title={t('dashboard.defectsFound')}
           code="DEF"
           value={failed.toLocaleString()}
-          subtitle="total failures"
+          subtitle={t('dashboard.totalFailures')}
           icon={XCircle}
           status={failed > 100 ? 'error' : (failed > 0 ? 'warning' : 'ok')}
           loading={summaryLoading}
         />
         <KPICard
-          title="PENDING REVIEW"
+          title={t('dashboard.pendingReview')}
           code="REV"
           value={pending.toLocaleString()}
-          subtitle="awaiting decision"
+          subtitle={t('dashboard.awaitingDecision')}
           icon={Clock}
           status={pending > 50 ? 'warning' : 'neutral'}
           loading={summaryLoading}
@@ -357,13 +354,13 @@ export default function DashboardPage() {
             <span className="font-mono text-xxs px-1.5 py-0.5 border border-surface-border bg-void text-text-tertiary">
               TRD
             </span>
-            <span>Inspection Trend</span>
+            <span>{t('dashboard.inspectionTrend')}</span>
             <span className="ml-auto font-mono text-xxs text-text-tertiary">{trendDays}D</span>
           </div>
           <div className="p-4">
             {trendLoading ? (
               <div className="h-32 flex items-center justify-center">
-                <Loader2 className="w-6 h-6 text-phosphor-amber animate-spin" />
+                <Loader2 className="w-6 h-6 text-phosphor-teal animate-spin" />
               </div>
             ) : trend?.length > 0 ? (
               <>
@@ -375,19 +372,19 @@ export default function DashboardPage() {
                 />
                 <div className="mt-4 pt-4 border-t border-surface-border grid grid-cols-3 gap-4">
                   <div>
-                    <span className="data-label">AVG/DAY</span>
-                    <span className="font-mono text-lg text-phosphor-amber">
+                    <span className="data-label">{t('dashboard.avgPerDay')}</span>
+                    <span className="font-mono text-lg text-phosphor-teal">
                       {Math.round(trend.reduce((a, b) => a + (b.total || b.totalInspected || 0), 0) / trend.length)}
                     </span>
                   </div>
                   <div>
-                    <span className="data-label">PEAK</span>
+                    <span className="data-label">{t('dashboard.peak')}</span>
                     <span className="font-mono text-lg text-phosphor-green">
                       {Math.max(...trend.map(t => t.total || t.totalInspected || 0))}
                     </span>
                   </div>
                   <div>
-                    <span className="data-label">LOW</span>
+                    <span className="data-label">{t('dashboard.low')}</span>
                     <span className="font-mono text-lg text-phosphor-red">
                       {Math.min(...trend.map(t => t.total || t.totalInspected || 0))}
                     </span>
@@ -397,7 +394,7 @@ export default function DashboardPage() {
             ) : (
               <div className="h-32 flex flex-col items-center justify-center gap-2">
                 <AlertTriangle className="w-6 h-6 text-text-tertiary" />
-                <span className="font-mono text-sm text-text-tertiary">NO TREND DATA</span>
+                <span className="font-mono text-sm text-text-tertiary">{t('dashboard.noTrendData')}</span>
               </div>
             )}
           </div>
@@ -409,13 +406,13 @@ export default function DashboardPage() {
             <span className="font-mono text-xxs px-1.5 py-0.5 border border-surface-border bg-void text-text-tertiary">
               PAR
             </span>
-            <span>Defect Pareto</span>
-            <span className="ml-auto font-mono text-xxs text-text-tertiary">TOP 5</span>
+            <span>{t('dashboard.defectPareto')}</span>
+            <span className="ml-auto font-mono text-xxs text-text-tertiary">{t('dashboard.top5')}</span>
           </div>
           <div className="p-4">
             {paretoLoading ? (
               <div className="h-32 flex items-center justify-center">
-                <Loader2 className="w-6 h-6 text-phosphor-amber animate-spin" />
+                <Loader2 className="w-6 h-6 text-phosphor-teal animate-spin" />
               </div>
             ) : pareto?.length > 0 ? (
               <div>
@@ -433,7 +430,7 @@ export default function DashboardPage() {
             ) : (
               <div className="h-32 flex flex-col items-center justify-center gap-2">
                 <AlertTriangle className="w-6 h-6 text-text-tertiary" />
-                <span className="font-mono text-sm text-text-tertiary">NO DEFECT DATA</span>
+                <span className="font-mono text-sm text-text-tertiary">{t('dashboard.noDefectData')}</span>
               </div>
             )}
           </div>
@@ -446,32 +443,32 @@ export default function DashboardPage() {
           <span className="font-mono text-xxs px-1.5 py-0.5 border border-surface-border bg-void text-text-tertiary">
             SYN
           </span>
-          <span>Sync Status</span>
+          <span>{t('dashboard.syncStatus')}</span>
         </div>
         <div className="p-4 grid grid-cols-2 md:grid-cols-4 gap-4">
-          <DataReadout 
-            label="LAST SYNC" 
+          <DataReadout
+            label={t('dashboard.lastSync')}
             value={lastSyncInfo.minutesAgo ? `${lastSyncInfo.minutesAgo}m ago` : '--'} 
             status={statuses?.lastSync?.state === 'ok' ? 'ok' : 'warning'} 
             size="small" 
             loading={healthLoading}
           />
-          <DataReadout 
-            label="SYNCED RECORDS" 
+          <DataReadout
+            label={t('dashboard.syncedRecords')}
             value={lastSyncInfo.syncedRecords || 0} 
             status="ok" 
             size="small" 
             loading={healthLoading}
           />
-          <DataReadout 
-            label="FAILED" 
+          <DataReadout
+            label={t('dashboard.failed')}
             value={lastSyncInfo.failedRecords || 0} 
             status={lastSyncInfo.failedRecords > 0 ? 'error' : 'ok'} 
             size="small" 
             loading={healthLoading}
           />
-          <DataReadout 
-            label="DURATION" 
+          <DataReadout
+            label={t('dashboard.duration')}
             value={lastSyncInfo.durationMs ? `${(lastSyncInfo.durationMs / 1000).toFixed(1)}s` : '--'} 
             status="ok" 
             size="small" 
@@ -484,11 +481,11 @@ export default function DashboardPage() {
       <div className="flex items-center justify-center gap-3 py-4">
         <div className="flex items-center gap-2">
           <div className="w-2 h-2 bg-phosphor-green animate-pulse-glow" />
-          <span className="font-mono text-xs text-text-tertiary">LIVE DATA FEED ACTIVE</span>
+          <span className="font-mono text-xs text-text-tertiary">{t('dashboard.liveDataFeed')}</span>
         </div>
         <span className="text-text-tertiary">|</span>
         <span className="font-mono text-xs text-text-tertiary">
-          AUTO-REFRESH: 5s INTERVAL
+          {t('dashboard.autoRefresh')}
         </span>
       </div>
     </div>

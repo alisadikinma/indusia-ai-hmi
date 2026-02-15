@@ -1795,7 +1795,7 @@ export function LiveViewV3({
     return (
       <div className="h-screen flex flex-col items-center justify-center bg-void p-8">
         <div className="text-center max-w-md">
-          <AlertTriangle className="w-16 h-16 text-phosphor-amber mx-auto mb-4" />
+          <AlertTriangle className="w-16 h-16 text-phosphor-teal mx-auto mb-4" />
           <h1 className="font-display text-2xl font-bold text-text-primary mb-2">
             No Active Work Order
           </h1>
@@ -1812,7 +1812,7 @@ export function LiveViewV3({
             </button>
             <button
               onClick={refreshWO}
-              className="px-6 py-3 border border-phosphor-amber text-phosphor-amber font-display font-bold tracking-wider hover:bg-phosphor-amber/10 transition-all"
+              className="px-6 py-3 border border-phosphor-teal text-phosphor-teal font-display font-bold tracking-wider hover:bg-phosphor-teal/10 transition-all"
             >
               REFRESH
             </button>
@@ -1838,14 +1838,14 @@ export function LiveViewV3({
         <div className="flex items-center gap-4">
           <button
             onClick={showSidebar}
-            className="p-2 border border-surface-border text-text-secondary hover:border-phosphor-amber/50 hover:text-phosphor-amber transition-colors"
+            className="p-2 border border-surface-border text-text-secondary hover:border-phosphor-teal/50 hover:text-phosphor-teal transition-colors"
           >
             <Menu className="w-5 h-5" />
           </button>
 
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 border border-phosphor-amber flex items-center justify-center bg-terminal">
-              <span className="font-display font-bold text-lg text-phosphor-amber">IN</span>
+            <div className="w-10 h-10 border border-phosphor-teal flex items-center justify-center bg-terminal">
+              <span className="font-display font-bold text-lg text-phosphor-teal">IN</span>
             </div>
             <div>
               <h1 className="font-display font-bold text-sm tracking-wider text-text-primary">
@@ -1854,7 +1854,7 @@ export function LiveViewV3({
                   <span className="text-phosphor-cyan ml-2">- {customerName || workOrder?.customer?.name || workOrder?.customerName}</span>
                 )}
               </h1>
-              <p className="font-mono text-xxs text-phosphor-amber tracking-widest">
+              <p className="font-mono text-xxs text-phosphor-teal tracking-widest">
                 LIVE INSPECTION
               </p>
             </div>
@@ -1881,15 +1881,15 @@ export function LiveViewV3({
               "flex items-center gap-2 px-3 py-2 border",
               reviewCountdown <= 5 
                 ? "bg-phosphor-red/20 border-phosphor-red animate-pulse" 
-                : "bg-phosphor-amber/10 border-phosphor-amber/50"
+                : "bg-phosphor-teal/10 border-phosphor-teal/50"
             )}>
               <span className={cn(
                 "font-mono text-sm",
-                reviewCountdown <= 5 ? "text-phosphor-red" : "text-phosphor-amber"
+                reviewCountdown <= 5 ? "text-phosphor-red" : "text-phosphor-teal"
               )}>Auto NG in</span>
               <span className={cn(
                 "font-mono text-2xl font-bold",
-                reviewCountdown <= 5 ? "text-phosphor-red" : "text-phosphor-amber"
+                reviewCountdown <= 5 ? "text-phosphor-red" : "text-phosphor-teal"
               )}>
                 {reviewCountdown}s
               </span>
@@ -1926,7 +1926,7 @@ export function LiveViewV3({
             />
           )}
 
-          <span className="font-mono text-sm text-phosphor-amber">{currentTime}</span>
+          <span className="font-mono text-sm text-phosphor-teal">{currentTime}</span>
 
           {/* User Profile Dropdown */}
           <div className="relative" ref={userMenuRef}>
@@ -2001,9 +2001,9 @@ export function LiveViewV3({
               "h-10 px-4 flex items-center gap-2 border-2 transition-all",
               "font-display text-xs font-bold tracking-wider",
               effectiveProcessStatus === 'PAUSED'
-                ? "bg-phosphor-amber border-phosphor-amber text-void"
+                ? "bg-phosphor-teal border-phosphor-teal text-void"
                 : isOperator && isConnected && effectiveProcessStatus === 'RUNNING'
-                  ? "border-phosphor-amber text-phosphor-amber hover:bg-phosphor-amber hover:text-void"
+                  ? "border-phosphor-teal text-phosphor-teal hover:bg-phosphor-teal hover:text-void"
                   : "border-surface-border text-text-tertiary cursor-not-allowed"
             )}
           >
@@ -2031,10 +2031,10 @@ export function LiveViewV3({
 
           {/* START blocked toast — appears inline next to buttons */}
           {startBlockReason && (
-            <div className="flex items-center gap-2 px-3 py-1.5 bg-phosphor-amber/15 border border-phosphor-amber/40 animate-fade-in">
-              <AlertTriangle className="w-4 h-4 text-phosphor-amber flex-shrink-0" />
-              <span className="font-mono text-xs text-phosphor-amber leading-tight">{startBlockReason}</span>
-              <button onClick={() => setStartBlockReason(null)} className="text-phosphor-amber/60 hover:text-phosphor-amber ml-1 flex-shrink-0">
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-phosphor-teal/15 border border-phosphor-teal/40 animate-fade-in">
+              <AlertTriangle className="w-4 h-4 text-phosphor-teal flex-shrink-0" />
+              <span className="font-mono text-xs text-phosphor-teal leading-tight">{startBlockReason}</span>
+              <button onClick={() => setStartBlockReason(null)} className="text-phosphor-teal/60 hover:text-phosphor-teal ml-1 flex-shrink-0">
                 <X className="w-3 h-3" />
               </button>
             </div>
@@ -2206,20 +2206,20 @@ export function LiveViewV3({
               className={cn(
                 "flex items-center gap-2 px-3 py-1.5 border transition-all",
                 effectiveAutoNgEnabled 
-                  ? "border-phosphor-amber bg-phosphor-amber/10" 
+                  ? "border-phosphor-teal bg-phosphor-teal/10" 
                   : "border-surface-border bg-surface-border/10",
                 "hover:border-text-tertiary"
               )}
               title={effectiveAutoNgEnabled ? "Auto-NG ON: Will auto-reject after 15s" : "Auto-NG OFF: Manual confirmation required"}
             >
               {effectiveAutoNgEnabled ? (
-                <ToggleRight className="w-4 h-4 text-phosphor-amber" />
+                <ToggleRight className="w-4 h-4 text-phosphor-teal" />
               ) : (
                 <ToggleLeft className="w-4 h-4 text-text-tertiary" />
               )}
               <span className={cn(
                 "font-mono text-xs font-bold",
-                effectiveAutoNgEnabled ? "text-phosphor-amber" : "text-text-tertiary"
+                effectiveAutoNgEnabled ? "text-phosphor-teal" : "text-text-tertiary"
               )}>
                 AUTO-NG
               </span>
@@ -2229,17 +2229,17 @@ export function LiveViewV3({
             <div className={cn(
               "flex items-center gap-2 px-3 py-1.5 border",
               effectiveAutoNgEnabled 
-                ? "border-phosphor-amber bg-phosphor-amber/10" 
+                ? "border-phosphor-teal bg-phosphor-teal/10" 
                 : "border-surface-border bg-surface-border/10"
             )}>
               {effectiveAutoNgEnabled ? (
-                <ToggleRight className="w-4 h-4 text-phosphor-amber" />
+                <ToggleRight className="w-4 h-4 text-phosphor-teal" />
               ) : (
                 <ToggleLeft className="w-4 h-4 text-text-tertiary" />
               )}
               <span className={cn(
                 "font-mono text-xs font-bold",
-                effectiveAutoNgEnabled ? "text-phosphor-amber" : "text-text-tertiary"
+                effectiveAutoNgEnabled ? "text-phosphor-teal" : "text-text-tertiary"
               )}>
                 AUTO-NG {effectiveAutoNgEnabled ? 'ON' : 'OFF'}
               </span>
@@ -2305,7 +2305,7 @@ export function LiveViewV3({
             <div className="flex items-center gap-2 md:gap-3 lg:gap-4 xl:gap-6 px-2 md:px-3 lg:px-4 py-1.5 md:py-2 bg-terminal border border-surface-border">
               <div className="flex items-center gap-1 md:gap-2">
                 <span className="font-mono text-xs text-text-tertiary hidden md:inline">PROGRESS</span>
-                <span className="font-mono text-sm md:text-base lg:text-lg xl:text-xl font-bold text-phosphor-amber">
+                <span className="font-mono text-sm md:text-base lg:text-lg xl:text-xl font-bold text-phosphor-teal">
                   {effectiveCounters.completedQty}/{effectiveCounters.lotSize}
                 </span>
               </div>
@@ -2325,7 +2325,7 @@ export function LiveViewV3({
                 <span className={cn(
                   "font-mono text-sm md:text-base lg:text-lg xl:text-xl font-bold",
                   parseFloat(yieldPercent) >= 98 ? "text-phosphor-green" :
-                  parseFloat(yieldPercent) >= 95 ? "text-phosphor-amber" : "text-phosphor-red"
+                  parseFloat(yieldPercent) >= 95 ? "text-phosphor-teal" : "text-phosphor-red"
                 )}>
                   {yieldPercent}%
                 </span>
@@ -2446,7 +2446,7 @@ export function LiveViewV3({
                 <div className="flex items-center gap-2 min-w-[200px]">
                   <button
                     onClick={() => { setInlineSelectedReason(''); setInlineOtherText('') }}
-                    className="h-14 px-3 bg-elevated border border-surface-border text-text-secondary font-mono hover:border-phosphor-amber/50 transition-colors flex-shrink-0"
+                    className="h-14 px-3 bg-elevated border border-surface-border text-text-secondary font-mono hover:border-phosphor-teal/50 transition-colors flex-shrink-0"
                   >
                     &larr;
                   </button>
@@ -2485,7 +2485,7 @@ export function LiveViewV3({
               </button>
               <button
                 onClick={() => { setInlineReasonInput(false); setInlineSelectedReason(''); setInlineOtherText('') }}
-                className="h-14 px-6 bg-elevated border border-surface-border text-text-secondary font-display font-bold hover:border-phosphor-amber/50 transition-colors"
+                className="h-14 px-6 bg-elevated border border-surface-border text-text-secondary font-display font-bold hover:border-phosphor-teal/50 transition-colors"
               >
                 CANCEL
               </button>
@@ -2591,9 +2591,9 @@ export function LiveViewV3({
       {/* WO Completed Overlay */}
       {woOnHold && !woCompleted && (
         <div className="fixed inset-0 z-50 bg-void/90 flex items-center justify-center">
-          <div className="bg-panel border-2 border-phosphor-amber p-8 max-w-lg text-center space-y-6">
-            <Pause className="w-16 h-16 text-phosphor-amber mx-auto" />
-            <h2 className="font-display text-3xl font-bold text-phosphor-amber tracking-wide">
+          <div className="bg-panel border-2 border-phosphor-teal p-8 max-w-lg text-center space-y-6">
+            <Pause className="w-16 h-16 text-phosphor-teal mx-auto" />
+            <h2 className="font-display text-3xl font-bold text-phosphor-teal tracking-wide">
               WORK ORDER ON HOLD
             </h2>
             <div className="space-y-2">
@@ -2611,7 +2611,7 @@ export function LiveViewV3({
               <div className="flex items-center justify-center gap-3">
                 <button
                   onClick={() => { setWoOnHold(false); refreshWO(); }}
-                  className="px-6 py-3 border-2 border-phosphor-amber text-phosphor-amber font-display font-bold tracking-wider hover:bg-phosphor-amber hover:text-void transition-all"
+                  className="px-6 py-3 border-2 border-phosphor-teal text-phosphor-teal font-display font-bold tracking-wider hover:bg-phosphor-teal hover:text-void transition-all"
                 >
                   REFRESH STATUS
                 </button>
@@ -2652,7 +2652,7 @@ export function LiveViewV3({
                 </p>
               </div>
               <div className="pt-4 border-t border-surface-border space-y-3">
-                <p className="font-mono text-sm text-phosphor-amber">
+                <p className="font-mono text-sm text-phosphor-teal">
                   Machine has been stopped. Please assign a new Work Order to continue.
                 </p>
                 <button
@@ -2663,7 +2663,7 @@ export function LiveViewV3({
                     clearActiveLine()
                     router.push('/inspection/select-line')
                   }}
-                  className="px-8 py-3 bg-phosphor-amber text-void font-display font-bold text-lg tracking-wider hover:shadow-glow-amber transition-all cursor-pointer"
+                  className="px-8 py-3 bg-phosphor-teal text-void font-display font-bold text-lg tracking-wider hover:shadow-glow-teal transition-all cursor-pointer"
                 >
                   SELECT NEW WORK ORDER
                 </button>

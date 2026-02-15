@@ -1,5 +1,6 @@
 import { Activity, Camera, Cloud, Circle, CheckCircle, AlertTriangle, XCircle, WifiOff, Loader2 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
+import { useI18n } from '@/context/I18nContext';
 
 const stateConfig = {
   ok: {
@@ -7,57 +8,59 @@ const stateConfig = {
     border: 'border-indusia-pass',
     text: 'text-indusia-pass',
     icon: CheckCircle,
-    label: 'Online',
+    labelKey: 'status.online',
   },
   warning: {
     bg: 'bg-indusia-warning/10',
     border: 'border-indusia-warning',
     text: 'text-indusia-warning',
     icon: AlertTriangle,
-    label: 'Warning',
+    labelKey: 'status.warning',
   },
   error: {
     bg: 'bg-indusia-fail/10',
     border: 'border-indusia-fail',
     text: 'text-indusia-fail',
     icon: XCircle,
-    label: 'Error',
+    labelKey: 'status.error',
   },
   offline: {
     bg: 'bg-indusia-textMuted/10',
     border: 'border-indusia-textMuted',
     text: 'text-indusia-textMuted',
     icon: WifiOff,
-    label: 'Offline',
+    labelKey: 'status.offline',
   },
   degraded: {
     bg: 'bg-indusia-warning/10',
     border: 'border-indusia-warning',
     text: 'text-indusia-warning',
     icon: AlertTriangle,
-    label: 'Degraded',
+    labelKey: 'status.degraded',
   },
   unknown: {
     bg: 'bg-indusia-textMuted/10',
     border: 'border-indusia-textMuted',
     text: 'text-indusia-textMuted',
     icon: Circle,
-    label: 'Unknown',
+    labelKey: 'status.unknown',
   },
   'in-progress': {
     bg: 'bg-indusia-primary/10',
     border: 'border-indusia-primary',
     text: 'text-indusia-primary',
     icon: Loader2,
-    label: 'In Progress',
+    labelKey: 'status.inProgress',
   },
 };
 
 export default function SystemStatusChip({ label, state, message, lastUpdated, onClick }) {
+  const { t } = useI18n();
   const config = stateConfig[state] || stateConfig.unknown;
   const StateIcon = config.icon;
+  const stateLabel = t(config.labelKey);
 
-  const timeAgo = lastUpdated ? formatDistanceToNow(new Date(lastUpdated), { addSuffix: true }) : 'Unknown';
+  const timeAgo = lastUpdated ? formatDistanceToNow(new Date(lastUpdated), { addSuffix: true }) : t('status.unknown');
 
   return (
     <button
@@ -67,7 +70,7 @@ export default function SystemStatusChip({ label, state, message, lastUpdated, o
         ${config.bg} ${config.border} hover:shadow-md
         min-h-[40px] cursor-pointer
       `}
-      title={`${label}: ${config.label}\n${message}\nUpdated ${timeAgo}`}
+      title={`${label}: ${stateLabel}\n${message}\nUpdated ${timeAgo}`}
     >
       <StateIcon
         className={`w-4 h-4 flex-shrink-0 ${config.text} ${
@@ -79,7 +82,7 @@ export default function SystemStatusChip({ label, state, message, lastUpdated, o
           {label}
         </span>
         <span className={`text-xs ${config.text} whitespace-nowrap`}>
-          {config.label}
+          {stateLabel}
         </span>
       </div>
 

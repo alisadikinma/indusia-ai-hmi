@@ -167,14 +167,11 @@ export function AuthProvider({ children }) {
   // Restore user session on mount + fetch CSRF token
   useEffect(() => {
     const restoreSession = async () => {
-      // Fetch CSRF token on app load
-      await fetchCSRFToken();
-      
       const storedUserId = localStorage.getItem('indusia_user_id');
       const storedUser = localStorage.getItem('indusia_user');
       const storedActiveLine = localStorage.getItem('indusia_active_line');
 
-      // Restore active line session
+      // Restore active line session (sync, no API call)
       if (storedActiveLine) {
         try {
           const parsedLine = JSON.parse(storedActiveLine);
@@ -185,53 +182,73 @@ export function AuthProvider({ children }) {
         }
       }
 
-      if (storedUserId) {
-        try {
-          const res = await fetch(`/api/auth/me`, {
-            headers: { 'x-user-id': storedUserId }
-          });
-          if (res.ok) {
-            const json = await res.json();
-            if (json.success && json.data) {
-              const selections = storedUser ? JSON.parse(storedUser) : {};
-              const restoredUser = normalizeUser({
-                ...json.data,
-                selectedSectionId: selections.selectedSectionId || null,
-                selectedCustomerId: selections.selectedCustomerId || null,
-                selectedLineId: selections.selectedLineId || null,
-                selectedBoardId: selections.selectedBoardId || null,
-              });
-              setUser(restoredUser);
-              
-              const roleId = json.data.role_id || json.data.roleId || `role_${restoredUser.role}`;
-              const permissions = await fetchMenuPermissions(roleId);
-              setMenuPermissions(permissions);
-              
-              setIsLoading(false);
-              return;
-            }
-          }
-        } catch (err) {
-          console.warn('API failed to restore session:', err.message);
-        }
-      }
+      // Fast path: restore from localStorage immediately so UI renders
+      // while we validate with API in parallel
+      let restoredFromStorage = false;
+      let roleIdForPerms = null;
 
-      // Fallback: try to restore from localStorage
       if (storedUser) {
         try {
           const parsed = JSON.parse(storedUser);
           const normalizedUser = normalizeUser(parsed);
           setUser(normalizedUser);
-          
-          const roleId = parsed.role_id || parsed.roleId || `role_${normalizedUser.role}`;
-          const permissions = await fetchMenuPermissions(roleId);
-          setMenuPermissions(permissions);
+          roleIdForPerms = parsed.role_id || parsed.roleId || `role_${normalizedUser.role}`;
+          restoredFromStorage = true;
         } catch (error) {
           console.error('Failed to parse stored user:', error);
           localStorage.removeItem('indusia_user');
           localStorage.removeItem('indusia_user_id');
         }
       }
+
+      // Run CSRF, permissions, and user validation in parallel
+      const promises = [fetchCSRFToken()];
+      if (roleIdForPerms) {
+        promises.push(fetchMenuPermissions(roleIdForPerms));
+      }
+      if (storedUserId) {
+        promises.push(
+          fetch(`/api/auth/me`, { headers: { 'x-user-id': storedUserId } })
+            .then(res => res.ok ? res.json() : null)
+            .catch(() => null)
+        );
+      }
+
+      const results = await Promise.all(promises);
+
+      // Apply permissions (index 1 if roleIdForPerms was set)
+      if (roleIdForPerms && results[1]) {
+        setMenuPermissions(results[1]);
+      }
+
+      // Apply validated user data from API (index 2 if storedUserId was set)
+      if (storedUserId && results.length > 2) {
+        const json = results[2];
+        if (json?.success && json?.data) {
+          const selections = storedUser ? JSON.parse(storedUser) : {};
+          const validatedUser = normalizeUser({
+            ...json.data,
+            selectedSectionId: selections.selectedSectionId || null,
+            selectedCustomerId: selections.selectedCustomerId || null,
+            selectedLineId: selections.selectedLineId || null,
+            selectedBoardId: selections.selectedBoardId || null,
+          });
+          setUser(validatedUser);
+
+          // Re-fetch permissions if role changed
+          const newRoleId = json.data.role_id || json.data.roleId || `role_${validatedUser.role}`;
+          if (newRoleId !== roleIdForPerms) {
+            const perms = await fetchMenuPermissions(newRoleId);
+            setMenuPermissions(perms);
+          }
+        }
+      }
+
+      // If nothing was restored at all, clear loading
+      if (!restoredFromStorage && !storedUserId) {
+        // No stored session
+      }
+
       setIsLoading(false);
     };
 
@@ -367,13 +384,9 @@ export function AuthProvider({ children }) {
     localStorage.removeItem('indusia_active_line');
   }, []);
 
-  // Logout
-  const logout = useCallback(async () => {
-    try {
-      await apiRequest('/api/auth/logout', { method: 'POST' });
-    } catch (err) {
-      console.warn('API logout failed:', err.message);
-    }
+  // Logout - clear local state immediately, fire API in background
+  const logout = useCallback(() => {
+    // Clear state instantly (no await = instant UI redirect)
     setUser(null);
     setMenuPermissions([]);
     setCsrfToken(null);
@@ -383,9 +396,10 @@ export function AuthProvider({ children }) {
     localStorage.removeItem('indusia_user_id');
     localStorage.removeItem('indusia_active_line');
     localStorage.removeItem(CSRF_STORAGE_KEY);
-    
-    // Fetch new CSRF token for next session
-    await fetchCSRFToken();
+
+    // Fire API logout + new CSRF in background (non-blocking)
+    apiRequest('/api/auth/logout', { method: 'POST' }).catch(() => {});
+    fetchCSRFToken().catch(() => {});
   }, [apiRequest, fetchCSRFToken]);
 
   // Change password
@@ -412,7 +426,11 @@ export function AuthProvider({ children }) {
   const hasMenuAccess = useCallback((menuId) => {
     if (!user) return false;
     const normalizedRole = user.role || normalizeRole(user.role_id) || normalizeRole(user.roleId);
-    if (normalizedRole === 'superadmin') return true;
+    // Super admin always keeps access to admin panel (prevent lockout)
+    if (normalizedRole === 'superadmin') {
+      const adminPanelMenus = ['menu_users', 'menu_roles', 'menu_permissions'];
+      if (adminPanelMenus.includes(menuId)) return true;
+    }
     return menuPermissions.includes(menuId);
   }, [user, menuPermissions]);
 

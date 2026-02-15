@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
+import { useI18n } from '@/context/I18nContext';
 import { Eye, EyeOff, Loader2, Shield, AlertTriangle, Terminal } from 'lucide-react';
 
 export default function LoginPage() {
@@ -16,6 +17,7 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [currentTime, setCurrentTime] = useState('');
   const [bootSequence, setBootSequence] = useState(0);
+  const { t } = useI18n();
 
   // Boot sequence animation
   useEffect(() => {
@@ -53,12 +55,12 @@ export default function LoginPage() {
     setError('');
 
     if (!email) {
-      setError('ERROR: EMAIL_REQUIRED');
+      setError(t('auth.emailRequired'));
       return;
     }
 
     if (!password) {
-      setError('ERROR: PASSWORD_REQUIRED');
+      setError(t('auth.passwordRequired'));
       return;
     }
 
@@ -68,7 +70,7 @@ export default function LoginPage() {
       const result = await login(email, password);
 
       if (!result.success) {
-        setError(`AUTH_FAILED: ${result.error || 'INVALID_CREDENTIALS'}`);
+        setError(`${t('auth.authFailed')}: ${result.error || t('auth.invalidCredentials')}`);
         setIsLoading(false);
         return;
       }
@@ -101,16 +103,16 @@ export default function LoginPage() {
       }
     } catch (err) {
       console.error('Login error:', err);
-      setError('SYSTEM_ERROR: CONNECTION_FAILED');
+      setError(t('auth.systemError'));
       setIsLoading(false);
     }
   };
 
   const bootMessages = [
-    '> SYSTEM BOOT SEQUENCE INITIATED',
-    '> LOADING AUTHENTICATION MODULES...',
-    '> ESTABLISHING SECURE CONNECTION...',
-    '> READY FOR OPERATOR INPUT'
+    t('auth.bootInit'),
+    t('auth.bootModules'),
+    t('auth.bootConnection'),
+    t('auth.bootReady')
   ];
 
   return (
@@ -122,24 +124,24 @@ export default function LoginPage() {
       <div className="absolute inset-0 bg-gradient-radial from-transparent via-transparent to-void/80" />
 
       {/* Technical corner decorations */}
-      <div className="absolute top-4 left-4 w-16 h-16 border-l-2 border-t-2 border-phosphor-amber/30" />
-      <div className="absolute top-4 right-4 w-16 h-16 border-r-2 border-t-2 border-phosphor-amber/30" />
-      <div className="absolute bottom-4 left-4 w-16 h-16 border-l-2 border-b-2 border-phosphor-amber/30" />
-      <div className="absolute bottom-4 right-4 w-16 h-16 border-r-2 border-b-2 border-phosphor-amber/30" />
+      <div className="absolute top-4 left-4 w-16 h-16 border-l-2 border-t-2 border-phosphor-teal/30" />
+      <div className="absolute top-4 right-4 w-16 h-16 border-r-2 border-t-2 border-phosphor-teal/30" />
+      <div className="absolute bottom-4 left-4 w-16 h-16 border-l-2 border-b-2 border-phosphor-teal/30" />
+      <div className="absolute bottom-4 right-4 w-16 h-16 border-r-2 border-b-2 border-phosphor-teal/30" />
 
       {/* System status bar - top */}
       <div className="absolute top-0 left-0 right-0 h-8 bg-panel/80 border-b border-surface-border flex items-center justify-between px-4 text-xxs font-mono">
         <div className="flex items-center gap-4">
-          <span className="text-phosphor-amber">SYS://INDUSIA.HMI.AUTH</span>
+          <span className="text-phosphor-teal">SYS://INDUSIA.HMI.AUTH</span>
           <span className="text-text-tertiary">|</span>
           <div className="flex items-center gap-1.5">
             <div className="w-1.5 h-1.5 bg-phosphor-green animate-pulse-glow" />
-            <span className="text-phosphor-green">ONLINE</span>
+            <span className="text-phosphor-green">{t('auth.online')}</span>
           </div>
         </div>
         <div className="flex items-center gap-4">
           <span className="text-text-tertiary">UTC</span>
-          <span className="text-phosphor-amber font-semibold tracking-wider">{currentTime}</span>
+          <span className="text-phosphor-teal font-semibold tracking-wider">{currentTime}</span>
         </div>
       </div>
 
@@ -150,7 +152,7 @@ export default function LoginPage() {
           {/* Panel header */}
           <div className="panel-header">
             <Shield className="w-4 h-4" />
-            <span>Authentication Terminal</span>
+            <span>{t('auth.authTerminal')}</span>
             <span className="ml-auto text-text-tertiary font-mono text-xxs">v2.4.1</span>
           </div>
 
@@ -159,8 +161,8 @@ export default function LoginPage() {
             <div className="flex items-center gap-4">
               {/* Logo mark */}
               <div className="relative">
-                <div className="w-16 h-16 border-2 border-phosphor-amber flex items-center justify-center bg-terminal relative overflow-hidden">
-                  <div className="absolute inset-0 bg-phosphor-amber/5" />
+                <div className="w-16 h-16 border-2 border-phosphor-teal flex items-center justify-center bg-terminal relative overflow-hidden">
+                  <div className="absolute inset-0 bg-phosphor-teal/5" />
                   <img src="/indusiaai-logo.png" alt="INDUSIA AI" className="w-12 h-12 object-contain" />
                 </div>
                 <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-phosphor-green animate-pulse-glow" />
@@ -171,8 +173,8 @@ export default function LoginPage() {
                 <h1 className="font-display font-bold text-3xl tracking-wider text-text-primary">
                   INDUSIA
                 </h1>
-                <p className="font-mono text-xs text-phosphor-amber tracking-widest">
-                  AI VISUAL INSPECTION
+                <p className="font-mono text-xs text-phosphor-teal tracking-widest">
+                  {t('auth.aiVisualInspection')}
                 </p>
               </div>
             </div>
@@ -190,7 +192,7 @@ export default function LoginPage() {
                 >
                   {msg}
                   {i === bootSequence && bootSequence < 3 && (
-                    <span className="inline-block w-2 h-3 bg-phosphor-amber ml-1 animate-typing-cursor" />
+                    <span className="inline-block w-2 h-3 bg-phosphor-teal ml-1 animate-typing-cursor" />
                   )}
                 </div>
               ))}
@@ -204,7 +206,7 @@ export default function LoginPage() {
               <div>
                 <label className="data-label flex items-center gap-2 mb-2">
                   <Terminal className="w-3 h-3" />
-                  Operator ID
+                  {t('auth.operatorId')}
                 </label>
                 <div className="relative">
                   <input
@@ -212,11 +214,11 @@ export default function LoginPage() {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="operator@indusia.ai"
-                    className="w-full px-4 py-3 bg-terminal border border-surface-border text-text-primary font-mono text-sm placeholder:text-text-tertiary focus:border-phosphor-amber focus:shadow-glow-amber transition-all"
+                    className="w-full px-4 py-3 bg-terminal border border-surface-border text-text-primary font-mono text-sm placeholder:text-text-tertiary focus:border-phosphor-teal focus:shadow-glow-teal transition-all"
                     disabled={isLoading}
                     autoComplete="email"
                   />
-                  <div className="absolute left-0 top-0 bottom-0 w-1 bg-phosphor-amber/50" />
+                  <div className="absolute left-0 top-0 bottom-0 w-1 bg-phosphor-teal/50" />
                 </div>
               </div>
 
@@ -224,7 +226,7 @@ export default function LoginPage() {
               <div>
                 <label className="data-label flex items-center gap-2 mb-2">
                   <Shield className="w-3 h-3" />
-                  Access Code
+                  {t('auth.accessCode')}
                 </label>
                 <div className="relative">
                   <input
@@ -232,15 +234,15 @@ export default function LoginPage() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••••••"
-                    className="w-full px-4 py-3 pr-12 bg-terminal border border-surface-border text-text-primary font-mono text-sm placeholder:text-text-tertiary focus:border-phosphor-amber focus:shadow-glow-amber transition-all"
+                    className="w-full px-4 py-3 pr-12 bg-terminal border border-surface-border text-text-primary font-mono text-sm placeholder:text-text-tertiary focus:border-phosphor-teal focus:shadow-glow-teal transition-all"
                     disabled={isLoading}
                     autoComplete="current-password"
                   />
-                  <div className="absolute left-0 top-0 bottom-0 w-1 bg-phosphor-amber/50" />
+                  <div className="absolute left-0 top-0 bottom-0 w-1 bg-phosphor-teal/50" />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-text-tertiary hover:text-phosphor-amber transition-colors p-1"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-text-tertiary hover:text-phosphor-teal transition-colors p-1"
                     tabIndex={-1}
                   >
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -255,7 +257,7 @@ export default function LoginPage() {
                   <div>
                     <p className="font-mono text-xs text-phosphor-red font-semibold">{error}</p>
                     <p className="font-mono text-xxs text-text-tertiary mt-1">
-                      CHECK CREDENTIALS AND RETRY
+                      {t('auth.checkCredentials')}
                     </p>
                   </div>
                 </div>
@@ -270,12 +272,12 @@ export default function LoginPage() {
                 {isLoading ? (
                   <>
                     <Loader2 className="w-5 h-5 animate-spin" />
-                    <span>AUTHENTICATING</span>
+                    <span>{t('auth.authenticating')}</span>
                   </>
                 ) : (
                   <>
                     <Shield className="w-5 h-5" />
-                    <span>AUTHORIZE ACCESS</span>
+                    <span>{t('auth.authorizeAccess')}</span>
                   </>
                 )}
               </button>
@@ -288,11 +290,11 @@ export default function LoginPage() {
               <div className="flex items-center gap-4">
                 <div className="flex items-center gap-1.5">
                   <div className="status-indicator ok" />
-                  <span className="text-text-tertiary">SECURE</span>
+                  <span className="text-text-tertiary">{t('auth.secure')}</span>
                 </div>
                 <div className="flex items-center gap-1.5">
                   <div className="status-indicator ok" />
-                  <span className="text-text-tertiary">ENCRYPTED</span>
+                  <span className="text-text-tertiary">{t('auth.encrypted')}</span>
                 </div>
               </div>
               <span className="text-text-tertiary">SESSION: {Math.random().toString(36).substr(2, 8).toUpperCase()}</span>
@@ -303,16 +305,16 @@ export default function LoginPage() {
         {/* Bottom system info */}
         <div className="mt-6 text-center">
           <p className="font-mono text-xxs text-text-tertiary tracking-wider">
-            INDUSIA AI VISUAL INSPECTION SYSTEM // HMI CONSOLE v1.0.0
+            {t('auth.systemInfo')}
           </p>
           <p className="font-mono text-xxs text-text-tertiary/50 mt-1">
-            AUTHORIZED PERSONNEL ONLY
+            {t('auth.authorizedOnly')}
           </p>
         </div>
       </div>
 
       {/* Decorative scan line */}
-      <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-phosphor-amber/50 to-transparent animate-scan" />
+      <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-phosphor-teal/50 to-transparent animate-scan" />
     </div>
   );
 }

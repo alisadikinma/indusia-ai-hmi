@@ -1,63 +1,47 @@
 'use client';
 
-import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { ChevronDown, LogOut, User, HelpCircle, Cloud } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useHelpOverlay } from '@/hooks/useHelpOverlay';
 import { useI18n } from '@/hooks/useI18n';
+import { useSystemHealthContext } from '@/context/SystemHealthContext';
 import { customers, lines } from '@/data/masterData';
 import NotificationBell from '../notifications/NotificationBell';
 import LanguageSwitcher from '../common/LanguageSwitcher';
+import VersionBadge from '../system-update/VersionBadge';
 
 export default function TopNav() {
   const router = useRouter();
   const { user, logout } = useAuth();
   const { openHelp } = useHelpOverlay();
   const { t } = useI18n();
+  const { statuses } = useSystemHealthContext();
   const [menuOpen, setMenuOpen] = useState(false);
-  const [lastSync, setLastSync] = useState(null);
   const menuRef = useRef(null);
 
-  // Fetch last sync time
-  const fetchLastSync = useCallback(async () => {
-    try {
-      const response = await fetch('/api/sync-queue/history?limit=1');
-      const result = await response.json();
-      if (result.success && result.data?.length > 0) {
-        const lastEntry = result.data[0];
-        if (lastEntry.status === 'completed' || lastEntry.status === 'success') {
-          setLastSync(lastEntry.completed_at || lastEntry.started_at);
-        }
-      }
-    } catch (err) {
-      console.warn('[TopNav] Failed to fetch last sync:', err);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchLastSync();
-    // Refresh every 60 seconds
-    const interval = setInterval(fetchLastSync, 60000);
-    return () => clearInterval(interval);
-  }, [fetchLastSync]);
+  // Use sync data from SystemHealthContext (no separate API call needed)
+  const lastSync = statuses?.lastSync?.lastUpdated && statuses.lastSync.state !== 'unknown'
+    ? statuses.lastSync.lastUpdated
+    : null;
 
   // Format timestamp for display
   const formatSyncTime = (timestamp) => {
-    if (!timestamp) return 'Never';
+    if (!timestamp) return t('time.never');
     const date = new Date(timestamp);
     const now = new Date();
     const diffMs = now - date;
     const diffMins = Math.floor(diffMs / 60000);
     const diffHours = Math.floor(diffMs / 3600000);
-    
-    if (diffMins < 1) return 'Just now';
-    if (diffMins < 60) return `${diffMins}m ago`;
-    if (diffHours < 24) return `${diffHours}h ago`;
-    
+
+    if (diffMins < 1) return t('time.justNow');
+    if (diffMins < 60) return t('time.minutesAgoShort', { n: diffMins });
+    if (diffHours < 24) return t('time.hoursAgoShort', { n: diffHours });
+
     // Show date if older than 24h
-    return date.toLocaleDateString('en-GB', { 
-      day: '2-digit', 
+    return date.toLocaleDateString('en-GB', {
+      day: '2-digit',
       month: 'short',
       hour: '2-digit',
       minute: '2-digit'
@@ -125,15 +109,18 @@ export default function TopNav() {
             </div>
           )}
 
+          {/* Version Badge */}
+          <VersionBadge />
+
           {/* Last Sync Indicator */}
           <button
             onClick={() => router.push('/settings/sync')}
             className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-indusia-bg hover:bg-indusia-border transition-colors cursor-pointer"
-            title={lastSync ? `Last synced: ${new Date(lastSync).toLocaleString()}` : 'No sync yet'}
+            title={lastSync ? t('header.lastSyncedTitle', { time: new Date(lastSync).toLocaleString() }) : t('header.noSyncYet')}
           >
             <Cloud className={`w-4 h-4 ${lastSync ? 'text-indusia-pass' : 'text-indusia-textMuted'}`} />
             <span className="text-xs font-medium text-indusia-textMuted">
-              SYNC: <span className={lastSync ? 'text-indusia-text' : 'text-indusia-warning'}>{formatSyncTime(lastSync)}</span>
+              {t('header.syncLabel')} <span className={lastSync ? 'text-indusia-text' : 'text-indusia-warning'}>{formatSyncTime(lastSync)}</span>
             </span>
           </button>
 

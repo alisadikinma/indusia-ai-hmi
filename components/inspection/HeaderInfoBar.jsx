@@ -125,12 +125,12 @@ export function HeaderInfoBar({ className }) {
       <div className={cn(
         "flex items-center gap-2 px-3 py-1.5 border",
         syncStatus === 'synced' && "border-phosphor-green/50 bg-phosphor-green/5",
-        syncStatus === 'pending' && "border-phosphor-amber/50 bg-phosphor-amber/5",
+        syncStatus === 'pending' && "border-phosphor-teal/50 bg-phosphor-teal/5",
         syncStatus === 'error' && "border-phosphor-red/50 bg-phosphor-red/5",
         syncStatus === 'checking' && "border-surface-border bg-surface-border/10"
       )}>
         {syncStatus === 'synced' && <CheckCircle2 className="w-4 h-4 text-phosphor-green" />}
-        {syncStatus === 'pending' && <RefreshCw className="w-4 h-4 text-phosphor-amber animate-spin" />}
+        {syncStatus === 'pending' && <RefreshCw className="w-4 h-4 text-phosphor-teal animate-spin" />}
         {syncStatus === 'error' && <CloudOff className="w-4 h-4 text-phosphor-red" />}
         {syncStatus === 'checking' && <Cloud className="w-4 h-4 text-text-tertiary animate-pulse" />}
         
@@ -141,7 +141,7 @@ export function HeaderInfoBar({ className }) {
           <span className={cn(
             "font-mono text-xs font-medium",
             syncStatus === 'synced' && "text-phosphor-green",
-            syncStatus === 'pending' && "text-phosphor-amber",
+            syncStatus === 'pending' && "text-phosphor-teal",
             syncStatus === 'error' && "text-phosphor-red",
             syncStatus === 'checking' && "text-text-secondary"
           )}>
@@ -158,7 +158,7 @@ export function HeaderInfoBar({ className }) {
             className={cn(
               "relative p-2 border transition-all",
               unreadCount > 0
-                ? "border-phosphor-amber bg-phosphor-amber/10 text-phosphor-amber hover:bg-phosphor-amber/20"
+                ? "border-phosphor-teal bg-phosphor-teal/10 text-phosphor-teal hover:bg-phosphor-teal/20"
                 : "border-surface-border bg-terminal text-text-tertiary hover:border-text-tertiary hover:text-text-secondary"
             )}
             title={`${unreadCount} ${t('header.notifications')}`}

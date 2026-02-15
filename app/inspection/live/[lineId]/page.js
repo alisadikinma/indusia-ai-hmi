@@ -18,8 +18,10 @@
 import { useEffect, useState } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/context/AuthContext'
+import { useI18n } from '@/hooks/useI18n'
 import { authFetch } from '@/lib/utils/authFetch'
 import { LiveViewV3 } from '@/components/inspection/LiveViewV3'
+import PageLoading from '@/components/common/PageLoading'
 
 export default function LiveInspectionPage() {
   const params = useParams()
@@ -28,6 +30,7 @@ export default function LiveInspectionPage() {
   const { lineId } = params
   const modelName = searchParams.get('model') || null
   const { user, isOperator, setActiveLine, clearActiveLine, activeLineId, hasMenuAccess } = useAuth()
+  const { t } = useI18n()
   
   // State for line details
   const [lineDetails, setLineDetails] = useState(null)
@@ -76,13 +79,7 @@ export default function LiveInspectionPage() {
   if (loading || !user) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-void">
-        <div className="bg-panel border border-surface-border p-8 max-w-md text-center">
-          <div className="w-8 h-8 border-2 border-phosphor-amber border-t-transparent animate-spin mx-auto mb-4" />
-          <h2 className="text-xl font-display font-bold text-text-primary mb-3">LOADING...</h2>
-          <p className="text-sm font-mono text-text-tertiary">
-            {loading ? 'Loading line data' : 'Verifying credentials'}
-          </p>
-        </div>
+        <PageLoading message={loading ? t('inspection.loadingLineData') : t('auth.verifyingCredentials')} />
       </div>
     )
   }
@@ -92,9 +89,9 @@ export default function LiveInspectionPage() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-void">
         <div className="bg-panel border border-surface-border p-8 max-w-md text-center">
-          <h2 className="text-xl font-display font-bold text-phosphor-red mb-3">ACCESS DENIED</h2>
+          <h2 className="text-xl font-display font-bold text-phosphor-red mb-3">{t('auth.accessDenied')}</h2>
           <p className="text-sm font-mono text-text-tertiary">
-            You don&apos;t have permission for live inspection
+            {t('inspection.noPermissionLive')}
           </p>
         </div>
       </div>

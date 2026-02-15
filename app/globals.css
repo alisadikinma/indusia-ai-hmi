@@ -89,9 +89,9 @@
 
 :root {
   /* === PHOSPHOR COLOR SYSTEM === */
-  --phosphor-amber: #FFAA00;
-  --phosphor-amber-bright: #FFD93D;
-  --phosphor-amber-dim: #CC8800;
+  --phosphor-teal: #FFAA00;
+  --phosphor-teal-bright: #FFD93D;
+  --phosphor-teal-dim: #CC8800;
   --phosphor-green: #00FF66;
   --phosphor-green-bright: #66FFAA;
   --phosphor-green-dim: #00CC52;
@@ -184,13 +184,13 @@
 
   /* === SELECTION STYLE === */
   ::selection {
-    background-color: var(--phosphor-amber);
+    background-color: var(--phosphor-teal);
     color: var(--void-black);
   }
 
   /* === FOCUS STATES === */
   :focus-visible {
-    outline: 2px solid var(--phosphor-amber);
+    outline: 2px solid var(--phosphor-teal);
     outline-offset: 2px;
   }
 
@@ -224,8 +224,8 @@
   }
 
   input:focus, select:focus, textarea:focus {
-    border-color: var(--phosphor-amber);
-    box-shadow: 0 0 0 1px var(--phosphor-amber),
+    border-color: var(--phosphor-teal);
+    box-shadow: 0 0 0 1px var(--phosphor-teal),
                 0 0 20px rgba(255, 170, 0, 0.15),
                 inset 0 0 20px rgba(255, 170, 0, 0.03);
   }
@@ -247,7 +247,7 @@
   }
 
   ::-webkit-scrollbar-thumb:hover {
-    background: var(--phosphor-amber-dim);
+    background: var(--phosphor-teal-dim);
   }
 
   ::-webkit-scrollbar-corner {
@@ -272,8 +272,8 @@
     height: 1px;
     background: linear-gradient(90deg,
       transparent,
-      var(--phosphor-amber-dim) 20%,
-      var(--phosphor-amber-dim) 80%,
+      var(--phosphor-teal-dim) 20%,
+      var(--phosphor-teal-dim) 80%,
       transparent
     );
     opacity: 0.3;
@@ -291,7 +291,7 @@
     letter-spacing: 0.1em;
     text-transform: uppercase;
     font-size: 0.75rem;
-    color: var(--phosphor-amber);
+    color: var(--phosphor-teal);
     display: flex;
     align-items: center;
     gap: 0.5rem;
@@ -313,7 +313,7 @@
     position: absolute;
     width: 12px;
     height: 12px;
-    border: 1px solid var(--phosphor-amber-dim);
+    border: 1px solid var(--phosphor-teal-dim);
     opacity: 0.4;
   }
 
@@ -338,8 +338,8 @@
   }
 
   .status-warning {
-    color: var(--phosphor-amber);
-    text-shadow: 0 0 10px var(--phosphor-amber);
+    color: var(--phosphor-teal);
+    text-shadow: 0 0 10px var(--phosphor-teal);
   }
 
   .status-error {
@@ -373,12 +373,12 @@
   }
 
   .status-indicator.warning {
-    background-color: var(--phosphor-amber);
-    box-shadow: 0 0 8px var(--phosphor-amber);
+    background-color: var(--phosphor-teal);
+    box-shadow: 0 0 8px var(--phosphor-teal);
   }
 
   .status-indicator.warning::after {
-    background-color: var(--phosphor-amber);
+    background-color: var(--phosphor-teal);
   }
 
   .status-indicator.error {
@@ -394,8 +394,8 @@
   /* === BUTTONS === */
   .btn-primary {
     background: linear-gradient(180deg,
-      var(--phosphor-amber) 0%,
-      var(--phosphor-amber-dim) 100%
+      var(--phosphor-teal) 0%,
+      var(--phosphor-teal-dim) 100%
     );
     color: var(--void-black);
     font-weight: 700;
@@ -409,8 +409,8 @@
 
   .btn-primary:hover:not(:disabled) {
     background: linear-gradient(180deg,
-      var(--phosphor-amber-bright) 0%,
-      var(--phosphor-amber) 100%
+      var(--phosphor-teal-bright) 0%,
+      var(--phosphor-teal) 100%
     );
     box-shadow: 0 0 30px rgba(255, 170, 0, 0.4),
                 inset 0 1px 0 rgba(255, 255, 255, 0.2);
@@ -450,8 +450,8 @@
   }
 
   .btn-ghost:hover:not(:disabled) {
-    border-color: var(--phosphor-amber);
-    color: var(--phosphor-amber);
+    border-color: var(--phosphor-teal);
+    color: var(--phosphor-teal);
     box-shadow: 0 0 20px rgba(255, 170, 0, 0.1);
   }
 
@@ -471,7 +471,7 @@
     top: 0;
     bottom: 0;
     width: 3px;
-    background-color: var(--phosphor-amber);
+    background-color: var(--phosphor-teal);
   }
 
   .data-label {
@@ -487,7 +487,7 @@
   .data-value {
     font-size: 1.5rem;
     font-weight: 600;
-    color: var(--phosphor-amber);
+    color: var(--phosphor-teal);
     text-shadow: 0 0 20px rgba(255, 170, 0, 0.3);
     line-height: 1;
   }
@@ -522,7 +522,7 @@
 
   .terminal-line::before {
     content: '>';
-    color: var(--phosphor-amber);
+    color: var(--phosphor-teal);
     font-weight: bold;
   }
 
@@ -566,8 +566,8 @@
 
   .badge-amber {
     background-color: rgba(255, 170, 0, 0.1);
-    border-color: var(--phosphor-amber-dim);
-    color: var(--phosphor-amber);
+    border-color: var(--phosphor-teal-dim);
+    color: var(--phosphor-teal);
   }
 
   .badge-green {
@@ -614,15 +614,15 @@
   }
 
   .nav-item:hover {
-    color: var(--phosphor-amber);
+    color: var(--phosphor-teal);
     background-color: rgba(255, 170, 0, 0.05);
-    border-left-color: var(--phosphor-amber-dim);
+    border-left-color: var(--phosphor-teal-dim);
   }
 
   .nav-item.active {
-    color: var(--phosphor-amber);
+    color: var(--phosphor-teal);
     background-color: rgba(255, 170, 0, 0.1);
-    border-left-color: var(--phosphor-amber);
+    border-left-color: var(--phosphor-teal);
   }
 
   .nav-item.active::after {
@@ -663,7 +663,7 @@
 
 @layer utilities {
   /* === GLOW EFFECTS === */
-  .glow-amber {
+  .glow-teal {
     box-shadow: 0 0 20px rgba(255, 170, 0, 0.3),
                 0 0 40px rgba(255, 170, 0, 0.1);
   }
@@ -683,7 +683,7 @@
                 0 0 40px rgba(0, 221, 255, 0.1);
   }
 
-  .text-glow-amber {
+  .text-glow-teal {
     text-shadow: 0 0 10px rgba(255, 170, 0, 0.5),
                  0 0 20px rgba(255, 170, 0, 0.3);
   }
@@ -780,7 +780,7 @@
   .animate-typing-cursor::after {
     content: '█';
     animation: typing-cursor 1s step-end infinite;
-    color: var(--phosphor-amber);
+    color: var(--phosphor-teal);
   }
 
   /* === INSPECTION STAGE WOW ANIMATIONS === */
@@ -863,11 +863,11 @@
   .animate-stage-progress-sweep {
     background: linear-gradient(
       90deg, 
-      var(--phosphor-amber) 0%, 
+      var(--phosphor-teal) 0%, 
       #fbbf24 25%,
       #fef3c7 50%,
       #fbbf24 75%,
-      var(--phosphor-amber) 100%
+      var(--phosphor-teal) 100%
     );
     background-size: 200% 100%;
     animation: stage-progress-sweep 2s linear infinite;
@@ -907,12 +907,12 @@
   }
 
   .scrollbar-brutalist::-webkit-scrollbar-thumb {
-    background: var(--phosphor-amber-dim);
+    background: var(--phosphor-teal-dim);
     border-radius: 0;
   }
 
   .scrollbar-brutalist::-webkit-scrollbar-thumb:hover {
-    background: var(--phosphor-amber);
+    background: var(--phosphor-teal);
   }
 
   /* === NOISE TEXTURE OVERLAY === */

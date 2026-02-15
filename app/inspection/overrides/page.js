@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Search, Calendar, RefreshCw, Loader2, AlertCircle, Inbox, ChevronLeft, ChevronRight } from 'lucide-react';
+import PageLoading from '@/components/common/PageLoading';
 import { useAuth } from '@/context/AuthContext';
 import { useOverrides } from '@/hooks/useOverrides';
 import { useI18nContext } from '@/context/I18nContext';
@@ -316,10 +317,7 @@ export default function OverrideApprovalsPage() {
         subtitle={`${filteredOverrides.length} ${filteredOverrides.length === 1 ? 'item' : 'items'}`}
       >
         {loading && filteredOverrides.length === 0 ? (
-          <div className="text-center py-12">
-            <Loader2 className="w-8 h-8 animate-spin mx-auto text-indusia-primary mb-3" />
-            <p className="text-indusia-textMuted">{t('states.loadingDefault')}</p>
-          </div>
+          <PageLoading message={t('states.loadingDefault')} compact />
         ) : filteredOverrides.length === 0 ? (
           <div className="text-center py-12">
             <Inbox className="w-12 h-12 text-indusia-textMuted mx-auto mb-3" />

@@ -9,6 +9,7 @@ import { useState, useCallback } from 'react';
 import { Plus, FileText, AlertTriangle, CheckCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
+import PageLoading from '@/components/common/PageLoading';
 import { useWorkOrders, useWorkOrderMutations } from '@/hooks/useWorkOrders';
 import { WorkOrderTable } from '@/components/work-orders/WorkOrderTable';
 import { WorkOrderFilters } from '@/components/work-orders/WorkOrderFilters';
@@ -148,14 +149,7 @@ export default function WorkOrdersPage() {
 
   // Show loading while auth is loading
   if (authLoading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-center">
-          <div className="w-8 h-8 border-2 border-indusia-primary border-t-transparent animate-spin mx-auto mb-4" />
-          <p className="text-indusia-textMuted">Loading...</p>
-        </div>
-      </div>
-    );
+    return <PageLoading message="Loading..." compact />;
   }
 
   // Check access via database permissions

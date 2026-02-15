@@ -31,6 +31,9 @@ yarn-error.log*
 # line state cache (dev mode)
 .line-state.json
 
+# OTA update restart trigger
+.restart-trigger
+
 # vercel
 .vercel
 

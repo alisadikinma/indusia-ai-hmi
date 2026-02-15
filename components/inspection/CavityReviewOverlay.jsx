@@ -20,6 +20,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { cn } from '@/lib/utils'
 import { findNextUnreviewedFrame, computePcbCounts } from '@/lib/utils/inspectionReview'
 import { X, ZoomIn, ZoomOut, CheckCircle2, AlertCircle, Timer, ChevronLeft, ChevronRight } from 'lucide-react'
+import { useI18n } from '@/context/I18nContext'
 
 const AUTO_NG_DELAY_MS = 10000 // 10 seconds per frame
 
@@ -40,6 +41,7 @@ export function CavityReviewOverlay({
   bottomFrameCount = 0,  // DB-configured BOTTOM frame count (primary source for frame-to-PCB grouping)
 }) {
   const boardSerialNumber = inspection?.serialNumber || 'N/A'
+  const { t } = useI18n()
 
   // Collect all NG frames from both sides into a flat review list
   // Use loose equality (== true) because backend may send label as boolean true OR integer 1
@@ -253,17 +255,17 @@ export function CavityReviewOverlay({
         <div className="flex items-center gap-4">
           {/* Queue indicator — only show for multi-cavity panels */}
           {queueTotal > 1 && (
-            <span className="font-display font-bold text-phosphor-amber text-lg">
+            <span className="font-display font-bold text-phosphor-teal text-lg">
               PCB {queuePosition}/{queueTotal}
             </span>
           )}
           {/* AI decision */}
           <span className="px-2 py-0.5 rounded bg-phosphor-red/20 text-phosphor-red font-mono text-sm font-bold">
-            AI: NG
+            {t('cavityReview.aiNG')}
           </span>
           {/* Per-frame progress */}
-          <span className="px-2 py-0.5 rounded bg-phosphor-amber/20 text-phosphor-amber font-mono text-sm font-bold">
-            NG Frame {reviewIndex + 1}/{totalNGFrames}
+          <span className="px-2 py-0.5 rounded bg-phosphor-teal/20 text-phosphor-teal font-mono text-sm font-bold">
+            {t('cavityReview.ngFrame')} {reviewIndex + 1}/{totalNGFrames}
           </span>
           {/* Side indicator */}
           <span className="px-2 py-0.5 rounded bg-purple-500/20 text-purple-400 font-mono text-sm">
@@ -272,7 +274,7 @@ export function CavityReviewOverlay({
           {/* Reviewed progress */}
           {reviewedCount > 0 && (
             <span className="font-mono text-xs text-text-tertiary">
-              ({reviewedCount}/{totalNGFrames} reviewed)
+              ({reviewedCount}/{totalNGFrames} {t('cavityReview.reviewed')})
             </span>
           )}
         </div>
@@ -282,22 +284,22 @@ export function CavityReviewOverlay({
           {autoNgEnabled && !showReasonInput && !isCurrentReviewed && (
             <div className={cn(
               "flex items-center gap-2 px-3 py-1 rounded font-mono text-sm",
-              countdown <= 5 ? "bg-phosphor-red/20 text-phosphor-red" : "bg-phosphor-amber/20 text-phosphor-amber"
+              countdown <= 5 ? "bg-phosphor-red/20 text-phosphor-red" : "bg-phosphor-teal/20 text-phosphor-teal"
             )}>
               <Timer className="w-4 h-4" />
-              Auto-NG: {countdown}s
+              {t('cavityReview.autoNG')}: {countdown}s
             </div>
           )}
 
           {/* Zoom controls */}
           <div className="flex items-center gap-2">
             <button onClick={() => setZoom(z => Math.max(0.5, z - 0.25))}
-              className="p-1 rounded bg-elevated border border-surface-border hover:border-phosphor-amber/50 transition-colors">
+              className="p-1 rounded bg-elevated border border-surface-border hover:border-phosphor-teal/50 transition-colors">
               <ZoomOut className="w-4 h-4 text-text-tertiary" />
             </button>
             <span className="text-xs text-text-tertiary font-mono min-w-[40px] text-center">{Math.round(zoom * 100)}%</span>
             <button onClick={() => setZoom(z => Math.min(3, z + 0.25))}
-              className="p-1 rounded bg-elevated border border-surface-border hover:border-phosphor-amber/50 transition-colors">
+              className="p-1 rounded bg-elevated border border-surface-border hover:border-phosphor-teal/50 transition-colors">
               <ZoomIn className="w-4 h-4 text-text-tertiary" />
             </button>
           </div>
@@ -305,7 +307,7 @@ export function CavityReviewOverlay({
           {/* Close button */}
           {onClose && (
             <button onClick={onClose}
-              className="p-2 rounded bg-elevated border border-surface-border hover:border-phosphor-amber/50 transition-colors">
+              className="p-2 rounded bg-elevated border border-surface-border hover:border-phosphor-teal/50 transition-colors">
               <X className="w-5 h-5 text-text-tertiary" />
             </button>
           )}
@@ -323,7 +325,7 @@ export function CavityReviewOverlay({
               "absolute left-3 z-10 p-3 rounded-full border-2 transition-all",
               reviewIndex === 0
                 ? "border-surface-border bg-void/50 text-text-tertiary cursor-not-allowed opacity-30"
-                : "border-phosphor-amber/60 bg-void/80 text-phosphor-amber hover:bg-phosphor-amber/20 hover:border-phosphor-amber"
+                : "border-phosphor-teal/60 bg-void/80 text-phosphor-teal hover:bg-phosphor-teal/20 hover:border-phosphor-teal"
             )}
           >
             <ChevronLeft className="w-6 h-6" />
@@ -338,8 +340,8 @@ export function CavityReviewOverlay({
               <div className="relative transition-transform duration-200"
                 style={{ transform: `scale(${zoom})`, transformOrigin: 'center' }}>
                 {/* Floating SN badge — positioned above the image */}
-                <div className="absolute top-2 left-1/2 -translate-x-1/2 z-10 px-3 py-1.5 rounded bg-void/85 border border-phosphor-amber/50 backdrop-blur-sm">
-                  <span className="font-mono text-sm font-bold text-phosphor-amber">
+                <div className="absolute top-2 left-1/2 -translate-x-1/2 z-10 px-3 py-1.5 rounded bg-void/85 border border-phosphor-teal/50 backdrop-blur-sm">
+                  <span className="font-mono text-sm font-bold text-phosphor-teal">
                     SN: {currentFrame?.serial_number || boardSerialNumber}
                   </span>
                 </div>
@@ -350,7 +352,7 @@ export function CavityReviewOverlay({
             </div>
           ) : (
             <div className="flex items-center justify-center h-full text-text-tertiary">
-              <p className="font-mono text-sm">No image available</p>
+              <p className="font-mono text-sm">{t('inspection.noImageAvailable')}</p>
             </div>
           )}
         </div>
@@ -364,7 +366,7 @@ export function CavityReviewOverlay({
               "absolute right-3 z-10 p-3 rounded-full border-2 transition-all",
               reviewIndex === totalNGFrames - 1
                 ? "border-surface-border bg-void/50 text-text-tertiary cursor-not-allowed opacity-30"
-                : "border-phosphor-amber/60 bg-void/80 text-phosphor-amber hover:bg-phosphor-amber/20 hover:border-phosphor-amber"
+                : "border-phosphor-teal/60 bg-void/80 text-phosphor-teal hover:bg-phosphor-teal/20 hover:border-phosphor-teal"
             )}
           >
             <ChevronRight className="w-6 h-6" />
@@ -387,7 +389,7 @@ export function CavityReviewOverlay({
                   onClick={() => { setReviewIndex(idx); setZoom(1) }}
                   className={cn(
                     "relative flex-shrink-0 w-20 h-14 rounded overflow-hidden border-2 transition-all",
-                    isActive ? "border-phosphor-amber ring-2 ring-phosphor-amber/30"
+                    isActive ? "border-phosphor-teal ring-2 ring-phosphor-teal/30"
                       : isReviewed ? (wasNG ? "border-phosphor-red/80" : "border-phosphor-green/80")
                       : "border-surface-border"
                   )}>
@@ -424,7 +426,7 @@ export function CavityReviewOverlay({
               <div className="flex items-center gap-2 flex-1">
                 <button
                   onClick={() => { setSelectedReason(''); setOtherText('') }}
-                  className="h-14 px-3 bg-elevated border border-surface-border rounded-lg text-text-secondary font-mono hover:border-phosphor-amber/50 transition-colors flex-shrink-0"
+                  className="h-14 px-3 bg-elevated border border-surface-border rounded-lg text-text-secondary font-mono hover:border-phosphor-teal/50 transition-colors flex-shrink-0"
                 >
                   &larr;
                 </button>
@@ -433,7 +435,7 @@ export function CavityReviewOverlay({
                   value={otherText}
                   onChange={(e) => setOtherText(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter') handleSubmitFalseCall() }}
-                  placeholder="Type other reason..."
+                  placeholder={t('cavityReview.typeOtherReason')}
                   autoFocus
                   className="flex-1 h-14 px-4 bg-elevated border border-surface-border rounded-lg text-text-primary font-mono placeholder:text-text-tertiary focus:outline-none focus:ring-2 focus:ring-phosphor-green"
                 />
@@ -445,23 +447,23 @@ export function CavityReviewOverlay({
                 autoFocus
                 className="flex-1 h-14 px-4 bg-elevated border border-surface-border rounded-lg text-text-primary font-mono focus:outline-none focus:ring-2 focus:ring-phosphor-green"
               >
-                <option value="">Select reason...</option>
+                <option value="">{t('cavityReview.selectReason')}</option>
                 {falseCallReasons
                   .filter(r => !(r.name || r).toLowerCase().includes('other'))
                   .map(r => (
                     <option key={r.id || r} value={r.name || r}>{r.name || r}</option>
                   ))}
-                <option value="other">Other</option>
+                <option value="other">{t('cavityReview.other')}</option>
               </select>
             )}
             <button onClick={handleSubmitFalseCall}
               disabled={selectedReason === 'other' ? !otherText.trim() : !selectedReason.trim()}
               className="h-14 px-8 bg-phosphor-green text-void font-display font-bold text-lg rounded-lg hover:bg-phosphor-green-bright disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
-              SUBMIT
+              {t('falseCall.submit')}
             </button>
             <button onClick={handleCancelReason}
-              className="h-14 px-6 bg-elevated border border-surface-border text-text-secondary font-display font-bold rounded-lg hover:border-phosphor-amber/50 transition-colors">
-              CANCEL
+              className="h-14 px-6 bg-elevated border border-surface-border text-text-secondary font-display font-bold rounded-lg hover:border-phosphor-teal/50 transition-colors">
+              {t('falseCall.cancel')}
             </button>
           </div>
         ) : isCurrentReviewed ? (
@@ -471,17 +473,17 @@ export function CavityReviewOverlay({
               "font-mono text-sm px-3 py-1 rounded",
               currentDecision === 'REAL_NG' ? "bg-phosphor-red/20 text-phosphor-red" : "bg-phosphor-green/20 text-phosphor-green"
             )}>
-              {currentDecision === 'REAL_NG' ? 'Confirmed NG' : `False Call: ${currentDecision}`}
+              {currentDecision === 'REAL_NG' ? t('cavityReview.confirmedNG') : `${t('cavityReview.falseCallPrefix')}: ${currentDecision}`}
             </span>
             {reviewIndex < totalNGFrames - 1 && (
               <button onClick={() => { setReviewIndex(reviewIndex + 1); setZoom(1) }}
-                className="h-14 px-8 bg-phosphor-amber text-void font-display font-bold text-lg rounded-lg hover:bg-phosphor-amber-bright transition-colors">
-                NEXT FRAME
+                className="h-14 px-8 bg-phosphor-teal text-void font-display font-bold text-lg rounded-lg hover:bg-phosphor-teal-bright transition-colors">
+                {t('cavityReview.nextFrame')}
               </button>
             )}
             {reviewedCount === totalNGFrames && (
               <span className="font-mono text-sm text-phosphor-cyan animate-pulse">
-                All frames reviewed — proceeding...
+                {t('cavityReview.allReviewed')}
               </span>
             )}
           </div>
@@ -491,13 +493,13 @@ export function CavityReviewOverlay({
             <button onClick={handleFrameGood}
               className="h-16 px-12 bg-phosphor-green/10 border-2 border-phosphor-green text-phosphor-green font-display font-bold text-xl rounded-lg hover:bg-phosphor-green/20 shadow-glow-green transition-all active:scale-95 flex items-center gap-3">
               <CheckCircle2 className="w-7 h-7" />
-              GOOD
+              {t('cavityReview.good')}
               <span className="text-sm font-mono opacity-60">(G)</span>
             </button>
             <button onClick={() => handleFrameNGRef.current?.()}
               className="h-16 px-12 bg-phosphor-red/10 border-2 border-phosphor-red text-phosphor-red font-display font-bold text-xl rounded-lg hover:bg-phosphor-red/20 shadow-glow-red transition-all active:scale-95 flex items-center gap-3">
               <AlertCircle className="w-7 h-7" />
-              NG
+              {t('cavityReview.ng')}
               <span className="text-sm font-mono opacity-60">(N)</span>
             </button>
           </>

@@ -7,6 +7,7 @@
  */
 
 import { useRef, useEffect, useState } from 'react'
+import { useI18n } from '@/context/I18nContext'
 
 export function DetectionOverlay({
   imageUrl,
@@ -15,6 +16,7 @@ export function DetectionOverlay({
   width = '100%',
   height = '100%'
 }) {
+  const { t } = useI18n()
   const containerRef = useRef(null)
   const canvasRef = useRef(null)
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 })
@@ -25,7 +27,7 @@ export function DetectionOverlay({
   const resultColors = {
     pass: '#00FF66',    // phosphor-green
     fail: '#FF4444',    // phosphor-red
-    review: '#FFAA00'   // phosphor-amber
+    review: '#FFAA00'   // phosphor-teal
   }
 
   const resultLabels = {
@@ -241,8 +243,8 @@ export function DetectionOverlay({
       {!imageLoaded && imageUrl && (
         <div className="absolute inset-0 flex items-center justify-center bg-terminal/80">
           <div className="flex flex-col items-center text-text-tertiary">
-            <div className="w-8 h-8 border-2 border-phosphor-amber border-t-transparent animate-spin mb-2" />
-            <span className="font-mono text-xs">LOADING FRAME...</span>
+            <div className="w-8 h-8 border-2 border-phosphor-teal border-t-transparent animate-spin mb-2" />
+            <span className="font-mono text-xs">{t('inspection.loadingFrame')}</span>
           </div>
         </div>
       )}
@@ -254,8 +256,8 @@ export function DetectionOverlay({
             <div className="w-16 h-16 border-2 border-surface-border flex items-center justify-center mb-3 mx-auto">
               <span className="font-mono text-2xl">📷</span>
             </div>
-            <div className="font-display text-sm tracking-wider">AWAITING CAMERA FEED</div>
-            <div className="font-mono text-xxs text-text-tertiary mt-1">NO SIGNAL</div>
+            <div className="font-display text-sm tracking-wider">{t('inspection.awaitingCameraFeed')}</div>
+            <div className="font-mono text-xxs text-text-tertiary mt-1">{t('inspection.noSignal')}</div>
           </div>
         </div>
       )}

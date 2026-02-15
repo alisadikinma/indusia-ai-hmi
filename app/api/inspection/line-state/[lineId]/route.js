@@ -7,47 +7,25 @@
  * GET: Fetch current state (from memory - fast)
  * PUT: Update state (operator only, writes to memory + async file backup)
  *
- * Uses in-memory Map for fast reads, with file backup for persistence.
+ * Uses shared lineStateStore for in-memory reads, with file backup for persistence.
  */
 
 import { NextResponse } from 'next/server'
 import fs from 'fs'
 import path from 'path'
+import { getCache, setLineState } from '@/lib/services/lineStateStore'
 
 // File path for persistence (backup only - not read on every request)
 const STATE_FILE = path.join(process.cwd(), '.line-state.json')
 
-// In-memory cache - loaded from file once at startup
-let lineStateCache = null
 let writeInFlight = false
-
-// Load cache from file (called once on first access)
-function ensureCache() {
-  if (lineStateCache !== null) return lineStateCache
-
-  try {
-    if (fs.existsSync(STATE_FILE)) {
-      const data = fs.readFileSync(STATE_FILE, 'utf-8')
-      lineStateCache = new Map(JSON.parse(data))
-    }
-  } catch (err) {
-    console.warn('[LineState] Corrupt state file, resetting:', err.message)
-    // Delete corrupt file so it doesn't block future startups
-    try { fs.unlinkSync(STATE_FILE) } catch (_) { /* ignore */ }
-  }
-
-  if (!lineStateCache) {
-    lineStateCache = new Map()
-  }
-
-  return lineStateCache
-}
 
 // Persist cache to file (async, atomic write via temp file, skip if write already in-flight)
 function persistToFile() {
+  const cache = getCache()
   if (writeInFlight) return // skip — previous write still pending
   try {
-    const data = JSON.stringify([...lineStateCache.entries()])
+    const data = JSON.stringify([...cache.entries()])
     const tmpFile = STATE_FILE + '.tmp'
     writeInFlight = true
     fs.writeFile(tmpFile, data, 'utf-8', (err) => {
@@ -100,12 +78,12 @@ export async function GET(request, { params }) {
       )
     }
 
-    const cache = ensureCache()
+    const cache = getCache()
 
     // Get or create default state
     if (!cache.has(lineId)) {
       const defaultState = getDefaultState()
-      cache.set(lineId, defaultState)
+      setLineState(lineId, defaultState)
       persistToFile()
     }
 
@@ -137,7 +115,7 @@ export async function PUT(request, { params }) {
       )
     }
 
-    const cache = ensureCache()
+    const cache = getCache()
 
     // Get current state or default
     const currentState = cache.get(lineId) || getDefaultState()
@@ -158,7 +136,7 @@ export async function PUT(request, { params }) {
     }
 
     // Save to memory (instant) + persist to file (async)
-    cache.set(lineId, updatedState)
+    setLineState(lineId, updatedState)
     persistToFile()
 
     return NextResponse.json({

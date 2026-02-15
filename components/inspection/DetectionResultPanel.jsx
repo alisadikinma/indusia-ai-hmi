@@ -7,6 +7,7 @@
 
 import { AlertTriangle, AlertCircle, Info, CheckCircle2, Target } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useI18n } from '@/context/I18nContext';
 
 const SEVERITY_CONFIG = {
   critical: {
@@ -17,9 +18,9 @@ const SEVERITY_CONFIG = {
   },
   major: {
     label: 'MAJOR',
-    color: 'text-phosphor-amber',
-    bgColor: 'bg-phosphor-amber/10',
-    borderColor: 'border-phosphor-amber/50',
+    color: 'text-phosphor-teal',
+    bgColor: 'bg-phosphor-teal/10',
+    borderColor: 'border-phosphor-teal/50',
   },
   minor: {
     label: 'MINOR',
@@ -46,13 +47,15 @@ export function DetectionResultPanel({
   defectIndex = 0,
   defectCount = 0,
 }) {
+  const { t } = useI18n();
+
   // Loading state
   if (isLoading) {
     return (
       <div className="h-full flex items-center justify-center bg-terminal border border-surface-border">
         <div className="text-center">
-          <div className="w-8 h-8 border-2 border-phosphor-amber border-t-transparent animate-spin mx-auto mb-2" />
-          <p className="font-mono text-xs text-text-tertiary">ANALYZING...</p>
+          <div className="w-8 h-8 border-2 border-phosphor-teal border-t-transparent animate-spin mx-auto mb-2" />
+          <p className="font-mono text-xs text-text-tertiary">{t('hmi.analyzing')}</p>
         </div>
       </div>
     );
@@ -65,14 +68,14 @@ export function DetectionResultPanel({
         <div className="flex items-center gap-2 px-3 py-2 bg-phosphor-green/10 border-b border-phosphor-green/30">
           <CheckCircle2 className="w-4 h-4 text-phosphor-green" />
           <span className="font-display font-bold text-sm text-phosphor-green tracking-wide">
-            AI RESULT: PASS
+            {t('inspection.aiResultPass')}
           </span>
         </div>
         <div className="flex-1 flex items-center justify-center p-3">
           <div className="text-center">
             <CheckCircle2 className="w-12 h-12 text-phosphor-green/50 mx-auto mb-2" />
-            <p className="font-display text-base text-phosphor-green">NO DEFECTS DETECTED</p>
-            <p className="font-mono text-xs text-text-tertiary mt-1">Board passed AI inspection</p>
+            <p className="font-display text-base text-phosphor-green">{t('inspection.noDefectsDetected')}</p>
+            <p className="font-mono text-xs text-text-tertiary mt-1">{t('inspection.boardPassedAI')}</p>
           </div>
         </div>
       </div>
@@ -86,7 +89,7 @@ export function DetectionResultPanel({
         <div className="flex items-center gap-2 px-3 py-2 bg-panel border-b border-surface-border">
           <Info className="w-4 h-4 text-text-tertiary" />
           <span className="font-display font-bold text-sm text-text-tertiary tracking-wide">
-            AI RESULT: WAITING
+            {t('inspection.aiResultWaiting')}
           </span>
         </div>
         <div className="flex-1 flex items-center justify-center p-3">
@@ -94,7 +97,7 @@ export function DetectionResultPanel({
             <div className="w-12 h-12 border-2 border-surface-border border-dashed flex items-center justify-center mx-auto mb-2">
               <Target className="w-6 h-6 text-text-tertiary" />
             </div>
-            <p className="font-mono text-xs text-text-tertiary">Waiting for inspection...</p>
+            <p className="font-mono text-xs text-text-tertiary">{t('inspection.waitingForInspection')}</p>
           </div>
         </div>
       </div>
@@ -126,11 +129,11 @@ export function DetectionResultPanel({
         <div className="flex items-center gap-2">
           <AlertTriangle className={cn("w-4 h-4", config.color)} />
           <span className={cn("font-display font-bold text-sm tracking-wide", config.color)}>
-            DEFECT DETECTED
+            {t('inspection.defectDetected')}
           </span>
         </div>
         {defectCount > 1 && (
-          <span className="font-mono text-xs text-phosphor-amber">
+          <span className="font-mono text-xs text-phosphor-teal">
             {defectIndex + 1}/{defectCount}
           </span>
         )}
@@ -158,7 +161,7 @@ export function DetectionResultPanel({
               <div
                 className={cn("h-full", {
                   'bg-phosphor-red': confidencePercent >= 85,
-                  'bg-phosphor-amber': confidencePercent >= 60 && confidencePercent < 85,
+                  'bg-phosphor-teal': confidencePercent >= 60 && confidencePercent < 85,
                   'bg-yellow-400': confidencePercent < 60,
                 })}
                 style={{ width: `${confidencePercent}%` }}

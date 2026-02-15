@@ -5,7 +5,7 @@ import { useToast } from '@/hooks/useToast';
 
 const SystemHealthContext = createContext(null);
 
-const REFRESH_INTERVAL = 15000; // 15 seconds
+const REFRESH_INTERVAL = 60000; // 60 seconds
 
 const STATE_TYPES = {
   OK: 'ok',
@@ -90,9 +90,10 @@ export function SystemHealthProvider({ children }) {
     }
   }, [statuses, showToast]);
 
-  // Initial fetch
+  // Delayed initial fetch - don't block page render
   useEffect(() => {
-    fetchHealth(false);
+    const timer = setTimeout(() => fetchHealth(false), 2000);
+    return () => clearTimeout(timer);
   }, []);
 
   // Periodic refresh
