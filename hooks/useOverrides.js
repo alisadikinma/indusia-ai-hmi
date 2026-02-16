@@ -61,7 +61,7 @@ export function useOverrides(initialFilters = {}) {
   const [overrides, setOverrides] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [stats, setStats] = useState({ pending: 0, approved: 0, rejected: 0, total: 0 });
+  const [stats, setStats] = useState({ pending: 0, approved: 0, rejected: 0, reviewed: 0, total: 0 });
   const [isStale, setIsStale] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(null);
   const [filters, setFiltersState] = useState({
@@ -346,6 +346,37 @@ export function useOverrides(initialFilters = {}) {
     }
   };
 
+  const reviewOverride = async (id, reviewerId, reviewerName, frameDecisions, notes = '') => {
+    try {
+      const res = await authFetch(`/api/overrides/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          action: 'review',
+          reviewerId,
+          reviewerName,
+          frameDecisions,
+          reviewNotes: notes
+        })
+      });
+      if (!res.ok) throw new Error('Failed to review override');
+
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error || 'Failed to review override');
+
+      // Update local state and cache
+      setOverrides(prev => {
+        const updated = prev.map(o => o.id === id ? json.data : o);
+        setCache(CACHE_KEY_OVERRIDES, updated, filters);
+        return updated;
+      });
+      await fetchStats();
+      return json.data;
+    } catch (err) {
+      console.error('[useOverrides] Review error:', err.message);
+      throw err;
+    }
+  };
+
   const getById = (id) => overrides.find(o => o.id === id);
 
   const refreshOverrides = useCallback(async () => {
@@ -369,6 +400,7 @@ export function useOverrides(initialFilters = {}) {
     createOverride,
     approveOverride,
     rejectOverride,
+    reviewOverride,
     getById,
     refreshOverrides,
     // New cache-related

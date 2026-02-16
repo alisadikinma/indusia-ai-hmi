@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Search, Calendar, RefreshCw, Loader2, AlertCircle, Inbox, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, Calendar, RefreshCw, Loader2, AlertCircle, Inbox, ChevronLeft, ChevronRight, CheckCircle, XCircle } from 'lucide-react';
 import PageLoading from '@/components/common/PageLoading';
 import { useAuth } from '@/context/AuthContext';
 import { useOverrides } from '@/hooks/useOverrides';
@@ -31,6 +31,7 @@ export default function OverrideApprovalsPage() {
     setFilters,
     approveOverride,
     rejectOverride,
+    reviewOverride,
     refreshOverrides,
     isStale,
     lastUpdated,
@@ -184,6 +185,26 @@ export default function OverrideApprovalsPage() {
     }
   };
 
+  const handleReviewFrames = async (id, frameDecisions, reviewerNotes) => {
+    try {
+      await reviewOverride(id, user?.id, user?.name, frameDecisions, reviewerNotes);
+      showToast({
+        title: 'Review Submitted',
+        description: `${Object.values(frameDecisions).filter(d => d === 'approved').length} approved, ${Object.values(frameDecisions).filter(d => d === 'rejected').length} rejected`,
+        variant: 'success',
+      });
+      setReviewModalOpen(false);
+      setSelectedOverride(null);
+    } catch (err) {
+      console.error('Failed to review:', err);
+      showToast({
+        title: t('status.failed'),
+        description: err.message,
+        variant: 'error',
+      });
+    }
+  };
+
   const handleRefresh = async () => {
     await refreshOverrides();
     showToast({
@@ -199,6 +220,7 @@ export default function OverrideApprovalsPage() {
     pending: stats?.pending ?? overrides.filter((o) => o.status === 'pending').length,
     approved: stats?.approved ?? overrides.filter((o) => o.status === 'approved').length,
     rejected: stats?.rejected ?? overrides.filter((o) => o.status === 'rejected').length,
+    reviewed: stats?.reviewed ?? overrides.filter((o) => o.status === 'reviewed').length,
   };
 
   const statusLabels = {
@@ -206,6 +228,7 @@ export default function OverrideApprovalsPage() {
     pending: t('manager.pending'),
     approved: t('manager.approved'),
     rejected: t('manager.rejected'),
+    reviewed: 'Reviewed',
   };
 
   return (
@@ -216,7 +239,7 @@ export default function OverrideApprovalsPage() {
       />
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-5 gap-4 mb-6">
         <div className="bg-indusia-surface rounded-lg border border-indusia-border p-4">
           <p className="text-xs text-indusia-textMuted uppercase tracking-wide mb-1">{t('common.total')}</p>
           <p className="text-2xl font-bold text-indusia-text">{statusCounts.all}</p>
@@ -224,6 +247,10 @@ export default function OverrideApprovalsPage() {
         <div className="bg-indusia-surface rounded-lg border border-indusia-border p-4">
           <p className="text-xs text-indusia-textMuted uppercase tracking-wide mb-1">{t('manager.pending')}</p>
           <p className="text-2xl font-bold text-indusia-warning">{statusCounts.pending}</p>
+        </div>
+        <div className="bg-indusia-surface rounded-lg border border-indusia-border p-4">
+          <p className="text-xs text-indusia-textMuted uppercase tracking-wide mb-1">Reviewed</p>
+          <p className="text-2xl font-bold text-phosphor-cyan">{statusCounts.reviewed}</p>
         </div>
         <div className="bg-indusia-surface rounded-lg border border-indusia-border p-4">
           <p className="text-xs text-indusia-textMuted uppercase tracking-wide mb-1">{t('manager.approved')}</p>
@@ -239,7 +266,7 @@ export default function OverrideApprovalsPage() {
       <div className="bg-indusia-surface rounded-lg border border-indusia-border p-6 mb-6">
         <div className="flex items-center justify-between gap-6">
           <div className="flex items-center gap-2">
-            {['all', 'pending', 'approved', 'rejected'].map((status) => (
+            {['all', 'pending', 'reviewed', 'approved', 'rejected'].map((status) => (
               <button
                 key={status}
                 onClick={() => handleStatusFilterChange(status)}
@@ -391,10 +418,14 @@ export default function OverrideApprovalsPage() {
                         </p>
                       </td>
                       <td className="px-4 py-4">
-                        <StatusBadge
-                          status={override.status}
-                          label={statusLabels[override.status] || override.status.toUpperCase()}
-                        />
+                        {override.status === 'reviewed' && override.frameDecisions ? (
+                          <FrameStatusSummary frameDecisions={override.frameDecisions} />
+                        ) : (
+                          <StatusBadge
+                            status={override.status}
+                            label={statusLabels[override.status] || override.status.toUpperCase()}
+                          />
+                        )}
                       </td>
                       <td className="px-4 py-4">
                         {override.status === 'pending' ? (
@@ -458,8 +489,33 @@ export default function OverrideApprovalsPage() {
         }}
         onApprove={handleApprove}
         onReject={handleReject}
+        onReview={handleReviewFrames}
         override={selectedOverride}
       />
+    </div>
+  );
+}
+
+function FrameStatusSummary({ frameDecisions }) {
+  const decisions = typeof frameDecisions === 'string' ? JSON.parse(frameDecisions) : frameDecisions;
+  const values = Object.values(decisions || {});
+  const approved = values.filter(d => d === 'approved').length;
+  const rejected = values.filter(d => d === 'rejected').length;
+
+  return (
+    <div className="flex items-center gap-2">
+      {approved > 0 && (
+        <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-phosphor-green/15 text-phosphor-green text-xs font-mono">
+          <CheckCircle className="w-3 h-3" />
+          {approved}
+        </span>
+      )}
+      {rejected > 0 && (
+        <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-phosphor-red/15 text-phosphor-red text-xs font-mono">
+          <XCircle className="w-3 h-3" />
+          {rejected}
+        </span>
+      )}
     </div>
   );
 }

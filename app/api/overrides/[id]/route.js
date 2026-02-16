@@ -28,9 +28,10 @@ async function handleGET(request, { params }) {
 
 /**
  * PATCH /api/overrides/:id
- * Body: { action: 'approve'|'reject', reviewerId, reviewerName, reviewNotes }
+ * Body: { action: 'approve'|'reject'|'review', reviewerId, reviewerName, reviewNotes, frameDecisions? }
  *
- * Approval only updates status in local DB.
+ * action='review': Per-frame review with frameDecisions object { "TOP-0": "approved", ... }
+ * action='approve'/'reject': Legacy single-decision review
  * Image upload to cloud storage happens during sync-to-cloud process.
  */
 async function handlePATCH(request, { params }) {
@@ -38,9 +39,9 @@ async function handlePATCH(request, { params }) {
     const { id } = params
     const body = await request.json()
 
-    if (!body.action || !['approve', 'reject'].includes(body.action)) {
+    if (!body.action || !['approve', 'reject', 'review'].includes(body.action)) {
       return NextResponse.json(
-        { success: false, error: 'Invalid action. Must be "approve" or "reject"' },
+        { success: false, error: 'Invalid action. Must be "approve", "reject", or "review"' },
         { status: 400 }
       )
     }
@@ -48,6 +49,13 @@ async function handlePATCH(request, { params }) {
     if (!body.reviewerId || !body.reviewerName) {
       return NextResponse.json(
         { success: false, error: 'Missing required fields: reviewerId, reviewerName' },
+        { status: 400 }
+      )
+    }
+
+    if (body.action === 'review' && (!body.frameDecisions || Object.keys(body.frameDecisions).length === 0)) {
+      return NextResponse.json(
+        { success: false, error: 'frameDecisions is required for review action' },
         { status: 400 }
       )
     }
@@ -61,11 +69,19 @@ async function handlePATCH(request, { params }) {
         body.reviewerName,
         body.reviewNotes || ''
       )
-    } else {
+    } else if (body.action === 'reject') {
       result = await overridesRepo.reject(
         id,
         body.reviewerId,
         body.reviewerName,
+        body.reviewNotes || ''
+      )
+    } else {
+      result = await overridesRepo.review(
+        id,
+        body.reviewerId,
+        body.reviewerName,
+        body.frameDecisions,
         body.reviewNotes || ''
       )
     }
