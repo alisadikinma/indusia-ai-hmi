@@ -41,6 +41,9 @@ npm run test:coverage         # Generate coverage report in coverage/
 npm run test:e2e              # Headless browser tests (CI mode)
 npm run test:e2e:headed       # Run with visible browser for debugging
 npm run test:e2e:ui           # Interactive Playwright UI mode
+
+# Database migrations
+npm run migrate               # Run pending SQL migrations (direct pg connection)
 ```
 
 ## Quick Start
@@ -200,14 +203,14 @@ Uses Tailwind CSS with a **Phosphor/Terminal** design system in `tailwind.config
 ```js
 // Phosphor accents
 phosphor: {
-  amber: '#FFAA00',         // Primary actions, highlights, warnings
-  'amber-bright': '#FFD93D', 'amber-dim': '#CC8800',
+  teal: '#09A8A4',           // Primary actions, highlights, accents
+  'teal-bright': '#3DBFBC', 'teal-dim': '#078682',
   green: '#00FF66',          // Success/pass
   'green-bright': '#66FFAA', 'green-dim': '#00CC52',
   red: '#FF4444',            // Error/fail
   'red-bright': '#FF6B6B',
-  cyan: '#00DDFF',           // Info/links
-  'cyan-dim': '#0099BB',
+  cyan: '#5B9DFF',           // Info/links
+  'cyan-dim': '#3D7BE0',
 }
 
 // Backgrounds (dark-to-light)
@@ -223,13 +226,13 @@ elevated: '#161B22',        // Elevated surfaces
 'text-tertiary': '#484F58',  // Muted text
 ```
 
-**Legacy `indusia.*` tokens** exist for backwards compatibility but map to the new Phosphor values. Use the Phosphor system for new code. Note: `phosphor-teal` in tailwind.config maps to `#FFAA00` (amber), not teal — this is the primary accent color.
+**Legacy `indusia.*` tokens** exist for backwards compatibility but map to the new Phosphor values. Use the Phosphor system for new code.
 
 **CRT Effects** (globals.css): Scanline overlay (`body::before`) and vignette gradient (`body::after`) create terminal-style aesthetic.
 
-**Glow effects:** `shadow-glow-amber`, `shadow-glow-green`, `shadow-glow-red`, `shadow-glow-cyan`
+**Glow effects:** `shadow-glow-teal`, `shadow-glow-green`, `shadow-glow-red`, `shadow-glow-cyan`
 
-**Animations:** `animate-pulse-glow`, `animate-flicker`, `animate-scan`, `animate-typing-cursor`, `animate-fade-in`, `animate-slide-up`, plus 14 inspection stage animations (`animate-stage-glow-pulse`, `animate-stage-scanning`, `animate-stage-shimmer`, etc.)
+**Animations:** `animate-pulse-glow`, `animate-blink-error`, `animate-flicker`, `animate-scan`, `animate-typing-cursor`, `animate-fade-in`, `animate-slide-up`, `animate-slide-down`
 
 ### Data Layer Architecture
 
@@ -793,7 +796,7 @@ Permission strings follow the format `resource:action` (e.g., `users:read`, `ove
 
 ## Database Schema Notes
 
-The full schema is in `indusia_schema_v1.md`. Key tables:
+Key tables:
 - `users`, `roles`, `role_menu_permissions` - RBAC
 - `customers`, `sections`, `lines`, `boards` - Master data hierarchy (boards include `top_frame_count`, `bottom_frame_count`)
 - `system_status` - Hardware component statuses (camera, PLC)
