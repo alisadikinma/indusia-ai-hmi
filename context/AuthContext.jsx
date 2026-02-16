@@ -258,17 +258,9 @@ export function AuthProvider({ children }) {
   // Login with email and password (API-based login)
   const login = useCallback(async (email, password) => {
     try {
-      // Get CSRF token for login request
-      const token = await getCSRFToken();
-      
-      const headers = { 'Content-Type': 'application/json' };
-      if (token) {
-        headers['X-CSRF-Token'] = token;
-      }
-      
       const res = await fetch('/api/auth/login', {
         method: 'POST',
-        headers,
+        headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({ email, password })
       });
@@ -329,7 +321,7 @@ export function AuthProvider({ children }) {
 
       return { success: false, error: 'Invalid email or password' };
     }
-  }, [getCSRFToken]);
+  }, []);
 
   // Legacy login with profile (maintains backward compatibility)
   const loginWithProfile = useCallback((profile, options = {}) => {
@@ -384,22 +376,24 @@ export function AuthProvider({ children }) {
     localStorage.removeItem('indusia_active_line');
   }, []);
 
-  // Logout - clear local state immediately, fire API in background
-  const logout = useCallback(() => {
-    // Clear state instantly (no await = instant UI redirect)
+  // Logout - clear local state immediately, renew CSRF token for login page
+  const logout = useCallback(async () => {
+    // Fire API logout BEFORE clearing token (needs current CSRF to authenticate)
+    apiRequest('/api/auth/logout', { method: 'POST' }).catch(() => {});
+
+    // Clear user state instantly (triggers UI redirect to /login)
     setUser(null);
     setMenuPermissions([]);
-    setCsrfToken(null);
     setActiveLineId(null);
     setActiveLineName(null);
     localStorage.removeItem('indusia_user');
     localStorage.removeItem('indusia_user_id');
     localStorage.removeItem('indusia_active_line');
-    localStorage.removeItem(CSRF_STORAGE_KEY);
 
-    // Fire API logout + new CSRF in background (non-blocking)
-    apiRequest('/api/auth/logout', { method: 'POST' }).catch(() => {});
-    fetchCSRFToken().catch(() => {});
+    // Clear old CSRF token, then fetch a fresh one for the login page
+    setCsrfToken(null);
+    localStorage.removeItem(CSRF_STORAGE_KEY);
+    await fetchCSRFToken().catch(() => {});
   }, [apiRequest, fetchCSRFToken]);
 
   // Change password

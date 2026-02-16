@@ -1,0 +1,72 @@
+{
+  "description": "Eval cases for industrial-docs skill",
+  "evals": [
+    {
+      "id": "eval-01-operator-manual",
+      "prompt": "Generate Document 2 (Operator Manual) for customer 'PT Example Manufacturing'. Use all screenshots from docs/FAT_SAT/Operation_Manual/. Save to docs/FAT_SAT/deliverables/02_Operator_Manual.docx",
+      "expectations": [
+        "Output file exists at docs/FAT_SAT/deliverables/02_Operator_Manual.docx",
+        "Document contains cover page with customer name 'PT Example Manufacturing'",
+        "Document embeds Login_Page.png screenshot",
+        "Document embeds Live Inspection screenshots (at least 4 from 7_Live_Inspection/)",
+        "Document uses GOOD/NG terminology, never APPROVE/REJECT",
+        "All images have figure captions",
+        "Section 4 (Live Inspection) is the most detailed section",
+        "Document includes keyboard shortcuts appendix"
+      ]
+    },
+    {
+      "id": "eval-02-fat-report",
+      "prompt": "Generate Document 5 (FAT Report) for customer 'PT Example Manufacturing', machine serial 'INDUSIA-2026-001'. Include all test cases from SKILL.md outline. Save to docs/FAT_SAT/deliverables/05_FAT_Report.docx",
+      "expectations": [
+        "Output file exists at docs/FAT_SAT/deliverables/05_FAT_Report.docx",
+        "Document has cover page with machine serial number",
+        "Test IDs follow FAT-XXX format sequentially",
+        "Each test has: ID, Description, Expected Result, Actual Result (blank), PASS/FAIL (blank)",
+        "Test categories cover: Power-On, Hardware, Auth, Master Data, Work Order, Live Inspection, Management, Cloud Sync, Safety",
+        "Sign-off table has roles for both INDUSIA and Customer representatives",
+        "Test summary table counts total tests per category",
+        "Non-conformance report section is present but empty (template)"
+      ]
+    },
+    {
+      "id": "eval-03-architecture-guide",
+      "prompt": "Generate Document 1 (System Architecture Guide) for customer 'PT Example Manufacturing'. Reference docs/API_AI_BACKEND.md for API details and docs/DATABASE_SCHEMA.md for schema info. Save to docs/FAT_SAT/deliverables/01_System_Architecture_Guide.docx",
+      "expectations": [
+        "Output file exists",
+        "Contains architecture diagram description (factory floor vs office network)",
+        "Describes SSE communication between AI Backend and UI",
+        "Lists all ports: 3000 (Next.js), 3001 (PostgREST), 5432 (PostgreSQL), 8001 (AI Backend)",
+        "Includes database ownership matrix (UI vs AI Backend)",
+        "Security section mentions 47 penetration test fixes",
+        "Glossary section defines AOI, PCB, HMI, SSE, PLC, RBAC"
+      ]
+    },
+    {
+      "id": "eval-04-troubleshooting",
+      "prompt": "Generate Document 4 (Troubleshooting Guide). Include the quick reference symptom table with at least 15 common issues. Save to docs/FAT_SAT/deliverables/04_Troubleshooting_Guide.docx",
+      "expectations": [
+        "Output file exists",
+        "Quick reference symptom table has at least 15 rows",
+        "Each row has: Symptom, Possible Cause, Solution, Severity",
+        "Covers hardware issues (camera, PLC, pneumatic)",
+        "Covers software issues (HMI, login, SSE, database)",
+        "Covers AI issues (high false call rate, low confidence)",
+        "Covers network/sync issues",
+        "Has escalation procedure section"
+      ]
+    },
+    {
+      "id": "eval-05-terminology-check",
+      "prompt": "Generate Document 2 (Operator Manual) Section 4 (Live Inspection) only. Focus on the GOOD/NG decision workflow.",
+      "expectations": [
+        "Uses 'GOOD' not 'APPROVE' for pass action",
+        "Uses 'NG' not 'REJECT' for fail action",
+        "Never uses the term 'FALSE CALL' as a button label",
+        "Explains false call as automatic detection when operator disagrees with AI",
+        "Mentions keyboard shortcuts G and N",
+        "References ISA-101 button sizing (30mm minimum)"
+      ]
+    }
+  ]
+}

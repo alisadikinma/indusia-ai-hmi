@@ -4,7 +4,7 @@ import { normalizeRole } from '@/lib/utils/roleUtils'
 import { validateMockCredentials } from '@/data/mockUsers'
 import { sanitizeRequestBody } from '@/lib/utils/sanitize'
 import { checkRateLimit, getClientIP, RATE_LIMITS, rateLimitResponse } from '@/lib/utils/rateLimit'
-import { withCSRF, generateCSRFToken, setCSRFCookie } from '@/lib/utils/csrf'
+import { generateCSRFToken, setCSRFCookie } from '@/lib/utils/csrf'
 import { z } from 'zod'
 
 // Validation schema for login
@@ -169,5 +169,8 @@ async function handlePOST(request) {
   }
 }
 
-// Apply CSRF protection
-export const POST = withCSRF(handlePOST)
+// Login does NOT need CSRF protection:
+// - No existing session to hijack (this IS the session entry point)
+// - Rate limiting already protects against brute force
+// - Login response generates a fresh CSRF token for subsequent requests
+export const POST = handlePOST

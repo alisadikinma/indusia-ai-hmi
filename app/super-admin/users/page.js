@@ -6,12 +6,12 @@ import { useAuth } from '@/context/AuthContext';
 import { useUsers } from '@/hooks/useUsers';
 import { useToast } from '@/hooks/useToast';
 import { useSections } from '@/hooks/useSections';
-import { roles } from '@/data/masterData';
+import { useRoles } from '@/hooks/useRoles';
 import SectionHeader from '@/components/common/SectionHeader';
 import StatusBadge from '@/components/common/StatusBadge';
 import Drawer from '@/components/Drawer';
 import ConfirmDialog from '@/components/ConfirmDialog';
-import { Search, Plus, Edit, Trash2, RefreshCw, Ban, CheckCircle, Eye, EyeOff } from 'lucide-react';
+import { Search, Plus, Edit, Trash2, RefreshCw, Ban, CheckCircle, Eye, EyeOff, X } from 'lucide-react';
 
 export default function UsersManagementPage() {
   const router = useRouter();
@@ -19,6 +19,7 @@ export default function UsersManagementPage() {
   const { showToast } = useToast();
   const { users, create, update, remove, disable, enable, resetPassword } = useUsers();
   const { sections, loading: sectionsLoading } = useSections();
+  const { roles } = useRoles();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
@@ -32,7 +33,7 @@ export default function UsersManagementPage() {
     name: '',
     email: '',
     password: '',
-    role: '',
+    role_id: '',
     sections: [],
     whatsapp: '',
     notificationPreferences: {
@@ -61,7 +62,7 @@ export default function UsersManagementPage() {
     return users.filter(u => {
       const matchesSearch = u.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                            u.email.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesRole = roleFilter === 'all' || u.role === roleFilter;
+      const matchesRole = roleFilter === 'all' || u.roleId === roleFilter;
       const matchesStatus = statusFilter === 'all' || u.status === statusFilter;
       return matchesSearch && matchesRole && matchesStatus;
     });
@@ -77,7 +78,7 @@ export default function UsersManagementPage() {
     if (!formData.email.trim()) errors.email = 'Email is required';
     else if (!validateEmail(formData.email)) errors.email = 'Email must be @company.com';
     if (!isEditDrawerOpen && !formData.password.trim()) errors.password = 'Password is required';
-    if (!formData.role) errors.role = 'Role is required';
+    if (!formData.role_id) errors.role_id = 'Role is required';
     if (formData.sections.length === 0) errors.sections = 'At least one section required';
 
     setFormErrors(errors);
@@ -137,8 +138,8 @@ export default function UsersManagementPage() {
       name: usr.name,
       email: usr.email,
       password: '',
-      role: usr.role,
-      sections: usr.sections,
+      role_id: usr.roleId || '',
+      sections: usr.sections || [],
       whatsapp: usr.whatsapp || '',
       notificationPreferences: usr.notificationPreferences || { email: true, whatsapp: false },
     });
@@ -151,7 +152,7 @@ export default function UsersManagementPage() {
       name: '',
       email: '',
       password: '',
-      role: '',
+      role_id: '',
       sections: [],
       whatsapp: '',
       notificationPreferences: { email: true, whatsapp: false },
@@ -231,7 +232,7 @@ export default function UsersManagementPage() {
               <tr key={usr.id} className="border-b border-indusia-border hover:bg-indusia-surfaceMuted transition-colors">
                 <td className="px-6 py-4 text-sm font-medium text-indusia-text">{usr.name}</td>
                 <td className="px-6 py-4 text-sm text-indusia-textMuted">{usr.email}</td>
-                <td className="px-6 py-4 text-sm text-indusia-text capitalize">{usr.role}</td>
+                <td className="px-6 py-4 text-sm text-indusia-text capitalize">{roles.find(r => r.id === usr.roleId)?.name || usr.roleId}</td>
                 <td className="px-6 py-4 text-sm text-indusia-textMuted">
                   {usr.sections.map(s => sections.find(sec => sec.id === s)?.name).join(', ')}
                 </td>
@@ -341,14 +342,14 @@ export default function UsersManagementPage() {
               <div>
                 <label className="block text-sm font-medium text-indusia-text mb-2">Role</label>
                 <select
-                  value={formData.role}
-                  onChange={(e) => setFormData(prev => ({ ...prev, role: e.target.value }))}
+                  value={formData.role_id}
+                  onChange={(e) => setFormData(prev => ({ ...prev, role_id: e.target.value }))}
                   className="w-full px-4 py-2 bg-indusia-bg border border-indusia-border rounded-lg text-indusia-text focus:outline-none focus:ring-2 focus:ring-indusia-primary"
                 >
                   <option value="">Select role...</option>
                   {roles.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
                 </select>
-                {formErrors.role && <p className="text-xs text-indusia-fail mt-1">{formErrors.role}</p>}
+                {formErrors.role_id && <p className="text-xs text-indusia-fail mt-1">{formErrors.role_id}</p>}
               </div>
 
               <div>
@@ -375,46 +376,6 @@ export default function UsersManagementPage() {
                 {formErrors.sections && <p className="text-xs text-indusia-fail mt-1">{formErrors.sections}</p>}
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-indusia-text mb-2">WhatsApp (Optional)</label>
-                <input
-                  type="text"
-                  value={formData.whatsapp}
-                  onChange={(e) => setFormData(prev => ({ ...prev, whatsapp: e.target.value }))}
-                  placeholder="+62xxxxxxxx"
-                  className="w-full px-4 py-2 bg-indusia-bg border border-indusia-border rounded-lg text-indusia-text focus:outline-none focus:ring-2 focus:ring-indusia-primary"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-indusia-text mb-2">Notifications</label>
-                <div className="space-y-2">
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={formData.notificationPreferences.email}
-                      onChange={(e) => setFormData(prev => ({
-                        ...prev,
-                        notificationPreferences: { ...prev.notificationPreferences, email: e.target.checked }
-                      }))}
-                      className="w-4 h-4 text-indusia-primary"
-                    />
-                    <span className="text-sm text-indusia-text">Email Notifications</span>
-                  </label>
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={formData.notificationPreferences.whatsapp}
-                      onChange={(e) => setFormData(prev => ({
-                        ...prev,
-                        notificationPreferences: { ...prev.notificationPreferences, whatsapp: e.target.checked }
-                      }))}
-                      className="w-4 h-4 text-indusia-primary"
-                    />
-                    <span className="text-sm text-indusia-text">WhatsApp Notifications</span>
-                  </label>
-                </div>
-              </div>
             </div>
 
             <div className="px-6 py-4 border-t border-indusia-border flex justify-end gap-3 sticky bottom-0 bg-indusia-surface">
@@ -452,8 +413,8 @@ export default function UsersManagementPage() {
           <div>
             <label className="block text-sm font-medium text-indusia-text mb-2">Role</label>
             <select
-              value={formData.role}
-              onChange={(e) => setFormData(prev => ({ ...prev, role: e.target.value }))}
+              value={formData.role_id}
+              onChange={(e) => setFormData(prev => ({ ...prev, role_id: e.target.value }))}
               className="w-full px-4 py-2 bg-indusia-bg border border-indusia-border rounded-lg text-indusia-text focus:outline-none focus:ring-2 focus:ring-indusia-primary"
             >
               {roles.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
@@ -480,46 +441,6 @@ export default function UsersManagementPage() {
                   </label>
                 ))
               )}
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-indusia-text mb-2">WhatsApp</label>
-            <input
-              type="text"
-              value={formData.whatsapp}
-              onChange={(e) => setFormData(prev => ({ ...prev, whatsapp: e.target.value }))}
-              className="w-full px-4 py-2 bg-indusia-bg border border-indusia-border rounded-lg text-indusia-text focus:outline-none focus:ring-2 focus:ring-indusia-primary"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-indusia-text mb-2">Notifications</label>
-            <div className="space-y-2">
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={formData.notificationPreferences.email}
-                  onChange={(e) => setFormData(prev => ({
-                    ...prev,
-                    notificationPreferences: { ...prev.notificationPreferences, email: e.target.checked }
-                  }))}
-                  className="w-4 h-4 text-indusia-primary"
-                />
-                <span className="text-sm text-indusia-text">Email Notifications</span>
-              </label>
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={formData.notificationPreferences.whatsapp}
-                  onChange={(e) => setFormData(prev => ({
-                    ...prev,
-                    notificationPreferences: { ...prev.notificationPreferences, whatsapp: e.target.checked }
-                  }))}
-                  className="w-4 h-4 text-indusia-primary"
-                />
-                <span className="text-sm text-indusia-text">WhatsApp Notifications</span>
-              </label>
             </div>
           </div>
 

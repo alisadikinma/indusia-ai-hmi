@@ -34,6 +34,9 @@ yarn-error.log*
 # OTA update restart trigger
 .restart-trigger
 
+# documentation source files (large binaries)
+docs/FAT_SAT/
+
 # vercel
 .vercel
 

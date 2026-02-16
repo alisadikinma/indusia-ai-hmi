@@ -55,7 +55,9 @@
       "Bash(git diff:*)",
       "Bash(pip show:*)",
       "Bash(ls:*)",
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "Bash(pip install:*)",
+      "Bash(test:*)"
     ],
     "deny": [],
     "ask": []

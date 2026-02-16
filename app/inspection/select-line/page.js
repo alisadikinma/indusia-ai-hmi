@@ -625,8 +625,8 @@ export default function SelectLinePage() {
 
           {/* Logo */}
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 border border-phosphor-teal flex items-center justify-center bg-terminal">
-              <span className="font-display font-bold text-lg text-phosphor-teal">IN</span>
+            <div className="w-10 h-10 border border-phosphor-teal flex items-center justify-center bg-void">
+              <img src="/indusiaai-logo.png" alt="INDUSIA AI" className="w-8 h-8 object-contain" />
             </div>
             <div>
               <h1 className="font-display font-bold text-lg tracking-wider text-text-primary">
