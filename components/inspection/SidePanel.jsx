@@ -32,12 +32,16 @@ const DEFECT_COLORS = {
   'default': '#EF4444'
 }
 
-// Generate a deterministic color from serial number using golden angle rotation.
-// Golden angle (137.508°) guarantees maximum visual separation between consecutive numbers.
+// Generate a deterministic color from serial number string.
+// Uses FNV-1a hash on the full string — no parseInt, no precision loss.
 // Same SN always produces the same color — TOP and BOTTOM thumbnails match visually.
 function snToColor(sn) {
-  const num = parseInt(sn.replace(/\D/g, ''), 10) || 0
-  const hue = (num * 137.508) % 360
+  let hash = 2166136261
+  for (let i = 0; i < sn.length; i++) {
+    hash ^= sn.charCodeAt(i)
+    hash = (hash * 16777619) | 0
+  }
+  const hue = ((hash >>> 0) * 137.508) % 360
   return `hsl(${hue}, 75%, 55%)`
 }
 
@@ -185,7 +189,7 @@ export function SidePanel({ side, frames = [], className, onFrameClick, reviewin
             style={{ cursor: zoom > 1 ? 'grab' : 'default' }}
           >
             {/* Floating Serial Number Badge */}
-            {activeFrame?.serial_number && (
+            {activeFrame?.serial_number && String(activeFrame.serial_number) !== '0' && (
               <div className="absolute top-2 left-1/2 -translate-x-1/2 z-10 px-3 py-1 rounded bg-void/85 border border-phosphor-teal/50 backdrop-blur-sm">
                 <span className="font-mono text-xs font-bold text-phosphor-teal">
                   SN: {activeFrame.serial_number}
@@ -271,8 +275,8 @@ export function SidePanel({ side, frames = [], className, onFrameClick, reviewin
                     )}
                   </div>
 
-                  {/* SN color bar — same SN on TOP and BOTTOM gets same color */}
-                  {frame.serial_number && (
+                  {/* SN color bar — same SN on TOP and BOTTOM gets same color. Hide for empty cavities (SN "0"). */}
+                  {frame.serial_number && String(frame.serial_number) !== '0' && (
                     <div
                       className="absolute bottom-0 left-0 right-0 h-1.5"
                       style={{ backgroundColor: snToColor(frame.serial_number) }}

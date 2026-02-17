@@ -1031,14 +1031,18 @@ export function LiveViewV3({
     const pcbCounts = falseCallData?.pcbCounts
     console.log('[LiveView] computeCounterDeltas:', { qty, operatorDecision, pcbCounts, hasFalseCallData: !!falseCallData })
     if (pcbCounts) {
-      // Clamp to cavity_count — frame grouping may report more "PCBs" than physical PCBs
-      // when serial_number is null and top/bottom have different frame counts per PCB.
-      const ngQty = Math.min(pcbCounts.ngPcbs, qty)
-      const goodQty = qty - ngQty
+      // Subtract empty cavities (SN "0") — they have no PCB inserted
+      const filledQty = Math.max(1, qty - (pcbCounts.emptyPcbs || 0))
+      // Clamp to filled cavity count — frame grouping may report more "PCBs" than physical PCBs
+      const ngQty = Math.min(pcbCounts.ngPcbs, filledQty)
+      const goodQty = filledQty - ngQty
       const falseCallCount = Math.min(pcbCounts.goodPcbs, goodQty)
-      if (pcbCounts.ngPcbs > qty || pcbCounts.goodPcbs > goodQty) {
-        console.warn('[LiveView] pcbCounts clamped to cavity_count=%d: ngPcbs %d→%d, goodPcbs %d→%d',
-          qty, pcbCounts.ngPcbs, ngQty, pcbCounts.goodPcbs, falseCallCount)
+      if (pcbCounts.emptyPcbs) {
+        console.log('[LiveView] Empty cavities excluded: %d of %d (filled=%d)', pcbCounts.emptyPcbs, qty, filledQty)
+      }
+      if (pcbCounts.ngPcbs > filledQty || pcbCounts.goodPcbs > goodQty) {
+        console.warn('[LiveView] pcbCounts clamped to filled=%d: ngPcbs %d→%d, goodPcbs %d→%d',
+          filledQty, pcbCounts.ngPcbs, ngQty, pcbCounts.goodPcbs, falseCallCount)
       }
       return {
         goodQty,
