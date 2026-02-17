@@ -49,5 +49,6 @@ nul
 NUL
 
 *.png
+!public/indusiaai-logo.png
 *.jpg
 *.jpeg
