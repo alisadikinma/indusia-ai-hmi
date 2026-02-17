@@ -3,7 +3,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { authFetch } from '@/lib/utils/authFetch'
 
-const CHECK_INTERVAL = 3600000 // 1 hour
+const CHECK_INTERVAL = 900000 // 15 minutes
 
 /**
  * useSystemUpdate Hook

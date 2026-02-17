@@ -25,7 +25,7 @@ export default function SystemUpdatePage() {
     changelog,
     loading: checkLoading,
     checkForUpdate,
-  } = useSystemUpdate({ autoCheck: false })
+  } = useSystemUpdate({ autoCheck: isSuperAdmin })
 
   // Page state
   const [isUpdating, setIsUpdating] = useState(false)
