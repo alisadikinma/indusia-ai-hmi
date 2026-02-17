@@ -53,7 +53,7 @@ function formatDuration(startTime, t) {
   }
 }
 
-function LineCard({ line, section, isSelected, onSelect, currentUserId, isOperator, t, models, selectedModel, onModelSelect, activeModelName, hasNoActiveWO }) {
+function LineCard({ line, section, isSelected, onSelect, onStartInspection, isStartReady, isLoading, currentUserId, isOperator, t, models, selectedModel, onModelSelect, activeModelName, hasNoActiveWO }) {
   const statusConfig = {
     running: { 
       label: t('lineStatus.running'), 
@@ -339,28 +339,45 @@ function LineCard({ line, section, isSelected, onSelect, currentUserId, isOperat
           )}
         </div>
 
-        {!isDisabled && (
-          <div className={cn(
-            "flex items-center gap-2 px-3 py-1.5 transition-colors",
-            isSelected && hasNoActiveWO
-              ? "bg-phosphor-red/20 text-phosphor-red"
-              : isSelected
-                ? "bg-phosphor-teal text-void"
-                : "bg-surface-border/50 text-text-secondary"
-          )}>
-            {!isOperator && <Eye size={12} />}
-            {isSelected && hasNoActiveWO && <AlertTriangle size={12} />}
-            <span className="font-display text-xs font-bold tracking-wider">
-              {isSelected && hasNoActiveWO ? 'NO WO' : isSelected ? t('line.selected') : isOperator ? t('line.select') : t('line.view')}
-            </span>
-            {!(isSelected && hasNoActiveWO) && <ChevronRight size={14} />}
-          </div>
-        )}
-        
         {isInUseByOther && isOperator && (
           <div className="flex items-center gap-2 px-3 py-1.5 bg-phosphor-cyan/10 text-phosphor-cyan">
             <Lock size={12} />
             <span className="font-display text-xs font-bold tracking-wider">{t('line.locked')}</span>
+          </div>
+        )}
+
+        {/* START INSPECTION / VIEW button — only when selected and ready */}
+        {isSelected && !isDisabled && isStartReady && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onStartInspection(); }}
+            disabled={isLoading}
+            className={cn(
+              "flex items-center gap-2 px-4 py-2 font-display text-sm font-bold tracking-wider transition-all",
+              isOperator
+                ? "bg-phosphor-green text-void hover:shadow-glow-green"
+                : "bg-phosphor-cyan text-void hover:shadow-glow-cyan"
+            )}
+          >
+            {isLoading ? (
+              <>
+                <div className="w-4 h-4 border-2 border-void border-t-transparent animate-spin" />
+                <span>{t('line.connecting')}</span>
+              </>
+            ) : (
+              <>
+                {isOperator ? <Zap size={16} /> : <Eye size={16} />}
+                <span>{isOperator ? t('line.startInspection') : t('line.viewInspection')}</span>
+                <ChevronRight size={16} />
+              </>
+            )}
+          </button>
+        )}
+
+        {/* Warning when selected but no WO */}
+        {isSelected && !isDisabled && hasNoActiveWO && (
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-phosphor-red/20 text-phosphor-red">
+            <AlertTriangle size={12} />
+            <span className="font-display text-xs font-bold tracking-wider">NO WO</span>
           </div>
         )}
       </div>
@@ -569,11 +586,10 @@ export default function SelectLinePage() {
 
   const getSection = (sectionId) => sections.find(s => s.id === sectionId);
 
-  const selectedLineModel = selectedLine ? selectedModels[selectedLine.id] : null;
-
   const handleStartInspection = () => {
     if (!selectedLine) return;
-    if (isOperator && !selectedLineModel) return;
+    const lineModel = selectedModels[selectedLine.id];
+    if (isOperator && !lineModel) return;
     if (isOperator && noWoWarning) return;
     setIsLoading(true);
 
@@ -581,7 +597,7 @@ export default function SelectLinePage() {
       setActiveLine(selectedLine.id, selectedLine.name);
     }
 
-    const modelParam = selectedLineModel ? `?model=${encodeURIComponent(selectedLineModel.name)}` : '';
+    const modelParam = lineModel ? `?model=${encodeURIComponent(lineModel.name)}` : '';
     router.push(`/inspection/live/${selectedLine.id}${modelParam}`);
   };
 
@@ -787,6 +803,12 @@ export default function SelectLinePage() {
                   section={getSection(line.sectionId)}
                   isSelected={selectedLine?.id === line.id}
                   onSelect={(line) => { setSelectedLine(line); setNoWoWarning(null); }}
+                  onStartInspection={handleStartInspection}
+                  isStartReady={
+                    selectedLine?.id === line.id &&
+                    (!isOperator || (selectedModels[line.id] && !noWoWarning))
+                  }
+                  isLoading={isLoading}
                   currentUserId={user?.id}
                   isOperator={isOperator}
                   t={t}
@@ -802,79 +824,6 @@ export default function SelectLinePage() {
         </div>
       </main>
 
-      {/* Bottom Action Bar - fixed to bottom of flex layout */}
-      <div className="shrink-0 h-16 bg-panel border-t border-surface-border flex items-center justify-between px-6">
-        <div className="flex items-center gap-4 min-w-0">
-          {selectedLine ? (
-            <div className="flex items-center gap-3 min-w-0">
-              <CheckCircle2 className="w-5 h-5 text-phosphor-green shrink-0" />
-              <div className="min-w-0">
-                <p className="font-display font-bold text-sm text-text-primary truncate">
-                  {selectedLine.name} {t('line.selected')}
-                </p>
-                <p className="font-mono text-xs text-text-tertiary truncate">
-                  {getSection(selectedLine.sectionId)?.name}
-                  {selectedLine.customerName && ` • ${selectedLine.customerName}${selectedLine.customerCode ? ` (${selectedLine.customerCode})` : ''}`}
-                  {selectedLineModel && (
-                    <span className="text-purple-400"> • {selectedLineModel.name} v{selectedLineModel.version}</span>
-                  )}
-                  {isOperator && !selectedLineModel && (
-                    <span className="text-phosphor-teal"> • {t('line.selectModelRequired') || 'Select AI model to continue'}</span>
-                  )}
-                  {!isOperator && ` • ${t('line.viewOnlyMode', { role: '' }).trim()}`}
-                </p>
-              </div>
-            </div>
-          ) : (
-            <div className="flex items-center gap-3">
-              <AlertTriangle className="w-5 h-5 text-phosphor-teal shrink-0" />
-              <div>
-                <p className="font-display font-bold text-sm text-phosphor-teal">
-                  {t('line.noLineSelected')}
-                </p>
-                <p className="font-mono text-xs text-text-tertiary">
-                  {t('line.selectLineToContinue')}
-                </p>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {noWoWarning && (
-          <div className="flex items-center gap-2 px-3 py-2 bg-phosphor-red/10 border border-phosphor-red/30 mx-4">
-            <AlertTriangle className="w-4 h-4 text-phosphor-red shrink-0" />
-            <p className="font-mono text-xs text-phosphor-red">
-              No WO for <span className="font-bold">{noWoWarning}</span>
-            </p>
-          </div>
-        )}
-
-        <button
-          onClick={handleStartInspection}
-          disabled={!selectedLine || isLoading || (isOperator && !selectedLineModel) || (isOperator && !!noWoWarning)}
-          className={cn(
-            "h-12 px-8 font-display text-base font-bold tracking-wider flex items-center gap-3 transition-all shrink-0",
-            selectedLine && (!isOperator || selectedLineModel) && !(isOperator && noWoWarning)
-              ? isOperator
-                ? "bg-phosphor-green text-void hover:shadow-glow-green"
-                : "bg-phosphor-cyan text-void hover:shadow-glow-cyan"
-              : "bg-surface-border text-text-tertiary cursor-not-allowed"
-          )}
-        >
-          {isLoading ? (
-            <>
-              <div className="w-5 h-5 border-2 border-void border-t-transparent animate-spin" />
-              <span>{t('line.connecting')}</span>
-            </>
-          ) : (
-            <>
-              {isOperator ? <Zap className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-              <span>{isOperator ? t('line.startInspection') : t('line.viewInspection')}</span>
-              <ChevronRight className="w-5 h-5" />
-            </>
-          )}
-        </button>
-      </div>
     </div>
   );
 }

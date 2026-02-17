@@ -121,6 +121,7 @@ export async function PUT(request, { params }) {
     const currentState = cache.get(lineId) || getDefaultState()
 
     // Update only provided fields (pass-through stage as-is from operator)
+    // Note: woCounterVersion is preserved — only bumpWoCounterVersion() sets it
     const updatedState = {
       ...currentState,
       ...(body.autoNgEnabled !== undefined && { autoNgEnabled: Boolean(body.autoNgEnabled) }),
@@ -131,6 +132,7 @@ export async function PUT(request, { params }) {
       ...(body.modelName !== undefined && { modelName: body.modelName }),
       ...(body.workOrderCounters !== undefined && { workOrderCounters: body.workOrderCounters }),
       ...(body.cycleTime !== undefined && { cycleTime: body.cycleTime }),
+      woCounterVersion: currentState.woCounterVersion || 0,
       updatedAt: new Date().toISOString(),
       updatedBy: body.updatedBy || null
     }

@@ -134,7 +134,7 @@ export default function SystemUpdatePage() {
     try {
       const res = await authFetch('/api/system/update', {
         method: 'POST',
-        body: JSON.stringify({ targetVersion: latestVersion }),
+        body: JSON.stringify({ targetVersion: latestVersion, skipRestart: true }),
       })
 
       const reader = res.body.getReader()

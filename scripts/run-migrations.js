@@ -207,9 +207,10 @@ async function runMigrations(appliedBy = 'system') {
 // Export for use as module
 module.exports = { runMigrations, getPendingMigrations, scanMigrationFiles };
 
-// Run standalone if called directly
-if (require.main === module) {
-  // Load .env.local for standalone execution
+/**
+ * Load .env.local for standalone execution
+ */
+function loadEnv() {
   const envPath = path.join(__dirname, '..', '.env.local');
   if (fs.existsSync(envPath)) {
     const envContent = fs.readFileSync(envPath, 'utf-8');
@@ -227,15 +228,63 @@ if (require.main === module) {
       }
     }
   }
+}
 
-  runMigrations('cli')
-    .then(result => {
-      if (result.errors.length > 0) {
+// Run standalone if called directly
+// Modes: --json (run + JSON output), --pending (check pending + JSON output), default (run + console)
+if (require.main === module) {
+  loadEnv();
+
+  const args = process.argv.slice(2);
+  const jsonMode = args.includes('--json');
+  const pendingMode = args.includes('--pending');
+  const appliedBy = args.find(a => a.startsWith('--user='))?.split('=')[1] || 'cli';
+
+  // In JSON mode, suppress all console.log/warn/error to keep stdout clean for JSON
+  if (jsonMode) {
+    const origLog = console.log;
+    const origWarn = console.warn;
+    const origError = console.error;
+    console.log = (...a) => process.stderr.write(a.join(' ') + '\n');
+    console.warn = (...a) => process.stderr.write(a.join(' ') + '\n');
+    console.error = (...a) => process.stderr.write(a.join(' ') + '\n');
+  }
+
+  if (pendingMode) {
+    getPendingMigrations()
+      .then(result => {
+        if (jsonMode) {
+          process.stdout.write(JSON.stringify(result));
+        } else {
+          console.log(`Pending: ${result.pending.length}, Applied: ${result.applied}, Total: ${result.total}`);
+          result.pending.forEach(f => console.log(`  - ${f}`));
+        }
+      })
+      .catch(err => {
+        if (jsonMode) {
+          process.stdout.write(JSON.stringify({ error: err.message }));
+        } else {
+          console.error('Failed:', err);
+        }
         process.exit(1);
-      }
-    })
-    .catch(err => {
-      console.error('Migration runner failed:', err);
-      process.exit(1);
-    });
+      });
+  } else {
+    runMigrations(appliedBy)
+      .then(result => {
+        if (jsonMode) {
+          process.stdout.write(JSON.stringify(result));
+        }
+        if (result.errors.length > 0) {
+          process.exit(1);
+        }
+      })
+      .catch(err => {
+        if (jsonMode) {
+          process.stdout.write(JSON.stringify({ applied: 0, errors: [{ filename: 'fatal', error: err.message }] }));
+        } else {
+          console.error('Migration runner failed:', err);
+        }
+        process.exit(1);
+      });
+  }
 }

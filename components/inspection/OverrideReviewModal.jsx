@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { X, FileText, CheckCircle, XCircle, ImageIcon, ChevronLeft, ChevronRight, Eye, Layers, Hash, AlertCircle } from 'lucide-react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import { X, FileText, CheckCircle, XCircle, ImageIcon, Eye, Layers, Hash } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
 import { useI18n } from '@/context/I18nContext';
@@ -61,6 +61,21 @@ export default function OverrideReviewModal({
   const totalFrames = allFrames.length;
   const currentFrame = allFrames[reviewIndex] || null;
 
+  // Group frames by serial number for tabbed view
+  const framesBySn = useMemo(() => {
+    if (!allFrames.length) return {};
+    const groups = {};
+    allFrames.forEach((frame, globalIdx) => {
+      const sn = frame.serialNumber || `PCB-${globalIdx + 1}`;
+      if (!groups[sn]) groups[sn] = [];
+      groups[sn].push({ ...frame, globalIdx });
+    });
+    return groups;
+  }, [allFrames]);
+
+  const snList = useMemo(() => Object.keys(framesBySn), [framesBySn]);
+  const [activeSn, setActiveSn] = useState('');
+
   // Load existing decisions for read-only view
   const existingDecisions = useMemo(() => {
     if (!override) return null;
@@ -82,6 +97,7 @@ export default function OverrideReviewModal({
     setReviewIndex(0);
     setShowSummary(false);
     setIsProcessing(false);
+    setActiveSn(''); // Will be set by snList effect below
     // Load existing decisions for read-only, or start fresh
     if (existingDecisions) {
       setFrameDecisions(existingDecisions);
@@ -89,6 +105,13 @@ export default function OverrideReviewModal({
       setFrameDecisions({});
     }
   }, [override?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Initialize activeSn when snList becomes available
+  useEffect(() => {
+    if (snList.length > 0 && !activeSn) {
+      setActiveSn(snList[0]);
+    }
+  }, [snList, activeSn]);
 
   // Frame key helper
   const getFrameKey = useCallback((frame) => {
@@ -102,34 +125,12 @@ export default function OverrideReviewModal({
   const rejectedCount = Object.values(frameDecisions).filter(d => d === 'rejected').length;
   const allReviewed = isMultiFrame && reviewedCount === totalFrames;
 
-  // Find next unreviewed frame
-  const findNextUnreviewed = useCallback((fromIndex, decisions) => {
-    for (let i = 0; i < totalFrames; i++) {
-      const idx = (fromIndex + i) % totalFrames;
-      const key = getFrameKey(allFrames[idx]);
-      if (!decisions[key]) return idx;
-    }
-    return -1; // all reviewed
-  }, [totalFrames, allFrames, getFrameKey]);
-
-  // Per-frame decision handler
+  // Per-frame decision handler (used by keyboard shortcuts)
   const handleFrameDecision = useCallback((decision) => {
     if (!currentFrame || isAlreadyReviewed) return;
     const key = getFrameKey(currentFrame);
-    const newDecisions = { ...frameDecisions, [key]: decision };
-    setFrameDecisions(newDecisions);
-
-    // Auto-advance to next unreviewed
-    const nextIdx = findNextUnreviewed(reviewIndex + 1, newDecisions);
-    if (nextIdx === -1) {
-      // All frames reviewed — show summary after brief delay
-      setTimeout(() => setShowSummary(true), 600);
-    } else {
-      setReviewIndex(nextIdx);
-      setImageError(false);
-      setShowRawImage(false);
-    }
-  }, [currentFrame, isAlreadyReviewed, frameDecisions, reviewIndex, getFrameKey, findNextUnreviewed]);
+    setFrameDecisions(prev => ({ ...prev, [key]: decision }));
+  }, [currentFrame, isAlreadyReviewed, getFrameKey]);
 
   // Submit all frame decisions
   const handleSubmitReview = async () => {
@@ -194,6 +195,9 @@ export default function OverrideReviewModal({
     }
   };
 
+  // Frames for the active SN tab
+  const activeSnFrames = useMemo(() => framesBySn[activeSn] || [], [framesBySn, activeSn]);
+
   const handleClose = () => {
     if (isProcessing) return;
     setReviewerNotes('');
@@ -203,6 +207,7 @@ export default function OverrideReviewModal({
     setFrameDecisions({});
     setReviewIndex(0);
     setShowSummary(false);
+    setActiveSn('');
     onClose();
   };
 
@@ -211,27 +216,36 @@ export default function OverrideReviewModal({
     if (!isOpen || !isMultiFrame || !isPending || showSummary) return;
 
     const handleKeyDown = (e) => {
-      const key = currentFrame ? getFrameKey(currentFrame) : '';
-      const isCurrentReviewed = frameDecisions[key] != null;
-
       if (e.key === 'a' || e.key === 'A') {
-        if (!isCurrentReviewed) {
-          e.preventDefault();
-          handleFrameDecision('approved');
-        }
+        e.preventDefault();
+        handleFrameDecision('approved');
       } else if (e.key === 'r' || e.key === 'R') {
-        if (!isCurrentReviewed) {
-          e.preventDefault();
-          handleFrameDecision('rejected');
-        }
+        e.preventDefault();
+        handleFrameDecision('rejected');
       } else if (e.key === 'ArrowLeft') {
         e.preventDefault();
-        setReviewIndex(prev => Math.max(0, prev - 1));
+        setReviewIndex(prev => {
+          const next = Math.max(0, prev - 1);
+          const nextFrame = allFrames[next];
+          if (nextFrame) {
+            const sn = nextFrame.serialNumber || `PCB-${next + 1}`;
+            setActiveSn(sn);
+          }
+          return next;
+        });
         setImageError(false);
         setShowRawImage(false);
       } else if (e.key === 'ArrowRight') {
         e.preventDefault();
-        setReviewIndex(prev => Math.min(totalFrames - 1, prev + 1));
+        setReviewIndex(prev => {
+          const next = Math.min(totalFrames - 1, prev + 1);
+          const nextFrame = allFrames[next];
+          if (nextFrame) {
+            const sn = nextFrame.serialNumber || `PCB-${next + 1}`;
+            setActiveSn(sn);
+          }
+          return next;
+        });
         setImageError(false);
         setShowRawImage(false);
       } else if (e.key === 'Escape') {
@@ -242,7 +256,7 @@ export default function OverrideReviewModal({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, isMultiFrame, isPending, showSummary, currentFrame, frameDecisions, getFrameKey, handleFrameDecision, totalFrames]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isOpen, isMultiFrame, isPending, showSummary, handleFrameDecision, totalFrames]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Build image URL
   const getFrameImageUrl = (frame) => {
@@ -291,7 +305,7 @@ export default function OverrideReviewModal({
                 {isMultiFrame && !showSummary && (
                   <>
                     <span className="px-1.5 py-0.5 rounded bg-phosphor-teal/20 text-phosphor-teal text-xs font-mono font-bold">
-                      Frame {reviewIndex + 1}/{totalFrames}
+                      {snList.length} PCB{snList.length !== 1 ? 's' : ''} &middot; {totalFrames} frames
                     </span>
                     {reviewedCount > 0 && (
                       <span className="px-1.5 py-0.5 rounded bg-phosphor-cyan/20 text-phosphor-cyan text-xs font-mono">
@@ -329,45 +343,96 @@ export default function OverrideReviewModal({
           )}
 
           {isMultiFrame && showSummary ? (
-            /* ============ Summary View (after all frames reviewed) ============ */
+            /* ============ Summary View — grouped by SN (PCB) ============ */
             <div className="space-y-4">
-              <div className="text-center py-4">
-                <CheckCircle className="w-10 h-10 text-phosphor-teal mx-auto mb-2" />
-                <h3 className="text-lg font-display font-bold text-text-primary">
-                  All Frames Reviewed
-                </h3>
-                <p className="text-sm text-text-secondary mt-1">
-                  {approvedCount} approved, {rejectedCount} rejected
-                </p>
-              </div>
+              {/* PCB-level summary grouped by SN */}
+              {(() => {
+                // Compute PCB-level verdicts
+                const pcbNgCount = snList.filter(sn => {
+                  const frames = framesBySn[sn];
+                  return frames.some(f => frameDecisions[getFrameKey(f)] === 'rejected');
+                }).length;
+                const pcbOkCount = snList.length - pcbNgCount;
 
-              {/* Per-frame decision summary */}
-              <div className="space-y-1">
-                {allFrames.map((frame, idx) => {
-                  const key = getFrameKey(frame);
-                  const decision = frameDecisions[key];
-                  return (
-                    <div key={key} className="flex items-center gap-3 bg-elevated rounded px-3 py-2 border border-surface-border">
-                      <button
-                        onClick={() => { setShowSummary(false); setReviewIndex(idx); }}
-                        className="flex items-center gap-2 flex-1 text-left hover:text-phosphor-teal transition-colors"
-                      >
-                        <span className="text-xs font-mono text-text-tertiary w-16">{frame.side} F{frame.frameIndex}</span>
-                        <span className="text-xs text-text-secondary truncate">
-                          {frame.serialNumber || '-'}
-                        </span>
-                      </button>
-                      <span className={cn(
-                        "flex items-center gap-1 px-2 py-0.5 rounded text-xs font-mono font-medium",
-                        decision === 'approved' ? "bg-phosphor-green/15 text-phosphor-green" : "bg-phosphor-red/15 text-phosphor-red"
-                      )}>
-                        {decision === 'approved' ? <CheckCircle className="w-3 h-3" /> : <XCircle className="w-3 h-3" />}
-                        {decision === 'approved' ? 'Approved' : 'Rejected'}
-                      </span>
+                return (
+                  <>
+                    {/* Header stats */}
+                    <div className="flex items-center justify-between px-1">
+                      <h3 className="text-sm font-display font-bold text-text-primary">
+                        Review Summary
+                      </h3>
+                      <div className="flex items-center gap-3">
+                        {pcbOkCount > 0 && (
+                          <span className="text-xs font-mono text-phosphor-green">{pcbOkCount} PCB OK</span>
+                        )}
+                        {pcbNgCount > 0 && (
+                          <span className="text-xs font-mono text-phosphor-red">{pcbNgCount} PCB NG</span>
+                        )}
+                      </div>
                     </div>
-                  );
-                })}
-              </div>
+
+                    {/* SN groups */}
+                    <div className="space-y-2">
+                      {snList.map(sn => {
+                        const frames = framesBySn[sn];
+                        const hasRejection = frames.some(f => frameDecisions[getFrameKey(f)] === 'rejected');
+                        const pcbVerdict = hasRejection ? 'NG' : 'OK';
+
+                        return (
+                          <div key={sn} className={cn(
+                            "rounded-lg border overflow-hidden",
+                            hasRejection ? "border-phosphor-red/40" : "border-phosphor-green/40"
+                          )}>
+                            {/* SN header row */}
+                            <div className={cn(
+                              "flex items-center justify-between px-3 py-1.5",
+                              hasRejection ? "bg-phosphor-red/5" : "bg-phosphor-green/5"
+                            )}>
+                              <div className="flex items-center gap-2">
+                                <Hash className="w-3 h-3 text-text-tertiary" />
+                                <span className="font-mono text-xs font-medium text-text-primary">{sn}</span>
+                                <span className="text-xxs text-text-tertiary font-mono">
+                                  {frames.length} frame{frames.length !== 1 ? 's' : ''}
+                                </span>
+                              </div>
+                              <span className={cn(
+                                "flex items-center gap-1 px-2 py-0.5 rounded text-xs font-mono font-bold",
+                                hasRejection ? "bg-phosphor-red/20 text-phosphor-red" : "bg-phosphor-green/20 text-phosphor-green"
+                              )}>
+                                {hasRejection ? <XCircle className="w-3 h-3" /> : <CheckCircle className="w-3 h-3" />}
+                                {pcbVerdict}
+                              </span>
+                            </div>
+                            {/* Frame rows within SN */}
+                            <div className="divide-y divide-surface-border">
+                              {frames.map(frame => {
+                                const key = getFrameKey(frame);
+                                const decision = frameDecisions[key];
+                                return (
+                                  <button
+                                    key={key}
+                                    onClick={() => { setShowSummary(false); setReviewIndex(frame.globalIdx); setActiveSn(sn); }}
+                                    className="w-full flex items-center gap-3 px-3 py-1.5 hover:bg-elevated/50 transition-colors text-left"
+                                  >
+                                    <span className="text-xs font-mono text-text-tertiary w-20">{frame.side} F{frame.frameIndex}</span>
+                                    <span className={cn(
+                                      "flex items-center gap-1 text-xs font-mono ml-auto",
+                                      decision === 'approved' ? "text-phosphor-green" : "text-phosphor-red"
+                                    )}>
+                                      {decision === 'approved' ? <CheckCircle className="w-3 h-3" /> : <XCircle className="w-3 h-3" />}
+                                      {decision === 'approved' ? 'Approved' : 'Rejected'}
+                                    </span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </>
+                );
+              })()}
 
               {/* Reviewer notes */}
               {isPending && (
@@ -388,9 +453,143 @@ export default function OverrideReviewModal({
             </div>
 
           ) : isMultiFrame ? (
-            /* ============ Per-Frame Review View ============ */
+            /* ============ Per-Frame Review View (Tabbed by SN) ============ */
             <>
-              {/* Main frame image */}
+              {/* SN Tab Bar */}
+              {snList.length > 1 && (
+                <div className="flex items-center gap-1 overflow-x-auto pb-1">
+                  {snList.map(sn => {
+                    const frames = framesBySn[sn];
+                    const isActive = activeSn === sn;
+                    const decidedCount = frames.filter(f => frameDecisions[getFrameKey(f)] != null).length;
+                    const allDecided = decidedCount === frames.length;
+                    return (
+                      <button
+                        key={sn}
+                        onClick={() => {
+                          setActiveSn(sn);
+                          setReviewIndex(frames[0].globalIdx);
+                          setImageError(false);
+                          setShowRawImage(false);
+                        }}
+                        className={cn(
+                          "flex items-center gap-2 px-3 py-1.5 border font-mono text-xs transition-all flex-shrink-0",
+                          isActive
+                            ? "border-phosphor-teal bg-phosphor-teal/10 text-phosphor-teal"
+                            : allDecided
+                              ? "border-phosphor-green/40 bg-phosphor-green/5 text-phosphor-green hover:border-phosphor-green/60"
+                              : "border-surface-border bg-terminal text-text-secondary hover:border-text-tertiary"
+                        )}
+                      >
+                        <Hash className="w-3 h-3" />
+                        <span className="font-medium">{sn}</span>
+                        <span className={cn(
+                          "px-1.5 py-0.5 rounded text-xxs font-bold",
+                          isActive ? "bg-phosphor-teal/20" : "bg-surface-border"
+                        )}>
+                          {frames.length} frame{frames.length !== 1 ? 's' : ''} &middot; {frames.reduce((sum, f) => sum + (f.objects?.length || 0), 0)} obj
+                        </span>
+                        {allDecided && <CheckCircle className="w-3 h-3" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Single SN header (when only one SN) */}
+              {snList.length === 1 && (
+                <div className="flex items-center gap-2 px-3 py-1.5 border border-phosphor-teal/30 bg-phosphor-teal/5">
+                  <Hash className="w-3.5 h-3.5 text-phosphor-teal" />
+                  <span className="font-mono text-sm font-medium text-phosphor-teal">{snList[0]}</span>
+                  <span className="font-mono text-xs text-text-tertiary">
+                    {totalFrames} {totalFrames === 1 ? 'issue' : 'issues'}
+                  </span>
+                </div>
+              )}
+
+              {/* Compact frame rows for active SN — thumbnail + label + approve/reject */}
+              {activeSnFrames.length > 0 && (
+                <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                  {activeSnFrames.map((frame) => {
+                    const key = getFrameKey(frame);
+                    const isActive = frame.globalIdx === reviewIndex;
+                    const decision = frameDecisions[key];
+                    const hasDecision = decision != null;
+
+                    return (
+                      <div key={key} className="flex flex-col items-center gap-1 flex-shrink-0">
+                        {/* Thumbnail — click to view */}
+                        <button
+                          onClick={() => { setReviewIndex(frame.globalIdx); setImageError(false); setShowRawImage(false); }}
+                          className={cn(
+                            "relative w-24 h-16 rounded overflow-hidden border-2 transition-all",
+                            isActive ? "border-phosphor-teal ring-2 ring-phosphor-teal/30"
+                              : hasDecision ? (decision === 'approved' ? "border-phosphor-green/80" : "border-phosphor-red/80")
+                              : "border-surface-border hover:border-text-tertiary"
+                          )}
+                        >
+                          {frame.imageAnnotatedPath ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={`/api/storage/false-calls/${frame.imageAnnotatedPath}`}
+                              alt={`${frame.side} F${frame.frameIndex}`}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <div className="w-full h-full bg-elevated flex items-center justify-center">
+                              <ImageIcon className="w-4 h-4 text-text-tertiary" />
+                            </div>
+                          )}
+                          <div className="absolute bottom-0 inset-x-0 bg-void/80 text-center">
+                            <span className="text-xxs font-mono text-text-primary">
+                              {frame.side} F{frame.frameIndex}
+                            </span>
+                          </div>
+                        </button>
+                        {/* Inline approve/reject toggle */}
+                        {isPending ? (
+                          <div className="flex items-center rounded overflow-hidden border border-surface-border">
+                            <button
+                              onClick={() => setFrameDecisions(prev => ({ ...prev, [key]: 'approved' }))}
+                              className={cn(
+                                "px-2 py-0.5 transition-all",
+                                decision === 'approved'
+                                  ? "bg-phosphor-green/20 text-phosphor-green"
+                                  : "text-text-tertiary hover:text-phosphor-green hover:bg-phosphor-green/5"
+                              )}
+                              title="Approve"
+                            >
+                              <CheckCircle className="w-3.5 h-3.5" />
+                            </button>
+                            <div className="w-px h-4 bg-surface-border" />
+                            <button
+                              onClick={() => setFrameDecisions(prev => ({ ...prev, [key]: 'rejected' }))}
+                              className={cn(
+                                "px-2 py-0.5 transition-all",
+                                decision === 'rejected'
+                                  ? "bg-phosphor-red/20 text-phosphor-red"
+                                  : "text-text-tertiary hover:text-phosphor-red hover:bg-phosphor-red/5"
+                              )}
+                              title="Reject"
+                            >
+                              <XCircle className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ) : hasDecision && (
+                          <span className={cn(
+                            "text-xxs font-mono font-medium px-1.5 py-0.5 rounded",
+                            decision === 'approved' ? "bg-phosphor-green/15 text-phosphor-green" : "bg-phosphor-red/15 text-phosphor-red"
+                          )}>
+                            {decision === 'approved' ? 'Approved' : 'Rejected'}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Main frame detail */}
               {currentFrame && (
                 <div className="space-y-3">
                   <div className="relative bg-void rounded-lg border border-surface-border overflow-hidden">
@@ -420,35 +619,6 @@ export default function OverrideReviewModal({
                       </button>
                     </div>
 
-                    {/* SN badge */}
-                    {currentFrame.serialNumber && (
-                      <div className="absolute top-2 left-2 z-10 px-2 py-0.5 rounded bg-void/80 border border-phosphor-teal/50 backdrop-blur-sm">
-                        <span className="font-mono text-xs font-bold text-phosphor-teal">
-                          SN: {currentFrame.serialNumber}
-                        </span>
-                      </div>
-                    )}
-
-                    {/* Nav arrows */}
-                    {totalFrames > 1 && (
-                      <>
-                        <button
-                          onClick={() => { setReviewIndex(i => Math.max(0, i - 1)); setImageError(false); setShowRawImage(false); }}
-                          disabled={reviewIndex === 0}
-                          className="absolute left-2 top-1/2 -translate-y-1/2 z-10 p-1.5 rounded-full bg-void/70 border border-surface-border text-text-secondary hover:text-phosphor-teal disabled:opacity-20 disabled:cursor-not-allowed transition-all"
-                        >
-                          <ChevronLeft className="w-5 h-5" />
-                        </button>
-                        <button
-                          onClick={() => { setReviewIndex(i => Math.min(totalFrames - 1, i + 1)); setImageError(false); setShowRawImage(false); }}
-                          disabled={reviewIndex === totalFrames - 1}
-                          className="absolute right-2 top-1/2 -translate-y-1/2 z-10 p-1.5 rounded-full bg-void/70 border border-surface-border text-text-secondary hover:text-phosphor-teal disabled:opacity-20 disabled:cursor-not-allowed transition-all"
-                        >
-                          <ChevronRight className="w-5 h-5" />
-                        </button>
-                      </>
-                    )}
-
                     {getFrameImageUrl(currentFrame) && !imageError ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
@@ -466,10 +636,9 @@ export default function OverrideReviewModal({
                   </div>
 
                   {/* Frame metadata */}
-                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                     <MetaCell label="Side" value={currentFrame.side} />
                     <MetaCell label="Frame" value={`F${currentFrame.frameIndex}`} />
-                    <MetaCell label="SN" value={currentFrame.serialNumber || '-'} />
                     <MetaCell label="Position" value={currentFrame.position ?? '-'} />
                     <MetaCell label="Reason" value={currentFrame.falseCallReason || '-'} highlight />
                   </div>
@@ -478,7 +647,7 @@ export default function OverrideReviewModal({
                   {currentFrame.objects?.length > 0 && (
                     <div>
                       <h4 className="text-xs font-mono text-text-tertiary uppercase mb-1.5">
-                        Detected Objects ({currentFrame.objects.length})
+                        Detected Objects — {currentFrame.side} F{currentFrame.frameIndex} ({currentFrame.objects.length})
                       </h4>
                       <div className="space-y-1">
                         {currentFrame.objects.map((obj, i) => (
@@ -497,63 +666,6 @@ export default function OverrideReviewModal({
                       </div>
                     </div>
                   )}
-                </div>
-              )}
-
-              {/* Frame thumbnail strip */}
-              {totalFrames > 1 && (
-                <div className="flex items-center gap-2 overflow-x-auto pb-1 justify-center">
-                  {allFrames.map((frame, idx) => {
-                    const key = getFrameKey(frame);
-                    const isActive = idx === reviewIndex;
-                    const decision = frameDecisions[key];
-                    const hasDecision = decision != null;
-
-                    return (
-                      <button
-                        key={key}
-                        onClick={() => { setReviewIndex(idx); setImageError(false); setShowRawImage(false); }}
-                        className={cn(
-                          "relative flex-shrink-0 w-20 h-14 rounded overflow-hidden border-2 transition-all",
-                          isActive ? "border-phosphor-teal ring-2 ring-phosphor-teal/30"
-                            : hasDecision ? (decision === 'approved' ? "border-phosphor-green/80" : "border-phosphor-red/80")
-                            : "border-surface-border hover:border-text-tertiary"
-                        )}
-                      >
-                        {frame.imageAnnotatedPath ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={`/api/storage/false-calls/${frame.imageAnnotatedPath}`}
-                            alt={`${frame.side} F${frame.frameIndex}`}
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          <div className="w-full h-full bg-elevated flex items-center justify-center">
-                            <ImageIcon className="w-4 h-4 text-text-tertiary" />
-                          </div>
-                        )}
-                        {/* Side label */}
-                        <div className="absolute bottom-0 inset-x-0 bg-void/80 text-center">
-                          <span className="text-xxs font-mono text-text-primary">
-                            {frame.side} F{frame.frameIndex}
-                          </span>
-                        </div>
-                        {/* Decision badge */}
-                        <div className={cn(
-                          "absolute top-0.5 right-0.5 w-4 h-4 rounded-full flex items-center justify-center",
-                          hasDecision
-                            ? (decision === 'approved' ? "bg-phosphor-green" : "bg-phosphor-red")
-                            : "bg-text-tertiary/50"
-                        )}>
-                          {hasDecision
-                            ? (decision === 'approved'
-                              ? <CheckCircle className="w-3 h-3 text-white" />
-                              : <XCircle className="w-3 h-3 text-white" />)
-                            : <AlertCircle className="w-3 h-3 text-white" />}
-                        </div>
-                      </button>
-                    );
-                  })}
                 </div>
               )}
             </>
@@ -682,58 +794,38 @@ export default function OverrideReviewModal({
                 ) : (
                   <>
                     <CheckCircle className="w-4 h-4" />
-                    Submit Review ({approvedCount} / {rejectedCount})
+                    Submit Review
                   </>
                 )}
               </button>
             </>
 
           ) : isMultiFrame && isPending ? (
-            /* Per-frame footer: Approve/Reject buttons */
+            /* Per-frame footer: progress + submit */
             <>
-              {/* Keyboard hint */}
-              <div className="text-xs text-text-tertiary font-mono">
-                A = Approve &middot; R = Reject &middot; &larr;&rarr; Navigate
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-text-tertiary font-mono">
+                  {reviewedCount}/{totalFrames} reviewed
+                </span>
+                {approvedCount > 0 && (
+                  <span className="text-xs font-mono text-phosphor-green">{approvedCount} approved</span>
+                )}
+                {rejectedCount > 0 && (
+                  <span className="text-xs font-mono text-phosphor-red">{rejectedCount} rejected</span>
+                )}
               </div>
-              {isCurrentReviewed ? (
-                <div className="flex items-center gap-3">
-                  <span className={cn(
-                    "font-mono text-sm px-3 py-1 rounded",
-                    currentDecision === 'approved' ? "bg-phosphor-green/20 text-phosphor-green" : "bg-phosphor-red/20 text-phosphor-red"
-                  )}>
-                    {currentDecision === 'approved' ? 'Approved' : 'Rejected'}
-                  </span>
-                  {allReviewed && (
-                    <button
-                      onClick={() => setShowSummary(true)}
-                      className="px-4 py-2 bg-phosphor-teal text-void rounded-lg font-display font-bold text-sm hover:bg-phosphor-teal-bright transition-all flex items-center gap-1.5"
-                    >
-                      <CheckCircle className="w-4 h-4" />
-                      Review Summary
-                    </button>
-                  )}
-                </div>
+              {allReviewed ? (
+                <button
+                  onClick={() => setShowSummary(true)}
+                  className="px-5 py-2 bg-phosphor-teal text-void rounded-lg font-display font-bold text-sm hover:bg-phosphor-teal-bright transition-all flex items-center gap-1.5"
+                >
+                  <CheckCircle className="w-4 h-4" />
+                  Submit Review
+                </button>
               ) : (
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={() => handleFrameDecision('rejected')}
-                    disabled={isProcessing}
-                    className="px-5 py-2 border border-phosphor-red text-phosphor-red rounded-lg font-medium text-sm hover:bg-phosphor-red/10 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
-                  >
-                    <XCircle className="w-4 h-4" />
-                    Reject
-                    <span className="text-xs opacity-60 font-mono">(R)</span>
-                  </button>
-                  <button
-                    onClick={() => handleFrameDecision('approved')}
-                    disabled={isProcessing}
-                    className="px-5 py-2 bg-phosphor-green text-void rounded-lg font-display font-bold text-sm hover:bg-phosphor-green-bright transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
-                  >
-                    <CheckCircle className="w-4 h-4" />
-                    Approve
-                    <span className="text-xs opacity-60 font-mono">(A)</span>
-                  </button>
-                </div>
+                <span className="text-xs text-text-tertiary font-mono">
+                  Review all frames to submit
+                </span>
               )}
             </>
 

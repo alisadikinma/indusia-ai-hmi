@@ -313,21 +313,33 @@ export function LiveViewV3({
   const [syncLoaded, setSyncLoaded] = useState(false)
   
   // Fetch line state from API
+  // Track woCounterVersion — when override review patches counters,
+  // line-state version is bumped. Detect change → trigger refreshWO().
+  const woCounterVersionRef = useRef(0)
+
   const fetchLineState = useCallback(async () => {
     try {
       const response = await authFetch(`/api/inspection/line-state/${lineId}`)
       const result = await response.json()
-      
+
       if (result.success && result.data) {
+        // Detect external WO counter changes (e.g. override review patched counters)
+        const serverVersion = result.data.woCounterVersion || 0
+        if (serverVersion > woCounterVersionRef.current) {
+          woCounterVersionRef.current = serverVersion
+          // Trigger WO refresh to pick up corrected counters from DB
+          refreshWO()
+        }
+
         // Calculate new autoNgEnabled value (default OFF)
         const newAutoNgEnabled = result.data.autoNgEnabled ?? false
-        
+
         // Only update local autoNgEnabled for Operator
         // Manager uses syncedState.autoNgEnabled exclusively
         if (isOperator) {
           setAutoNgEnabled(newAutoNgEnabled)
         }
-        
+
         // Create new synced state object
         const newSyncedState = {
           processStatus: result.data.processStatus || 'IDLE',
@@ -344,7 +356,7 @@ export function LiveViewV3({
           workOrderCounters: result.data.workOrderCounters || null,
           cycleTime: result.data.cycleTime || null
         }
-        
+
         setSyncedState(newSyncedState)
         setSyncLoaded(true)
 
@@ -386,8 +398,8 @@ export function LiveViewV3({
     } catch (error) {
       console.warn('[LiveView] Failed to fetch line state:', error)
     }
-  }, [lineId, isOperator])
-  
+  }, [lineId, isOperator, refreshWO]) // eslint-disable-line react-hooks/exhaustive-deps
+
   // Save line state to API (full state sync)
   const saveLineState = useCallback(async (updates) => {
     try {
@@ -765,26 +777,16 @@ export function LiveViewV3({
     return () => clearInterval(interval)
   }, [])
 
-  // VIEW ONLY mode: Fast polling for line state (500ms) + slow polling for WO data (5s)
-  // Line state needs fast refresh for real-time stage/inspection updates
-  // Work order data changes rarely - polling every 5s is sufficient
+  // Line-state polling — role-specific intervals
+  // Manager: 500ms (fast — real-time stage/inspection updates)
+  // Operator: 5s (slow — only checks woCounterVersion for external counter changes)
+  // When woCounterVersion changes, fetchLineState auto-triggers refreshWO()
   useEffect(() => {
-    if (!isOperator && workOrder && lineId) {
-      // Initial fetch immediately
-      fetchLineState()
-
-      // Fast interval: line state only (500ms)
-      const stateInterval = setInterval(fetchLineState, 500)
-
-      // Slow interval: work order refresh (5s)
-      const woInterval = setInterval(refreshWO, 5000)
-
-      return () => {
-        clearInterval(stateInterval)
-        clearInterval(woInterval)
-      }
-    }
-  }, [isOperator, workOrder, lineId, refreshWO, fetchLineState])
+    if (!workOrder || !lineId) return
+    fetchLineState()
+    const interval = setInterval(fetchLineState, isOperator ? 5000 : 500)
+    return () => clearInterval(interval)
+  }, [workOrder, lineId, isOperator, fetchLineState])
 
   // Note: VIEW ONLY mode no longer needs stage reset detection
   // because Manager now uses syncedState exclusively from API

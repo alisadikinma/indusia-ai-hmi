@@ -25,6 +25,7 @@ async function handlePOST(request) {
 
   const fromVersion = getCurrentVersion()
   const toVersion = body.targetVersion || 'latest'
+  const skipRestart = body.skipRestart === true
   const userId = request.user.name || request.user.id
 
   // Create update log entry
@@ -53,6 +54,7 @@ async function handlePOST(request) {
           toVersion,
           onProgress: sendEvent,
           userId,
+          skipRestart,
         })
 
         // Update log entry with final status
