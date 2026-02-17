@@ -367,6 +367,28 @@ GET /api/work-orders/active/{lineId}    ← Manager polls every 5s (slow, DB que
 - `InspectionStage.jsx` groups 20 stages into 7 visual phases: PCB IN → CAMERA MOVE → CAPTURE TOP → FLIP → CAPTURE BTM → AI INSPECT → RESULT
 - Phase detection uses `stage.message` string matching with proportional fallback
 
+**Serial Number Conditions (Barcode System):**
+
+The backend provides 3 serial number conditions per cavity, simulating real barcode reader behavior:
+
+| Condition | Format | Example | Meaning |
+|-----------|--------|---------|---------|
+| Real barcode | `PREFIX\|E\|PCI\|YYYYMMDD\|NNNNNNNNN` | `PCBA-10011\|E\|PCI\|20240803\|000000052` | Successful barcode read |
+| Failed read | `YYYYMMDD_HHMMSS` | `20260217_141638` | Barcode failed → timestamp substitute |
+| Empty cavity | `0` | `0` | No PCB in cavity (skip counting) |
+
+**Backend (Python patches in `D:/Projects/indusia-ai-backend/`):**
+- `auto_inspect_edge_patch7.py` — `allocate_serial_numbers()` generates per-cavity SNs with configurable sim rates
+- Environment: `SIM_BARCODE_OK_RATE=0.7`, `SIM_EMPTY_CAVITY_RATE=0.1` (remaining 20% = timestamp)
+- `SIM_BARCODE_PREFIX` configures the pipe-delimited prefix (default: `PCBA-10011|E|PCI`)
+- `auto_inspect_edge_patch10.py` — `build_frame_serial_map_for_model()` assigns cavity SNs to all frames per cavity
+
+**Frontend (HMI):**
+- `lib/utils/serialNumber.js` — `classifySerialNumber(sn)`, `formatSerialDisplay(sn)`, `isRealPcb(sn)`, `isFailedBarcode(sn)`
+- `SidePanel.jsx` — Floating badge: teal for barcode, yellow "NO READ" for timestamp; color bar: solid for barcode, dashed yellow for timestamp; hidden for empty
+- `CavityReviewOverlay.jsx` — Same badge styling for review modal
+- `lib/utils/inspectionReview.js` — `computePcbCounts()` already handles `"0"` as empty cavity (excluded from NG/good counts)
+
 ### System Health Monitoring
 
 `SystemHealthContext` provides real-time system status monitoring backed by `systemHealthRepo.getSystemHealth()`:

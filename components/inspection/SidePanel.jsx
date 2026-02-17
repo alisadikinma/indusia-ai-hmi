@@ -15,6 +15,7 @@ import { useState, useRef, useEffect } from 'react'
 import { cn } from '@/lib/utils'
 import { ZoomIn, ZoomOut, Maximize2, AlertCircle, CheckCircle2 } from 'lucide-react'
 import { useI18n } from '@/context/I18nContext'
+import { classifySerialNumber, formatSerialDisplay, SN_TYPE } from '@/lib/utils/serialNumber'
 
 // Defect type color mapping
 const DEFECT_COLORS = {
@@ -188,14 +189,26 @@ export function SidePanel({ side, frames = [], className, onFrameClick, reviewin
             className="absolute inset-0 flex items-center justify-center overflow-auto p-2"
             style={{ cursor: zoom > 1 ? 'grab' : 'default' }}
           >
-            {/* Floating Serial Number Badge */}
-            {activeFrame?.serial_number && String(activeFrame.serial_number) !== '0' && (
-              <div className="absolute top-2 left-1/2 -translate-x-1/2 z-10 px-3 py-1 rounded bg-void/85 border border-phosphor-teal/50 backdrop-blur-sm">
-                <span className="font-mono text-xs font-bold text-phosphor-teal">
-                  SN: {activeFrame.serial_number}
-                </span>
-              </div>
-            )}
+            {/* Floating Serial Number Badge — 3 conditions */}
+            {(() => {
+              const snType = classifySerialNumber(activeFrame?.serial_number)
+              if (snType === SN_TYPE.EMPTY) return null
+              const isTimestamp = snType === SN_TYPE.TIMESTAMP
+              const display = formatSerialDisplay(activeFrame?.serial_number)
+              return (
+                <div className={cn(
+                  "absolute top-2 left-1/2 -translate-x-1/2 z-10 px-3 py-1 rounded bg-void/85 backdrop-blur-sm",
+                  isTimestamp ? "border border-yellow-500/60" : "border border-phosphor-teal/50"
+                )}>
+                  <span className={cn(
+                    "font-mono text-xs font-bold",
+                    isTimestamp ? "text-yellow-400" : "text-phosphor-teal"
+                  )}>
+                    {isTimestamp ? `NO READ ${display}` : `SN: ${display}`}
+                  </span>
+                </div>
+              )
+            })()}
             <div
               className="relative transition-transform duration-200"
               style={{ transform: `scale(${zoom})`, transformOrigin: 'center' }}
@@ -275,13 +288,27 @@ export function SidePanel({ side, frames = [], className, onFrameClick, reviewin
                     )}
                   </div>
 
-                  {/* SN color bar — same SN on TOP and BOTTOM gets same color. Hide for empty cavities (SN "0"). */}
-                  {frame.serial_number && String(frame.serial_number) !== '0' && (
-                    <div
-                      className="absolute bottom-0 left-0 right-0 h-1.5"
-                      style={{ backgroundColor: snToColor(frame.serial_number) }}
-                    />
-                  )}
+                  {/* SN color bar — same SN on TOP and BOTTOM gets same color */}
+                  {(() => {
+                    const snType = classifySerialNumber(frame.serial_number)
+                    if (snType === SN_TYPE.EMPTY) return null
+                    // Timestamp (failed barcode) = dashed yellow bar
+                    if (snType === SN_TYPE.TIMESTAMP) {
+                      return (
+                        <div
+                          className="absolute bottom-0 left-0 right-0 h-1.5 bg-yellow-500/60"
+                          style={{ backgroundImage: 'repeating-linear-gradient(90deg, transparent, transparent 3px, rgba(0,0,0,0.4) 3px, rgba(0,0,0,0.4) 6px)' }}
+                        />
+                      )
+                    }
+                    // Real barcode = solid color bar
+                    return (
+                      <div
+                        className="absolute bottom-0 left-0 right-0 h-1.5"
+                        style={{ backgroundColor: snToColor(frame.serial_number) }}
+                      />
+                    )
+                  })()}
                 </button>
               )
             })}

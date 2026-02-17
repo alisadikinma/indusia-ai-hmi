@@ -19,6 +19,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { cn } from '@/lib/utils'
 import { findNextUnreviewedFrame, computePcbCounts } from '@/lib/utils/inspectionReview'
+import { classifySerialNumber, formatSerialDisplay, SN_TYPE } from '@/lib/utils/serialNumber'
 import { X, ZoomIn, ZoomOut, CheckCircle2, AlertCircle, Timer, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useI18n } from '@/context/I18nContext'
 
@@ -339,12 +340,27 @@ export function CavityReviewOverlay({
               style={{ cursor: zoom > 1 ? 'grab' : 'default' }}>
               <div className="relative transition-transform duration-200"
                 style={{ transform: `scale(${zoom})`, transformOrigin: 'center' }}>
-                {/* Floating SN badge — positioned above the image */}
-                <div className="absolute top-2 left-1/2 -translate-x-1/2 z-10 px-3 py-1.5 rounded bg-void/85 border border-phosphor-teal/50 backdrop-blur-sm">
-                  <span className="font-mono text-sm font-bold text-phosphor-teal">
-                    SN: {currentFrame?.serial_number || boardSerialNumber}
-                  </span>
-                </div>
+                {/* Floating SN badge — 3 conditions */}
+                {(() => {
+                  const sn = currentFrame?.serial_number || boardSerialNumber
+                  const snType = classifySerialNumber(sn)
+                  if (snType === SN_TYPE.EMPTY) return null
+                  const isTimestamp = snType === SN_TYPE.TIMESTAMP
+                  const display = formatSerialDisplay(sn)
+                  return (
+                    <div className={cn(
+                      "absolute top-2 left-1/2 -translate-x-1/2 z-10 px-3 py-1.5 rounded bg-void/85 backdrop-blur-sm",
+                      isTimestamp ? "border border-yellow-500/60" : "border border-phosphor-teal/50"
+                    )}>
+                      <span className={cn(
+                        "font-mono text-sm font-bold",
+                        isTimestamp ? "text-yellow-400" : "text-phosphor-teal"
+                      )}>
+                        {isTimestamp ? `NO READ ${display}` : `SN: ${display}`}
+                      </span>
+                    </div>
+                  )
+                })()}
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={currentFrame.image_url || currentFrame.image_raw_url} alt={`${currentFrame.side} frame ${currentFrame.frameIndex + 1}`}
                   className="max-w-full max-h-[60vh] object-contain" />
