@@ -22,6 +22,7 @@ export default function RolesManagementPage() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [selectedRole, setSelectedRole] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('');
   const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, roleId: null, roleName: '' });
 
   const [formData, setFormData] = useState({ id: '', name: '', description: '' });
@@ -44,6 +45,7 @@ export default function RolesManagementPage() {
   const resetForm = () => {
     setFormData({ id: '', name: '', description: '' });
     setFormErrors({});
+    setSubmitError('');
     setSelectedRole(null);
   };
 
@@ -73,19 +75,21 @@ export default function RolesManagementPage() {
     setSelectedRole(role);
     setFormData({ id: role.id, name: role.name, description: role.description || '' });
     setFormErrors({});
+    setSubmitError('');
     setIsEditModalOpen(true);
   };
 
   const handleCreate = async () => {
     if (!validateForm(false)) return;
+    setSubmitError('');
     setSubmitting(true);
     try {
       await create({ id: formData.id, name: formData.name.trim(), description: formData.description.trim() || undefined });
-      showToast('Role created successfully');
+      showToast({ title: 'Role created successfully', variant: 'success' });
       setIsAddModalOpen(false);
       resetForm();
     } catch (err) {
-      showToast(err.message || 'Failed to create role');
+      setSubmitError(err.message || 'Failed to create role');
     } finally {
       setSubmitting(false);
     }
@@ -93,16 +97,17 @@ export default function RolesManagementPage() {
 
   const handleUpdate = async () => {
     if (!validateForm(true)) return;
+    setSubmitError('');
     setSubmitting(true);
     try {
       const updates = { name: formData.name.trim() };
       if (formData.description.trim()) updates.description = formData.description.trim();
       await update(selectedRole.id, updates);
-      showToast('Role updated successfully');
+      showToast({ title: 'Role updated successfully', variant: 'success' });
       setIsEditModalOpen(false);
       resetForm();
     } catch (err) {
-      showToast(err.message || 'Failed to update role');
+      setSubmitError(err.message || 'Failed to update role');
     } finally {
       setSubmitting(false);
     }
@@ -113,92 +118,10 @@ export default function RolesManagementPage() {
     setConfirmDialog({ isOpen: false, roleId: null, roleName: '' });
     try {
       await remove(roleId);
-      showToast('Role deleted successfully');
+      showToast({ title: 'Role deleted successfully', variant: 'success' });
     } catch (err) {
-      showToast(err.message || 'Failed to delete role');
+      showToast({ title: 'Failed to delete role', description: err.message, variant: 'error' });
     }
-  };
-
-  const RoleFormModal = ({ isOpen, onClose, title, onSubmit, isEdit }) => {
-    if (!isOpen) return null;
-    return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center">
-        <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-        <div className="relative bg-indusia-surface rounded-xl shadow-2xl border border-indusia-border w-full max-w-lg mx-4">
-          <div className="px-6 py-4 border-b border-indusia-border flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-indusia-text">{title}</h3>
-            <button onClick={onClose} className="text-indusia-textMuted hover:text-indusia-text">
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-
-          <div className="px-6 py-6 space-y-4">
-            {!isEdit && (
-              <div>
-                <label className="block text-sm font-medium text-indusia-text mb-2">Role ID</label>
-                <input
-                  type="text"
-                  value={formData.id}
-                  onChange={(e) => setFormData(prev => ({ ...prev, id: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '') }))}
-                  placeholder="e.g. quality-lead"
-                  className="w-full px-4 py-2 bg-indusia-bg border border-indusia-border rounded-lg text-indusia-text text-sm focus:outline-none focus:ring-2 focus:ring-indusia-primary font-mono"
-                />
-                <p className="text-xs text-indusia-textMuted mt-1">Lowercase letters, numbers, and dashes only</p>
-                {formErrors.id && <p className="text-xs text-indusia-fail mt-1">{formErrors.id}</p>}
-              </div>
-            )}
-
-            {isEdit && (
-              <div>
-                <label className="block text-sm font-medium text-indusia-text mb-2">Role ID</label>
-                <div className="px-4 py-2 bg-indusia-bg border border-indusia-border rounded-lg text-indusia-textMuted text-sm font-mono">
-                  {formData.id}
-                </div>
-                <p className="text-xs text-indusia-textMuted mt-1">Role ID cannot be changed</p>
-              </div>
-            )}
-
-            <div>
-              <label className="block text-sm font-medium text-indusia-text mb-2">Name</label>
-              <input
-                type="text"
-                value={formData.name}
-                onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-                placeholder="e.g. Quality Lead"
-                className="w-full px-4 py-2 bg-indusia-bg border border-indusia-border rounded-lg text-indusia-text text-sm focus:outline-none focus:ring-2 focus:ring-indusia-primary"
-              />
-              {formErrors.name && <p className="text-xs text-indusia-fail mt-1">{formErrors.name}</p>}
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-indusia-text mb-2">Description</label>
-              <textarea
-                value={formData.description}
-                onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-                placeholder="Brief description of this role's responsibilities..."
-                rows={3}
-                className="w-full px-4 py-2 bg-indusia-bg border border-indusia-border rounded-lg text-indusia-text text-sm focus:outline-none focus:ring-2 focus:ring-indusia-primary resize-none"
-              />
-              {formErrors.description && <p className="text-xs text-indusia-fail mt-1">{formErrors.description}</p>}
-            </div>
-          </div>
-
-          <div className="px-6 py-4 border-t border-indusia-border flex justify-end gap-3">
-            <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-indusia-textMuted hover:text-indusia-text">
-              Cancel
-            </button>
-            <button
-              onClick={onSubmit}
-              disabled={submitting}
-              className="px-6 py-2 bg-indusia-primary text-white rounded-lg font-medium hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center gap-2"
-            >
-              {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
-              {isEdit ? 'Save Changes' : 'Create Role'}
-            </button>
-          </div>
-        </div>
-      </div>
-    );
   };
 
   return (
@@ -285,21 +208,124 @@ export default function RolesManagementPage() {
         </table>
       </div>
 
-      <RoleFormModal
-        isOpen={isAddModalOpen}
-        onClose={() => { setIsAddModalOpen(false); resetForm(); }}
-        title="Add New Role"
-        onSubmit={handleCreate}
-        isEdit={false}
-      />
+      {isAddModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/50" onClick={() => { setIsAddModalOpen(false); resetForm(); }} />
+          <div className="relative bg-indusia-surface rounded-xl shadow-2xl border border-indusia-border w-full max-w-lg mx-4">
+            <div className="px-6 py-4 border-b border-indusia-border flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-indusia-text">Add New Role</h3>
+              <button onClick={() => { setIsAddModalOpen(false); resetForm(); }} className="text-indusia-textMuted hover:text-indusia-text">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="px-6 py-6 space-y-4">
+              {submitError && (
+                <div className="p-3 rounded-lg bg-indusia-fail/10 border border-indusia-fail text-sm text-indusia-fail">
+                  {submitError}
+                </div>
+              )}
+              <div>
+                <label className="block text-sm font-medium text-indusia-text mb-2">Role ID</label>
+                <input
+                  type="text"
+                  value={formData.id}
+                  onChange={(e) => setFormData(prev => ({ ...prev, id: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '') }))}
+                  placeholder="e.g. quality-lead"
+                  className="w-full px-4 py-2 bg-indusia-bg border border-indusia-border rounded-lg text-indusia-text text-sm focus:outline-none focus:ring-2 focus:ring-indusia-primary font-mono"
+                />
+                <p className="text-xs text-indusia-textMuted mt-1">Lowercase letters, numbers, and dashes only</p>
+                {formErrors.id && <p className="text-xs text-indusia-fail mt-1">{formErrors.id}</p>}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-indusia-text mb-2">Name</label>
+                <input
+                  type="text"
+                  value={formData.name}
+                  onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+                  placeholder="e.g. Quality Lead"
+                  className="w-full px-4 py-2 bg-indusia-bg border border-indusia-border rounded-lg text-indusia-text text-sm focus:outline-none focus:ring-2 focus:ring-indusia-primary"
+                />
+                {formErrors.name && <p className="text-xs text-indusia-fail mt-1">{formErrors.name}</p>}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-indusia-text mb-2">Description</label>
+                <textarea
+                  value={formData.description}
+                  onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
+                  placeholder="Brief description of this role's responsibilities..."
+                  rows={3}
+                  className="w-full px-4 py-2 bg-indusia-bg border border-indusia-border rounded-lg text-indusia-text text-sm focus:outline-none focus:ring-2 focus:ring-indusia-primary resize-none"
+                />
+                {formErrors.description && <p className="text-xs text-indusia-fail mt-1">{formErrors.description}</p>}
+              </div>
+            </div>
+            <div className="px-6 py-4 border-t border-indusia-border flex justify-end gap-3">
+              <button onClick={() => { setIsAddModalOpen(false); resetForm(); }} className="px-4 py-2 text-sm font-medium text-indusia-textMuted hover:text-indusia-text">Cancel</button>
+              <button onClick={handleCreate} disabled={submitting} className="px-6 py-2 bg-indusia-primary text-white rounded-lg font-medium hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center gap-2">
+                {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
+                Create Role
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
-      <RoleFormModal
-        isOpen={isEditModalOpen}
-        onClose={() => { setIsEditModalOpen(false); resetForm(); }}
-        title="Edit Role"
-        onSubmit={handleUpdate}
-        isEdit={true}
-      />
+      {isEditModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/50" onClick={() => { setIsEditModalOpen(false); resetForm(); }} />
+          <div className="relative bg-indusia-surface rounded-xl shadow-2xl border border-indusia-border w-full max-w-lg mx-4">
+            <div className="px-6 py-4 border-b border-indusia-border flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-indusia-text">Edit Role</h3>
+              <button onClick={() => { setIsEditModalOpen(false); resetForm(); }} className="text-indusia-textMuted hover:text-indusia-text">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="px-6 py-6 space-y-4">
+              {submitError && (
+                <div className="p-3 rounded-lg bg-indusia-fail/10 border border-indusia-fail text-sm text-indusia-fail">
+                  {submitError}
+                </div>
+              )}
+              <div>
+                <label className="block text-sm font-medium text-indusia-text mb-2">Role ID</label>
+                <div className="px-4 py-2 bg-indusia-bg border border-indusia-border rounded-lg text-indusia-textMuted text-sm font-mono">
+                  {formData.id}
+                </div>
+                <p className="text-xs text-indusia-textMuted mt-1">Role ID cannot be changed</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-indusia-text mb-2">Name</label>
+                <input
+                  type="text"
+                  value={formData.name}
+                  onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+                  placeholder="e.g. Quality Lead"
+                  className="w-full px-4 py-2 bg-indusia-bg border border-indusia-border rounded-lg text-indusia-text text-sm focus:outline-none focus:ring-2 focus:ring-indusia-primary"
+                />
+                {formErrors.name && <p className="text-xs text-indusia-fail mt-1">{formErrors.name}</p>}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-indusia-text mb-2">Description</label>
+                <textarea
+                  value={formData.description}
+                  onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
+                  placeholder="Brief description of this role's responsibilities..."
+                  rows={3}
+                  className="w-full px-4 py-2 bg-indusia-bg border border-indusia-border rounded-lg text-indusia-text text-sm focus:outline-none focus:ring-2 focus:ring-indusia-primary resize-none"
+                />
+                {formErrors.description && <p className="text-xs text-indusia-fail mt-1">{formErrors.description}</p>}
+              </div>
+            </div>
+            <div className="px-6 py-4 border-t border-indusia-border flex justify-end gap-3">
+              <button onClick={() => { setIsEditModalOpen(false); resetForm(); }} className="px-4 py-2 text-sm font-medium text-indusia-textMuted hover:text-indusia-text">Cancel</button>
+              <button onClick={handleUpdate} disabled={submitting} className="px-6 py-2 bg-indusia-primary text-white rounded-lg font-medium hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center gap-2">
+                {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
+                Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <ConfirmDialog
         isOpen={confirmDialog.isOpen}

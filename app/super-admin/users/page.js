@@ -11,13 +11,14 @@ import SectionHeader from '@/components/common/SectionHeader';
 import StatusBadge from '@/components/common/StatusBadge';
 import Drawer from '@/components/Drawer';
 import ConfirmDialog from '@/components/ConfirmDialog';
-import { Search, Plus, Edit, Trash2, RefreshCw, Ban, CheckCircle, Eye, EyeOff, X } from 'lucide-react';
+import PageLoading from '@/components/common/PageLoading';
+import { Search, Plus, Edit, Trash2, RefreshCw, Ban, CheckCircle, Eye, EyeOff, X, Loader2 } from 'lucide-react';
 
 export default function UsersManagementPage() {
   const router = useRouter();
   const { user } = useAuth();
   const { showToast } = useToast();
-  const { users, create, update, remove, disable, enable, resetPassword } = useUsers();
+  const { users, loading: usersLoading, create, update, remove, disable, enable, resetPassword } = useUsers();
   const { sections, loading: sectionsLoading } = useSections();
   const { roles } = useRoles();
 
@@ -28,6 +29,8 @@ export default function UsersManagementPage() {
   const [isEditDrawerOpen, setIsEditDrawerOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
   const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, action: null, userId: null });
+  const [submitError, setSubmitError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -44,6 +47,20 @@ export default function UsersManagementPage() {
   const [formErrors, setFormErrors] = useState({});
   const [showPassword, setShowPassword] = useState(false);
 
+  const filteredUsers = useMemo(() => {
+    return users.filter(u => {
+      const matchesSearch = u.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                           u.email.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesRole = roleFilter === 'all' || u.roleId === roleFilter;
+      const matchesStatus = statusFilter === 'all' || u.status === statusFilter;
+      return matchesSearch && matchesRole && matchesStatus;
+    });
+  }, [users, searchQuery, roleFilter, statusFilter]);
+
+  if (usersLoading || sectionsLoading) {
+    return <PageLoading message="Loading users..." />;
+  }
+
   if (!user || user.role !== 'superadmin') {
     return (
       <div className="min-h-[60vh] flex items-center justify-center">
@@ -58,25 +75,15 @@ export default function UsersManagementPage() {
     );
   }
 
-  const filteredUsers = useMemo(() => {
-    return users.filter(u => {
-      const matchesSearch = u.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                           u.email.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesRole = roleFilter === 'all' || u.roleId === roleFilter;
-      const matchesStatus = statusFilter === 'all' || u.status === statusFilter;
-      return matchesSearch && matchesRole && matchesStatus;
-    });
-  }, [users, searchQuery, roleFilter, statusFilter]);
-
   const validateEmail = (email) => {
-    return email.endsWith('@company.com');
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
   };
 
   const validateForm = () => {
     const errors = {};
     if (!formData.name.trim()) errors.name = 'Name is required';
     if (!formData.email.trim()) errors.email = 'Email is required';
-    else if (!validateEmail(formData.email)) errors.email = 'Email must be @company.com';
+    else if (!validateEmail(formData.email)) errors.email = 'Invalid email address';
     if (!isEditDrawerOpen && !formData.password.trim()) errors.password = 'Password is required';
     if (!formData.role_id) errors.role_id = 'Role is required';
     if (formData.sections.length === 0) errors.sections = 'At least one section required';
@@ -85,46 +92,84 @@ export default function UsersManagementPage() {
     return Object.keys(errors).length === 0;
   };
 
-  const handleAddUser = () => {
+  const handleAddUser = async () => {
     if (!validateForm()) return;
-
-    create(formData);
-    showToast('User created successfully');
-    setIsAddModalOpen(false);
-    resetForm();
+    setSubmitError('');
+    setSubmitting(true);
+    try {
+      await create(formData);
+      showToast({ title: 'User created successfully', variant: 'success' });
+      setIsAddModalOpen(false);
+      resetForm();
+    } catch (err) {
+      setSubmitError(err.message || 'Failed to create user');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const handleEditUser = () => {
+  const handleEditUser = async () => {
     if (!validateForm()) return;
-
-    const { password, ...updateData } = formData;
-    update(selectedUser.id, updateData);
-    showToast('User updated successfully');
-    setIsEditDrawerOpen(false);
-    resetForm();
+    setSubmitError('');
+    setSubmitting(true);
+    try {
+      const updatePayload = {
+        name: formData.name,
+        email: formData.email,
+        sections: formData.sections,
+        whatsapp: formData.whatsapp,
+      };
+      if (formData.role_id !== (selectedUser.roleId || '')) {
+        updatePayload.role_id = formData.role_id;
+      }
+      await update(selectedUser.id, updatePayload);
+      showToast({ title: 'User updated successfully', variant: 'success' });
+      setIsEditDrawerOpen(false);
+      resetForm();
+    } catch (err) {
+      setSubmitError(err.message || 'Failed to update user');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const handleResetPassword = (userId) => {
-    const tempPassword = resetPassword(userId);
-    showToast(`Temporary password: ${tempPassword}`);
+  const handleResetPassword = async (userId) => {
     setConfirmDialog({ isOpen: false, action: null, userId: null });
+    try {
+      const tempPassword = await resetPassword(userId);
+      showToast({ title: 'Password reset', description: `Temporary password: ${tempPassword}`, variant: 'success' });
+    } catch (err) {
+      showToast({ title: 'Failed to reset password', description: err.message, variant: 'error' });
+    }
   };
 
-  const handleDisableUser = (userId) => {
-    disable(userId);
-    showToast('User disabled successfully');
+  const handleDisableUser = async (userId) => {
     setConfirmDialog({ isOpen: false, action: null, userId: null });
+    try {
+      await disable(userId);
+      showToast({ title: 'User disabled successfully', variant: 'success' });
+    } catch (err) {
+      showToast({ title: 'Failed to disable user', description: err.message, variant: 'error' });
+    }
   };
 
-  const handleEnableUser = (userId) => {
-    enable(userId);
-    showToast('User enabled successfully');
+  const handleEnableUser = async (userId) => {
+    try {
+      await enable(userId);
+      showToast({ title: 'User enabled successfully', variant: 'success' });
+    } catch (err) {
+      showToast({ title: 'Failed to enable user', description: err.message, variant: 'error' });
+    }
   };
 
-  const handleDeleteUser = (userId) => {
-    remove(userId);
-    showToast('User deleted successfully');
+  const handleDeleteUser = async (userId) => {
     setConfirmDialog({ isOpen: false, action: null, userId: null });
+    try {
+      await remove(userId);
+      showToast({ title: 'User deleted successfully', variant: 'success' });
+    } catch (err) {
+      showToast({ title: 'Failed to delete user', description: err.message, variant: 'error' });
+    }
   };
 
   const openAddModal = () => {
@@ -144,6 +189,7 @@ export default function UsersManagementPage() {
       notificationPreferences: usr.notificationPreferences || { email: true, whatsapp: false },
     });
     setFormErrors({});
+    setSubmitError('');
     setIsEditDrawerOpen(true);
   };
 
@@ -158,6 +204,7 @@ export default function UsersManagementPage() {
       notificationPreferences: { email: true, whatsapp: false },
     });
     setFormErrors({});
+    setSubmitError('');
     setSelectedUser(null);
   };
 
@@ -297,12 +344,18 @@ export default function UsersManagementPage() {
             </div>
 
             <div className="px-6 py-6 space-y-4">
+              {submitError && (
+                <div className="p-3 rounded-lg bg-indusia-fail/10 border border-indusia-fail text-sm text-indusia-fail">
+                  {submitError}
+                </div>
+              )}
               <div>
                 <label className="block text-sm font-medium text-indusia-text mb-2">Name</label>
                 <input
                   type="text"
                   value={formData.name}
                   onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+                  placeholder="e.g. John Doe"
                   className="w-full px-4 py-2 bg-indusia-bg border border-indusia-border rounded-lg text-indusia-text focus:outline-none focus:ring-2 focus:ring-indusia-primary"
                 />
                 {formErrors.name && <p className="text-xs text-indusia-fail mt-1">{formErrors.name}</p>}
@@ -314,6 +367,7 @@ export default function UsersManagementPage() {
                   type="email"
                   value={formData.email}
                   onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
+                  placeholder="e.g. john.doe@indusia.ai"
                   className="w-full px-4 py-2 bg-indusia-bg border border-indusia-border rounded-lg text-indusia-text focus:outline-none focus:ring-2 focus:ring-indusia-primary"
                 />
                 {formErrors.email && <p className="text-xs text-indusia-fail mt-1">{formErrors.email}</p>}
@@ -326,6 +380,7 @@ export default function UsersManagementPage() {
                     type={showPassword ? 'text' : 'password'}
                     value={formData.password}
                     onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))}
+                    placeholder="Min. 6 characters"
                     className="w-full px-4 py-2 bg-indusia-bg border border-indusia-border rounded-lg text-indusia-text focus:outline-none focus:ring-2 focus:ring-indusia-primary pr-10"
                   />
                   <button
@@ -380,7 +435,10 @@ export default function UsersManagementPage() {
 
             <div className="px-6 py-4 border-t border-indusia-border flex justify-end gap-3 sticky bottom-0 bg-indusia-surface">
               <button onClick={() => setIsAddModalOpen(false)} className="px-4 py-2 text-sm font-medium text-indusia-textMuted hover:text-indusia-text">Cancel</button>
-              <button onClick={handleAddUser} className="px-6 py-2 bg-indusia-primary text-white rounded-lg font-medium hover:opacity-90">Create User</button>
+              <button onClick={handleAddUser} disabled={submitting} className="px-6 py-2 bg-indusia-primary text-white rounded-lg font-medium hover:opacity-90 disabled:opacity-50 flex items-center gap-2">
+                {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
+                Create User
+              </button>
             </div>
           </div>
         </div>
@@ -388,12 +446,18 @@ export default function UsersManagementPage() {
 
       <Drawer isOpen={isEditDrawerOpen} onClose={() => setIsEditDrawerOpen(false)} title="Edit User">
         <div className="space-y-4">
+          {submitError && (
+            <div className="p-3 rounded-lg bg-indusia-fail/10 border border-indusia-fail text-sm text-indusia-fail">
+              {submitError}
+            </div>
+          )}
           <div>
             <label className="block text-sm font-medium text-indusia-text mb-2">Name</label>
             <input
               type="text"
               value={formData.name}
               onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+              placeholder="e.g. John Doe"
               className="w-full px-4 py-2 bg-indusia-bg border border-indusia-border rounded-lg text-indusia-text focus:outline-none focus:ring-2 focus:ring-indusia-primary"
             />
             {formErrors.name && <p className="text-xs text-indusia-fail mt-1">{formErrors.name}</p>}
@@ -405,6 +469,7 @@ export default function UsersManagementPage() {
               type="email"
               value={formData.email}
               onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
+              placeholder="e.g. john.doe@indusia.ai"
               className="w-full px-4 py-2 bg-indusia-bg border border-indusia-border rounded-lg text-indusia-text focus:outline-none focus:ring-2 focus:ring-indusia-primary"
             />
             {formErrors.email && <p className="text-xs text-indusia-fail mt-1">{formErrors.email}</p>}
@@ -446,7 +511,10 @@ export default function UsersManagementPage() {
 
           <div className="pt-4 border-t border-indusia-border flex justify-end gap-3">
             <button onClick={() => setIsEditDrawerOpen(false)} className="px-4 py-2 text-sm font-medium text-indusia-textMuted hover:text-indusia-text">Cancel</button>
-            <button onClick={handleEditUser} className="px-6 py-2 bg-indusia-primary text-white rounded-lg font-medium hover:opacity-90">Save Changes</button>
+            <button onClick={handleEditUser} disabled={submitting} className="px-6 py-2 bg-indusia-primary text-white rounded-lg font-medium hover:opacity-90 disabled:opacity-50 flex items-center gap-2">
+              {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
+              Save Changes
+            </button>
           </div>
         </div>
       </Drawer>

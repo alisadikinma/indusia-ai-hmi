@@ -6,7 +6,7 @@ import { z } from 'zod'
 
 // Validation schema for creating roles
 const createRoleSchema = z.object({
-  id: z.string().min(1).max(50).regex(/^[a-z_]+$/, 'Role ID must be lowercase with underscores only'),
+  id: z.string().min(1).max(50).regex(/^[a-z0-9-]+$/, 'Role ID must be lowercase letters, numbers, and dashes only'),
   name: z.string().min(1).max(100),
   description: z.string().max(500).optional(),
   isSystem: z.boolean().optional().default(false)

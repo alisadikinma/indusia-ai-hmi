@@ -12,7 +12,7 @@ const updateUserSchema = z.object({
   email: z.string().email().optional(),
   role_id: z.string().optional(),
   sections: z.array(z.string()).optional(),
-  status: z.enum(['active', 'inactive']).optional(),
+  status: z.enum(['active', 'inactive', 'disabled']).optional(),
   whatsapp: z.string().max(20).optional()
 }).strict()
 
@@ -148,11 +148,12 @@ async function handleDELETE(request, { params }) {
       )
     }
 
-    const result = await usersRepo.delete(id)
+    const result = await usersRepo.remove(id)
 
     if (result.error) {
+      console.error('[DELETE /api/users/[id]] Repo error:', result.error)
       return NextResponse.json(
-        { success: false, error: 'Failed to delete user' },
+        { success: false, error: result.error },
         { status: 500 }
       )
     }
@@ -161,7 +162,7 @@ async function handleDELETE(request, { params }) {
   } catch (error) {
     console.error('[DELETE /api/users/[id]] Error:', error)
     return NextResponse.json(
-      { success: false, error: 'Failed to delete user' },
+      { success: false, error: error.message || 'Failed to delete user' },
       { status: 500 }
     )
   }

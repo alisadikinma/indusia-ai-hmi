@@ -6,6 +6,18 @@
 import { useState, useEffect, useCallback } from 'react';
 import { authFetch } from '@/lib/utils/authFetch';
 
+/**
+ * Extract error message from API response
+ */
+async function extractError(res, fallback) {
+  try {
+    const json = await res.json();
+    return json.error || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 export function useUsers({ enabled = true } = {}) {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(enabled);
@@ -18,9 +30,8 @@ export function useUsers({ enabled = true } = {}) {
     setError(null);
     try {
       const res = await authFetch('/api/users');
-      if (!res.ok) throw new Error('Failed to fetch users');
       const json = await res.json();
-      if (!json.success) throw new Error(json.error || 'Failed to fetch users');
+      if (!res.ok || !json.success) throw new Error(json.error || 'Failed to fetch users');
       setUsers(json.data || []);
     } catch (err) {
       console.error('[useUsers] Fetch error:', err.message);
@@ -46,9 +57,8 @@ export function useUsers({ enabled = true } = {}) {
         method: 'POST',
         body: JSON.stringify(userData)
       });
-      if (!res.ok) throw new Error('Failed to create user');
       const json = await res.json();
-      if (!json.success) throw new Error(json.error || 'Failed to create user');
+      if (!res.ok || !json.success) throw new Error(json.error || 'Failed to create user');
       setUsers(prev => [...prev, json.data]);
       return json.data;
     } catch (err) {
@@ -63,9 +73,8 @@ export function useUsers({ enabled = true } = {}) {
         method: 'PATCH',
         body: JSON.stringify(updates)
       });
-      if (!res.ok) throw new Error('Failed to update user');
       const json = await res.json();
-      if (!json.success) throw new Error(json.error || 'Failed to update user');
+      if (!res.ok || !json.success) throw new Error(json.error || 'Failed to update user');
       setUsers(prev => prev.map(u => u.id === id ? json.data : u));
       return json.data;
     } catch (err) {
@@ -77,9 +86,8 @@ export function useUsers({ enabled = true } = {}) {
   const remove = async (id) => {
     try {
       const res = await authFetch(`/api/users/${id}`, { method: 'DELETE' });
-      if (!res.ok) throw new Error('Failed to delete user');
       const json = await res.json();
-      if (!json.success) throw new Error(json.error || 'Failed to delete user');
+      if (!res.ok || !json.success) throw new Error(json.error || 'Failed to delete user');
       setUsers(prev => prev.filter(u => u.id !== id));
       return true;
     } catch (err) {
@@ -101,10 +109,9 @@ export function useUsers({ enabled = true } = {}) {
       const res = await authFetch(`/api/users/${id}/reset-password`, {
         method: 'POST'
       });
-      if (!res.ok) throw new Error('Failed to reset password');
       const json = await res.json();
-      if (!json.success) throw new Error(json.error || 'Failed to reset password');
-      
+      if (!res.ok || !json.success) throw new Error(json.error || 'Failed to reset password');
+
       // Refresh user to get mustChangePassword status
       await fetchUsers();
       return json.data?.tempPassword || 'Password reset. Check email.';

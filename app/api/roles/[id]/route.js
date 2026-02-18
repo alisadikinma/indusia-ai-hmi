@@ -123,7 +123,7 @@ async function handleDELETE(request, { params }) {
       )
     }
 
-    const result = await rolesRepo.delete(id)
+    const result = await rolesRepo.remove(id)
 
     if (result.error) {
       return NextResponse.json(

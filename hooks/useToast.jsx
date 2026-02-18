@@ -8,7 +8,11 @@ const ToastContext = createContext(null);
 export function ToastProvider({ children }) {
   const [toasts, setToasts] = useState([]);
 
-  const showToast = useCallback(({ title, description, variant = 'info' }) => {
+  const showToast = useCallback((input) => {
+    // Accept both string shorthand and object format
+    const { title, description, variant = 'info' } = typeof input === 'string'
+      ? { title: input, description: undefined, variant: 'info' }
+      : input;
     const id = Date.now() + Math.random();
 
     setToasts((prev) => [
@@ -60,7 +64,7 @@ function ToastContainer({ toasts, onDismiss }) {
   if (toasts.length === 0) return null;
 
   return (
-    <div className="fixed top-6 right-6 z-50 flex flex-col gap-3 w-96">
+    <div className="fixed top-6 right-6 z-[10000] flex flex-col gap-3 w-96">
       {toasts.map((toast) => (
         <Toast
           key={toast.id}
@@ -91,7 +95,7 @@ function Toast({ toast, onDismiss }) {
     <div
       className={`
         rounded-lg border-l-4 bg-indusia-surface shadow-lg p-4
-        animate-in slide-in-from-right duration-300
+        animate-slide-down
         ${getStyles()}
       `}
     >

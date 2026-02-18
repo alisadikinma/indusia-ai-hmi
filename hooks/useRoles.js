@@ -17,9 +17,8 @@ export function useRoles() {
     setError(null);
     try {
       const res = await authFetch('/api/roles');
-      if (!res.ok) throw new Error('Failed to fetch roles');
       const json = await res.json();
-      if (!json.success) throw new Error(json.error || 'Failed to fetch roles');
+      if (!res.ok || !json.success) throw new Error(json.error || 'Failed to fetch roles');
       setRolesList(json.data || []);
     } catch (err) {
       console.error('[useRoles] Fetch error:', err.message);
@@ -44,9 +43,8 @@ export function useRoles() {
         method: 'POST',
         body: JSON.stringify(roleData)
       });
-      if (!res.ok) throw new Error('Failed to create role');
       const json = await res.json();
-      if (!json.success) throw new Error(json.error || 'Failed to create role');
+      if (!res.ok || !json.success) throw new Error(json.error || 'Failed to create role');
       setRolesList(prev => [...prev, json.data]);
       return json.data;
     } catch (err) {
@@ -61,9 +59,8 @@ export function useRoles() {
         method: 'PATCH',
         body: JSON.stringify(updates)
       });
-      if (!res.ok) throw new Error('Failed to update role');
       const json = await res.json();
-      if (!json.success) throw new Error(json.error || 'Failed to update role');
+      if (!res.ok || !json.success) throw new Error(json.error || 'Failed to update role');
       setRolesList(prev => prev.map(r => r.id === id ? json.data : r));
       return json.data;
     } catch (err) {
@@ -79,9 +76,8 @@ export function useRoles() {
     }
     try {
       const res = await authFetch(`/api/roles/${id}`, { method: 'DELETE' });
-      if (!res.ok) throw new Error('Failed to delete role');
       const json = await res.json();
-      if (!json.success) throw new Error(json.error || 'Failed to delete role');
+      if (!res.ok || !json.success) throw new Error(json.error || 'Failed to delete role');
       setRolesList(prev => prev.filter(r => r.id !== id));
       return true;
     } catch (err) {
