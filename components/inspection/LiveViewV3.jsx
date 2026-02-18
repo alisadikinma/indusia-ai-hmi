@@ -61,6 +61,7 @@ import { saveInspection } from '@/lib/services/inspectionService'
 import { getInspectionResult } from '@/lib/services/imageService'
 import { authFetch } from '@/lib/utils/authFetch'
 import { findNextUnreviewedFrame, computePcbCounts } from '@/lib/utils/inspectionReview'
+import { isRealPcb } from '@/lib/utils/serialNumber'
 
 // Constants
 const NG_REVIEW_TIMEOUT_SECONDS = 15 // Timeout for NG review → auto NG
@@ -834,21 +835,22 @@ export function LiveViewV3({
       return
     }
 
-    // Collect NG frames
+    // Collect NG frames — skip empty cavity frames (SN="0") since they have no real PCB
     const topFrames = currentInspection.results?.top || []
     const bottomFrames = currentInspection.results?.bottom || []
+    const hasSerialData = [...topFrames, ...bottomFrames].some(f => f.serial_number != null)
     const ngFrames = []
     topFrames.forEach((f, idx) => {
-      if (f.label == true) ngFrames.push({ ...f, side: 'TOP', frameIndex: idx })
+      if (f.label == true && (!hasSerialData || isRealPcb(f.serial_number))) ngFrames.push({ ...f, side: 'TOP', frameIndex: idx })
     })
     bottomFrames.forEach((f, idx) => {
-      if (f.label == true) ngFrames.push({ ...f, side: 'BOTTOM', frameIndex: idx })
+      if (f.label == true && (!hasSerialData || isRealPcb(f.serial_number))) ngFrames.push({ ...f, side: 'BOTTOM', frameIndex: idx })
     })
 
     const hasNGFrames = ngFrames.length > 0
     const aiNG = currentInspection.decision === 'FAIL'
 
-    if (hasNGFrames || aiNG) {
+    if (hasNGFrames) {
       if (autoNgEnabled) {
         // AUTO-NG mode: 5s delay before showing CavityReviewOverlay
         overlayDelayRef.current = setTimeout(() => {
@@ -864,7 +866,7 @@ export function LiveViewV3({
         falseCallInspectionRef.current = currentInspection
         setShowCavityOverlay(false)
         setNgFrameReview({
-          frames: ngFrames.length > 0 ? ngFrames : [{ side: 'TOP', frameIndex: 0, label: true }],
+          frames: ngFrames,
           currentIndex: 0,
           decisions: {}
         })
@@ -964,9 +966,23 @@ export function LiveViewV3({
         totalStages: 0
       })
 
-  // Determine AI result for UI
-  const aiResult = activeInspection?.decision === 'PASS' ? 'GOOD' : 
-                   activeInspection?.decision === 'FAIL' ? 'NG' : 'WAITING'
+  // Determine AI result for UI.
+  // When backend says FAIL but ALL NG frames are on empty cavities (SN="0"),
+  // override to GOOD — no real PCB has defects.
+  const aiResult = (() => {
+    if (!activeInspection) return 'WAITING'
+    if (activeInspection.decision === 'PASS') return 'GOOD'
+    if (activeInspection.decision !== 'FAIL') return 'WAITING'
+    // Backend says FAIL — check if any real PCB frame is NG
+    const aiTop = Array.isArray(activeInspection.results?.top) ? activeInspection.results.top : []
+    const aiBot = Array.isArray(activeInspection.results?.bottom) ? activeInspection.results.bottom : []
+    const aiAll = [...aiTop, ...aiBot]
+    const aiHasSN = aiAll.some(f => f.serial_number != null)
+    if (aiHasSN && !aiAll.some(f => f.label == true && isRealPcb(f.serial_number))) {
+      return 'GOOD' // All NG frames are on empty cavities
+    }
+    return 'NG'
+  })()
 
   // Determine effective process status
   // Operator: use SSE processStatus, VIEW ONLY: use synced from API
@@ -1151,7 +1167,25 @@ export function LiveViewV3({
       // 2.1. Optimistic local counter update — instant UI feedback (real WO path)
       // Multi-cavity panels: 1 board confirmation = N PCBs (cavity_count)
       // Split GOOD vs NG based on per-PCB counts (TOP+BOTTOM same SN = 1 PCB)
-      const qty = activeCavityCount
+      // Empty cavities (SN="0") must be excluded — they have no physical PCB
+      const inspTopFrames = Array.isArray(effectiveInspection.results?.top) ? effectiveInspection.results.top :
+                            effectiveInspection.results?.top?.image_url ? [effectiveInspection.results.top] : []
+      const inspBottomFrames = Array.isArray(effectiveInspection.results?.bottom) ? effectiveInspection.results.bottom :
+                               effectiveInspection.results?.bottom?.image_url ? [effectiveInspection.results.bottom] : []
+      const inspAllFrames = [...inspTopFrames, ...inspBottomFrames]
+      const inspHasSerialData = inspAllFrames.some(f => f.serial_number != null)
+      let qty = activeCavityCount
+      if (inspHasSerialData) {
+        // Count unique real serial numbers (same SN on TOP+BOTTOM = 1 PCB)
+        const realSNs = new Set()
+        for (const f of inspAllFrames) {
+          if (isRealPcb(f.serial_number)) realSNs.add(f.serial_number)
+        }
+        qty = realSNs.size || 1
+        if (qty !== activeCavityCount) {
+          console.log('[LiveView] Filled PCBs: %d of %d cavities (empty excluded from counters)', qty, activeCavityCount)
+        }
+      }
       const { goodQty: goodDelta, ngQty: ngDelta, falseCallCount } =
         computeCounterDeltas(qty, operatorDecision, falseCallData)
       if (fetchedWO) {
@@ -1761,13 +1795,15 @@ export function LiveViewV3({
 
   const getTotalDefects = (inspection) => {
     // Handle array of frames structure — only count objects with label=1 or label=true
+    // Skip empty cavity frames (SN="0") to avoid inflating defect count
     const isDefect = (obj) => obj.label === 1 || obj.label === true
     const topFrames = inspection?.results?.top || []
     const bottomFrames = inspection?.results?.bottom || []
+    const allFrames = [...topFrames, ...bottomFrames]
+    const hasSN = allFrames.some(f => f.serial_number != null)
+    const realFrames = hasSN ? allFrames.filter(f => isRealPcb(f.serial_number)) : allFrames
 
-    const topCount = topFrames.reduce((sum, f) => sum + (f.objects || []).filter(isDefect).length, 0)
-    const bottomCount = bottomFrames.reduce((sum, f) => sum + (f.objects || []).filter(isDefect).length, 0)
-    return topCount + bottomCount
+    return realFrames.reduce((sum, f) => sum + (f.objects || []).filter(isDefect).length, 0)
   }
 
   const getCurrentShift = () => {

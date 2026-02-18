@@ -9,6 +9,7 @@
 
 import { cn } from '@/lib/utils'
 import { CheckCircle2, AlertTriangle, Clock } from 'lucide-react'
+import { isRealPcb } from '@/lib/utils/serialNumber'
 import SidePanel from './SidePanel'
 
 export function InspectionResult({ inspection, className, onFrameClick, reviewingFrameKey, frameDecisions }) {
@@ -16,16 +17,25 @@ export function InspectionResult({ inspection, className, onFrameClick, reviewin
 
   const { results, decision } = inspection
 
-  // Determine AI result for display
-  const aiResult = decision === 'PASS' ? 'GOOD' : 
-                   decision === 'FAIL' ? 'NG' : 'WAITING'
-
   // results.top and results.bottom are now arrays of frames
   // Handle both array format (new) and object format (legacy)
   const topFrames = Array.isArray(results?.top) ? results.top : 
                     results?.top?.image_url ? [results.top] : []
   const bottomFrames = Array.isArray(results?.bottom) ? results.bottom : 
                        results?.bottom?.image_url ? [results.bottom] : []
+
+  // Determine AI result for display.
+  // Override FAIL → GOOD when all NG frames are on empty cavities (SN="0").
+  const aiResult = (() => {
+    if (decision === 'PASS') return 'GOOD'
+    if (decision !== 'FAIL') return 'WAITING'
+    const allFrames = [...topFrames, ...bottomFrames]
+    const hasSN = allFrames.some(f => f.serial_number != null)
+    if (hasSN && !allFrames.some(f => f.label == true && isRealPcb(f.serial_number))) {
+      return 'GOOD'
+    }
+    return 'NG'
+  })()
 
   const hasTop = topFrames.length > 0
   const hasBottom = bottomFrames.length > 0

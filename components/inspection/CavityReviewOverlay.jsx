@@ -19,7 +19,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { cn } from '@/lib/utils'
 import { findNextUnreviewedFrame, computePcbCounts } from '@/lib/utils/inspectionReview'
-import { classifySerialNumber, formatSerialDisplay, SN_TYPE } from '@/lib/utils/serialNumber'
+import { classifySerialNumber, isRealPcb, SN_TYPE } from '@/lib/utils/serialNumber'
 import { X, ZoomIn, ZoomOut, CheckCircle2, AlertCircle, Timer, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useI18n } from '@/context/I18nContext'
 
@@ -41,20 +41,21 @@ export function CavityReviewOverlay({
   topFrameCount = 0,     // DB-configured TOP frame count (primary source for frame-to-PCB grouping)
   bottomFrameCount = 0,  // DB-configured BOTTOM frame count (primary source for frame-to-PCB grouping)
 }) {
-  const boardSerialNumber = inspection?.serialNumber || 'N/A'
   const { t } = useI18n()
 
   // Collect all NG frames from both sides into a flat review list
   // Use loose equality (== true) because backend may send label as boolean true OR integer 1
+  // Skip empty cavity frames (SN="0") — they have no real PCB to inspect
   const ngFrames = useMemo(() => {
     const topFrames = inspection?.results?.top || []
     const bottomFrames = inspection?.results?.bottom || []
+    const hasSerialData = [...topFrames, ...bottomFrames].some(f => f.serial_number != null)
     const frames = []
     topFrames.forEach((f, idx) => {
-      if (f.label == true) frames.push({ ...f, side: 'TOP', frameIndex: idx })
+      if (f.label == true && (!hasSerialData || isRealPcb(f.serial_number))) frames.push({ ...f, side: 'TOP', frameIndex: idx })
     })
     bottomFrames.forEach((f, idx) => {
-      if (f.label == true) frames.push({ ...f, side: 'BOTTOM', frameIndex: idx })
+      if (f.label == true && (!hasSerialData || isRealPcb(f.serial_number))) frames.push({ ...f, side: 'BOTTOM', frameIndex: idx })
     })
     return frames
   }, [inspection])
@@ -340,13 +341,13 @@ export function CavityReviewOverlay({
               style={{ cursor: zoom > 1 ? 'grab' : 'default' }}>
               <div className="relative transition-transform duration-200"
                 style={{ transform: `scale(${zoom})`, transformOrigin: 'center' }}>
-                {/* Floating SN badge — 3 conditions */}
+                {/* Floating SN badge — show raw serial_number */}
                 {(() => {
-                  const sn = currentFrame?.serial_number || boardSerialNumber
+                  const sn = currentFrame?.serial_number
+                  if (sn == null) return null
                   const snType = classifySerialNumber(sn)
                   if (snType === SN_TYPE.EMPTY) return null
                   const isTimestamp = snType === SN_TYPE.TIMESTAMP
-                  const display = formatSerialDisplay(sn)
                   return (
                     <div className={cn(
                       "absolute top-2 left-1/2 -translate-x-1/2 z-10 px-3 py-1.5 rounded bg-void/85 backdrop-blur-sm",
@@ -356,7 +357,7 @@ export function CavityReviewOverlay({
                         "font-mono text-sm font-bold",
                         isTimestamp ? "text-yellow-400" : "text-phosphor-teal"
                       )}>
-                        {isTimestamp ? `NO READ ${display}` : `SN: ${display}`}
+                        SN: {String(sn)}
                       </span>
                     </div>
                   )

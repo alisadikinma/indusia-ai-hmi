@@ -15,7 +15,7 @@ import { useState, useRef, useEffect } from 'react'
 import { cn } from '@/lib/utils'
 import { ZoomIn, ZoomOut, Maximize2, AlertCircle, CheckCircle2 } from 'lucide-react'
 import { useI18n } from '@/context/I18nContext'
-import { classifySerialNumber, formatSerialDisplay, SN_TYPE } from '@/lib/utils/serialNumber'
+import { classifySerialNumber, isRealPcb, SN_TYPE } from '@/lib/utils/serialNumber'
 
 // Defect type color mapping
 const DEFECT_COLORS = {
@@ -55,16 +55,21 @@ export function SidePanel({ side, frames = [], className, onFrameClick, reviewin
   const containerRef = useRef(null)
   const { t } = useI18n()
 
+  // Check if frames carry serial_number data (legacy/pre-patch data may not have it)
+  const hasSerialData = frames.some(f => f.serial_number != null)
+
   // Current active frame — prefer url (with bbox) but fall back to raw_url
   const activeFrame = frames[activeFrameIndex] || null
+  const activeIsEmpty = hasSerialData && !isRealPcb(activeFrame?.serial_number)
   const imageUrl = activeFrame?.image_url || activeFrame?.image_raw_url
   const objects = activeFrame?.objects || []
-  
+
   // Use frame-level label (true=NG, false=GOOD) as the authoritative AI verdict.
   // Object-level obj.label is unreliable — some backends set label=1 for ALL
   // detected objects (components + defects), inflating the count.
   // Use loose equality (== true) because backend may send label as boolean true OR integer 1
-  const ngFrameCount = frames.filter(f => f.label == true).length
+  // NG count excludes empty cavity frames — they have no real PCB to inspect
+  const ngFrameCount = frames.filter(f => f.label == true && (!hasSerialData || isRealPcb(f.serial_number))).length
   const hasDefects = ngFrameCount > 0
   const frameCount = frames.length
 
@@ -189,12 +194,18 @@ export function SidePanel({ side, frames = [], className, onFrameClick, reviewin
             className="absolute inset-0 flex items-center justify-center overflow-auto p-2"
             style={{ cursor: zoom > 1 ? 'grab' : 'default' }}
           >
-            {/* Floating Serial Number Badge — 3 conditions */}
+            {/* Floating Serial Number Badge — 3 conditions + empty cavity label */}
             {(() => {
               const snType = classifySerialNumber(activeFrame?.serial_number)
+              if (snType === SN_TYPE.EMPTY && hasSerialData) {
+                return (
+                  <div className="absolute top-2 left-1/2 -translate-x-1/2 z-10 px-3 py-1 rounded bg-void/85 backdrop-blur-sm border border-text-tertiary/30">
+                    <span className="font-mono text-xs font-bold text-text-tertiary">SN: 0</span>
+                  </div>
+                )
+              }
               if (snType === SN_TYPE.EMPTY) return null
               const isTimestamp = snType === SN_TYPE.TIMESTAMP
-              const display = formatSerialDisplay(activeFrame?.serial_number)
               return (
                 <div className={cn(
                   "absolute top-2 left-1/2 -translate-x-1/2 z-10 px-3 py-1 rounded bg-void/85 backdrop-blur-sm",
@@ -204,7 +215,7 @@ export function SidePanel({ side, frames = [], className, onFrameClick, reviewin
                     "font-mono text-xs font-bold",
                     isTimestamp ? "text-yellow-400" : "text-phosphor-teal"
                   )}>
-                    {isTimestamp ? `NO READ ${display}` : `SN: ${display}`}
+                    SN: {String(activeFrame?.serial_number)}
                   </span>
                 </div>
               )
@@ -219,7 +230,7 @@ export function SidePanel({ side, frames = [], className, onFrameClick, reviewin
                 ref={imgRef}
                 src={imageUrl}
                 alt={`${side} side inspection frame ${activeFrameIndex + 1}`}
-                className="max-w-full max-h-[calc(40vh-2rem)] object-contain"
+                className={cn("max-w-full max-h-[calc(40vh-2rem)] object-contain", activeIsEmpty && "opacity-30 grayscale")}
               />
 
               {/* BBOX overlay removed - AI Backend already renders bbox on images */}
@@ -237,7 +248,8 @@ export function SidePanel({ side, frames = [], className, onFrameClick, reviewin
         <div className="px-3 py-2 bg-terminal border-t border-surface-border flex-shrink-0">
           <div className="flex items-center gap-2 overflow-x-auto pb-1">
             {frames.map((frame, index) => {
-              const frameIsNG = frame.label == true
+              const isEmpty = hasSerialData && !isRealPcb(frame.serial_number)
+              const frameIsNG = frame.label == true && !isEmpty
               const isActive = index === activeFrameIndex
               const frameKey = `${side}-${index}`
               const isReviewing = reviewingFrameKey === frameKey
@@ -250,20 +262,25 @@ export function SidePanel({ side, frames = [], className, onFrameClick, reviewin
                   key={index}
                   onClick={() => {
                     setActiveFrameIndex(index)
-                    if (frameIsNG && onFrameClick) onFrameClick(frame, index, side)
+                    // Don't trigger NG click for empty cavity frames
+                    if (frameIsNG && !isEmpty && onFrameClick) onFrameClick(frame, index, side)
                   }}
                   className={cn(
                     "relative flex-shrink-0 w-16 h-12 rounded overflow-hidden border-2 transition-all",
-                    isReviewing
-                      ? "border-phosphor-teal ring-2 ring-phosphor-teal/50 animate-pulse"
-                      : isActive
-                        ? "border-phosphor-teal ring-2 ring-phosphor-teal/30"
-                        : isConfirmed
-                          ? (confirmedAsNG ? "border-phosphor-red" : "border-phosphor-green")
-                          : frameIsNG
-                            ? "border-phosphor-red/50 hover:border-phosphor-red"
-                            : "border-surface-border hover:border-phosphor-green/50",
-                    frameIsNG && onFrameClick && "cursor-pointer"
+                    isEmpty
+                      ? isActive
+                        ? "border-text-tertiary/50 ring-1 ring-text-tertiary/30"
+                        : "border-surface-border/50 opacity-40"
+                      : isReviewing
+                        ? "border-phosphor-teal ring-2 ring-phosphor-teal/50 animate-pulse"
+                        : isActive
+                          ? "border-phosphor-teal ring-2 ring-phosphor-teal/30"
+                          : isConfirmed
+                            ? (confirmedAsNG ? "border-phosphor-red" : "border-phosphor-green")
+                            : frameIsNG
+                              ? "border-phosphor-red/50 hover:border-phosphor-red"
+                              : "border-surface-border hover:border-phosphor-green/50",
+                    !isEmpty && frameIsNG && onFrameClick && "cursor-pointer"
                   )}
                 >
                   {/* Thumbnail Image */}
@@ -271,22 +288,24 @@ export function SidePanel({ side, frames = [], className, onFrameClick, reviewin
                   <img
                     src={frame.image_url || frame.image_raw_url}
                     alt={`Frame ${index + 1}`}
-                    className="w-full h-full object-cover"
+                    className={cn("w-full h-full object-cover", isEmpty && "grayscale")}
                   />
 
-                  {/* Badge: show operator decision if confirmed, otherwise AI label */}
-                  <div className={cn(
-                    "absolute top-0.5 right-0.5 w-4 h-4 rounded-full flex items-center justify-center",
-                    isConfirmed
-                      ? (confirmedAsNG ? "bg-phosphor-red" : "bg-phosphor-green")
-                      : frameIsNG ? "bg-phosphor-red" : "bg-phosphor-green"
-                  )}>
-                    {(isConfirmed ? confirmedAsNG : frameIsNG) ? (
-                      <AlertCircle className="w-3 h-3 text-white" />
-                    ) : (
-                      <CheckCircle2 className="w-3 h-3 text-white" />
-                    )}
-                  </div>
+                  {/* Badge: hide for empty cavities, show operator decision if confirmed, otherwise AI label */}
+                  {!isEmpty && (
+                    <div className={cn(
+                      "absolute top-0.5 right-0.5 w-4 h-4 rounded-full flex items-center justify-center",
+                      isConfirmed
+                        ? (confirmedAsNG ? "bg-phosphor-red" : "bg-phosphor-green")
+                        : frameIsNG ? "bg-phosphor-red" : "bg-phosphor-green"
+                    )}>
+                      {(isConfirmed ? confirmedAsNG : frameIsNG) ? (
+                        <AlertCircle className="w-3 h-3 text-white" />
+                      ) : (
+                        <CheckCircle2 className="w-3 h-3 text-white" />
+                      )}
+                    </div>
+                  )}
 
                   {/* SN color bar — same SN on TOP and BOTTOM gets same color */}
                   {(() => {
