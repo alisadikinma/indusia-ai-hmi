@@ -152,6 +152,7 @@
     "machineRunning": "MESIN BERJALAN",
     "machineIdle": "MESIN IDLE",
     "waitingForOperator": "Menunggu operator untuk memulai",
+    "pressToStartInspection": "Tekan untuk memulai inspeksi",
     "waitingToResume": "Menunggu untuk melanjutkan",
     "workOrder": "PERINTAH KERJA"
   },

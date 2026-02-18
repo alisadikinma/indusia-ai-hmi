@@ -237,31 +237,53 @@ export function InspectionStage({ stage, stageDefinitions, processStatus, onResu
     )
   }
 
-  // ---- Machine IDLE state ----
-  if (processStatus === 'IDLE') {
+  // ---- Machine IDLE / READY state ----
+  // READY = SSE connected, waiting for operator to press START
+  // IDLE = initial state before SSE connects
+  if (processStatus === 'IDLE' || processStatus === 'READY') {
+    const isReady = processStatus === 'READY'
     return (
       <div className={cn("flex flex-col items-center justify-center h-full", className)}>
-        <div className="relative mb-8">
-          <div className="absolute inset-[-8px] w-[144px] h-[144px] rounded-full border-2 border-surface-border/50" />
-          <div className="relative w-32 h-32 border-2 border-surface-border rounded-full flex items-center justify-center bg-terminal/50 backdrop-blur-sm">
-            <Play className="w-14 h-14 text-text-tertiary" />
-          </div>
-        </div>
-        <p className="text-2xl text-text-secondary font-display font-bold tracking-wider mb-2">
-          {t('status.ready').toUpperCase()}
-        </p>
-        <p className="text-sm text-text-tertiary font-mono mb-6">
-          {t('hmi.waitingForOperator')}
-        </p>
-        {isOperator ? (
-          <button onClick={onResume} className="flex items-center gap-3 px-8 py-4 border-2 transition-all font-display text-sm font-bold tracking-wider border-phosphor-green text-phosphor-green hover:bg-phosphor-green hover:text-void">
-            <Play className="w-5 h-5" />
-            {t('buttons.start').toUpperCase()}
-          </button>
+        {isOperator && isReady ? (
+          /* Big prominent START button for operators when connected */
+          <>
+            <button
+              onClick={onResume}
+              className="group relative mb-6 transition-all"
+            >
+              <div className="absolute inset-[-12px] w-[168px] h-[168px] rounded-full border-2 border-phosphor-green/30 animate-pulse" />
+              <div className="relative w-36 h-36 border-3 border-phosphor-green rounded-full flex items-center justify-center bg-phosphor-green/10 hover:bg-phosphor-green/20 transition-colors cursor-pointer">
+                <Play className="w-16 h-16 text-phosphor-green group-hover:scale-110 transition-transform" />
+              </div>
+            </button>
+            <p className="text-3xl text-phosphor-green font-display font-bold tracking-wider mb-2">
+              {t('buttons.start').toUpperCase()}
+            </p>
+            <p className="text-sm text-text-tertiary font-mono">
+              {t('hmi.pressToStartInspection') || 'Press to start inspection'}
+            </p>
+          </>
         ) : (
-          <div className="flex items-center gap-2 px-4 py-2 border border-surface-border bg-surface-border/10">
-            <span className="font-mono text-xs text-text-tertiary">{t('hmi.viewOnlyCannotControl')}</span>
-          </div>
+          <>
+            <div className="relative mb-8">
+              <div className="absolute inset-[-8px] w-[144px] h-[144px] rounded-full border-2 border-surface-border/50" />
+              <div className="relative w-32 h-32 border-2 border-surface-border rounded-full flex items-center justify-center bg-terminal/50 backdrop-blur-sm">
+                <Play className="w-14 h-14 text-text-tertiary" />
+              </div>
+            </div>
+            <p className="text-2xl text-text-secondary font-display font-bold tracking-wider mb-2">
+              {t('status.ready').toUpperCase()}
+            </p>
+            <p className="text-sm text-text-tertiary font-mono mb-6">
+              {isOperator ? t('hmi.waitingForOperator') : t('hmi.viewOnlyCannotControl')}
+            </p>
+            {isOperator && (
+              <button onClick={onResume} className="flex items-center gap-3 px-8 py-4 border-2 transition-all font-display text-sm font-bold tracking-wider border-phosphor-green text-phosphor-green hover:bg-phosphor-green hover:text-void">
+                <Play className="w-5 h-5" />
+                {t('buttons.start').toUpperCase()}
+              </button>
+            )}
+          </>
         )}
       </div>
     )

@@ -825,40 +825,21 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
   }, [lineId, fetchStages])
 
   // ============================================
-  // Auto-connect and Auto-run on mount (operator only)
+  // Auto-connect SSE on mount (operator only)
+  // NOTE: Does NOT auto-run inspection. Operator must press RUN button.
+  // This prevents stale counter increments from previous sessions.
   // ============================================
 
-  // Guard: prevent double auto-start when workOrder changes from mock to real
+  // Guard: prevent double auto-connect when workOrder changes from mock to real
   const autoStartedRef = useRef(false)
 
   useEffect(() => {
-    let autoRunTimeout = null
-
     if (autoConnect && lineId && workOrder && !autoStartedRef.current) {
       autoStartedRef.current = true
-
-      const autoStartSequence = async () => {
-        await connect()
-
-        // Wait for SSE connections to establish, then auto-run
-        autoRunTimeout = setTimeout(async () => {
-          if (serviceRef.current?.isConnected()) {
-            console.log('[LiveInspection] Auto-starting process...')
-            await runProcess()
-          } else {
-            console.warn('[LiveInspection] SSE not connected after timeout, allowing retry')
-            autoStartedRef.current = false
-          }
-        }, 1500)
-      }
-
-      autoStartSequence()
+      connect()
     }
 
     return () => {
-      // Cancel pending auto-run timeout to prevent orphaned runProcess() calls
-      // (React Strict Mode runs effects twice: mount → cleanup → remount)
-      if (autoRunTimeout) clearTimeout(autoRunTimeout)
       disconnect()
       autoStartedRef.current = false
     }

@@ -152,6 +152,7 @@
     "machineRunning": "MACHINE RUNNING",
     "machineIdle": "MACHINE IDLE",
     "waitingForOperator": "Waiting for operator to start",
+    "pressToStartInspection": "Press to start inspection",
     "waitingToResume": "Waiting to resume",
     "workOrder": "WORK ORDER"
   },

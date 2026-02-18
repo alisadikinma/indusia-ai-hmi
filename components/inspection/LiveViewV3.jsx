@@ -374,9 +374,10 @@ export function LiveViewV3({
         // IMPORTANT: Only recover if WO ID matches — prevents stale counters from previous WO.
         if (isOperator && workOrder && newSyncedState.workOrderCounters) {
           const lsCounters = newSyncedState.workOrderCounters
-          // Skip recovery if line-state has counters from a different WO
-          if (lsCounters.workOrderId && workOrder.id && lsCounters.workOrderId !== workOrder.id) {
-            console.log('[LiveView] Line-state has counters from different WO, skipping recovery')
+          // Skip recovery if WO IDs don't match or either is missing.
+          // Without this, stale counters from a previous WO contaminate the new WO.
+          if (!lsCounters.workOrderId || !workOrder.id || lsCounters.workOrderId !== workOrder.id) {
+            console.log('[LiveView] Line-state WO mismatch or missing ID, skipping recovery', { lsWoId: lsCounters.workOrderId, woId: workOrder.id })
           } else {
             setSessionCounters(prev => {
               const isSessionEmpty = prev.completedQty === 0 && prev.goodQty === 0 && prev.ngQty === 0
@@ -641,9 +642,12 @@ export function LiveViewV3({
     }
 
     setWoOnHold(false)
+    // Discard any inspection events queued before operator pressed RUN.
+    // These may be stale results from a previous backend session.
+    clearInspection()
     await runProcess()
     saveLineState({ processStatus: 'RUNNING' })
-  }, [runProcess, saveLineState, workOrder, sessionCounters.completedQty, lineId, showStartBlocked])
+  }, [runProcess, saveLineState, workOrder, sessionCounters.completedQty, lineId, showStartBlocked, clearInspection])
   
   const handlePauseProcess = useCallback(async () => {
     await pauseProcess()
@@ -1619,6 +1623,13 @@ export function LiveViewV3({
   }, [activeInspection, aiResult, isOperator, announceResult])
   
   useEffect(() => {
+    // Don't auto-confirm if operator hasn't explicitly pressed RUN.
+    // Prevents stale counter increments from previous backend sessions.
+    if (processStatus !== 'RUNNING') {
+      if (reviewTimerRef.current) clearInterval(reviewTimerRef.current)
+      return
+    }
+
     // Clear timer when no inspection or paused
     if (!activeInspection || !isOperator || isPaused) {
       if (reviewTimerRef.current) clearInterval(reviewTimerRef.current)
@@ -1668,7 +1679,7 @@ export function LiveViewV3({
     return () => {
       if (reviewTimerRef.current) clearInterval(reviewTimerRef.current)
     }
-  }, [aiResult, isPaused, isOperator, activeInspection, submitDecision, autoNgEnabled, showCavityOverlay])
+  }, [aiResult, isPaused, isOperator, activeInspection, submitDecision, autoNgEnabled, showCavityOverlay, processStatus])
 
   // ============================================
   // Dev Mode: Simulate Inspection
