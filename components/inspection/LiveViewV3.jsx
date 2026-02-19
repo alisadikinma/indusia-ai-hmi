@@ -476,6 +476,8 @@ export function LiveViewV3({
       completedQty: (workOrder?.completedQty || 0) + sessionCounters.completedQty,
       goodQty: (workOrder?.goodQty || 0) + sessionCounters.goodQty,
       ngQty: (workOrder?.ngQty || 0) + sessionCounters.ngQty,
+      cameraStatus: hardwareStatus?.cameras?.[0]?.status,
+      plcStatus: hardwareStatus?.plcs?.[0]?.status,
     })
 
     // Skip if no change (unless autoNg specifically changed - force sync)

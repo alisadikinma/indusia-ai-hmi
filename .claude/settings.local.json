@@ -57,10 +57,14 @@
       "Bash(ls:*)",
       "Bash(python:*)",
       "Bash(pip install:*)",
-      "Bash(test:*)"
+      "Bash(test:*)",
+      "Read(//d/Projects/indusia-ai-backend/assets/dist/temp/auto_inspect_edge/**)"
     ],
     "deny": [],
-    "ask": []
+    "ask": [],
+    "additionalDirectories": [
+      "D:\\Projects\\indusia-ai-backend"
+    ]
   },
   "enabledPlugins": {}
 }

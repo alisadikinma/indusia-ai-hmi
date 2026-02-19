@@ -219,10 +219,19 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
 
   const handleHardwareStatus = useCallback((data) => {
     console.log('[LiveInspection] Hardware status:', data)
+
+    // SSE sends {cameras: [...], plcs: [...]} at root level (confirmed with backend)
+    // Fallback to data.hardware?.cameras for future compatibility
+    const rawCameras = data.cameras || data.hardware?.cameras || []
+    const rawPlcs = data.plcs || data.hardware?.plcs || []
+
+    // Backend sends status as boolean (true/false), UI expects 'ONLINE'/'OFFLINE'
+    const normalizeStatus = (s) => (s === true || s === 'ONLINE') ? 'ONLINE' : 'OFFLINE'
+
     setHardwareStatus({
-      cameras: data.hardware?.cameras || [],
-      plcs: data.hardware?.plcs || [],
-      timestamp: data.timestamp
+      cameras: rawCameras.map(c => ({ ...c, status: normalizeStatus(c.status) })),
+      plcs: rawPlcs.map(p => ({ ...p, status: normalizeStatus(p.status) })),
+      timestamp: data.timestamp || Date.now()
     })
   }, [])
 
@@ -469,27 +478,9 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
     setSessionStatus(session)
     
     // Update process status based on session status
+    // Hardware status is NOT set here — device_status SSE stream is the source of truth
     if (session?.status) {
       setProcessStatus(session.status)
-      
-      // Sync hardware status with process status
-      if (session.status === 'RUNNING' || session.status === 'PAUSED') {
-        setHardwareStatus(prev => ({
-          ...prev,
-          cameras: prev.cameras.length > 0 
-            ? prev.cameras.map(c => ({ ...c, status: 'ONLINE' }))
-            : [{ id: 'cam-01', name: 'Inspection Camera', status: 'ONLINE' }],
-          plcs: prev.plcs.length > 0
-            ? prev.plcs.map(p => ({ ...p, status: 'ONLINE' }))
-            : [{ id: 'plc-01', name: 'Conveyor PLC', status: 'ONLINE' }]
-        }))
-      } else if (session.status === 'STOPPED') {
-        setHardwareStatus(prev => ({
-          ...prev,
-          cameras: prev.cameras.map(c => ({ ...c, status: 'OFFLINE' })),
-          plcs: prev.plcs.map(p => ({ ...p, status: 'OFFLINE' }))
-        }))
-      }
     }
   }, [])
 
@@ -605,17 +596,18 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
         setProcessStatus('RUNNING')
         setSessionStatus(result.data)
 
-        // Hardware goes ONLINE when process runs
+        // Only set initial optimistic status if no device_status SSE received yet
+        // Once SSE device_status events arrive, they become the source of truth
         setHardwareStatus(prev => ({
           ...prev,
           cameras: prev.cameras.length > 0
-            ? prev.cameras.map(c => ({ ...c, status: 'ONLINE' }))
+            ? prev.cameras  // Keep real SSE data
             : [{ id: 'cam-01', name: 'Inspection Camera', status: 'ONLINE' }],
           plcs: prev.plcs.length > 0
-            ? prev.plcs.map(p => ({ ...p, status: 'ONLINE' }))
+            ? prev.plcs     // Keep real SSE data
             : [{ id: 'plc-01', name: 'Conveyor PLC', status: 'ONLINE' }]
         }))
-        console.log('[LiveInspection] Process started, hardware ONLINE')
+        console.log('[LiveInspection] Process started')
 
         // First board READY is handled by backend Patch 2 (auto-trigger _on_plc_ready).
         // Do NOT send triggerSimReady here — double READY causes two concurrent board
