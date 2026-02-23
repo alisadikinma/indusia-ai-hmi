@@ -479,7 +479,7 @@ export default function MasterDataPage() {
 
       {/* Customers Tab */}
       {!masterLoading && activeTab === 'customers' && (
-        <div className="grid grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-6">
           <Card title={t('masterData.customers')} subtitle={`${customers.length} customers`}>
             {customers.length === 0 ? (
               <p className="text-indusia-textMuted text-center py-8">{t('masterData.noCustomers')}</p>
@@ -548,7 +548,7 @@ export default function MasterDataPage() {
 
       {/* Sections Tab */}
       {!masterLoading && activeTab === 'sections' && (
-        <div className="grid grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-6">
           <Card title={t('masterData.sections')} subtitle={`${sections.length} sections`}>
             {sections.length === 0 ? (
               <p className="text-indusia-textMuted text-center py-8">{t('masterData.noSections')}</p>
@@ -617,7 +617,7 @@ export default function MasterDataPage() {
 
       {/* Lines Tab */}
       {!masterLoading && activeTab === 'lines' && (
-        <div className="grid grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-6">
           <Card title={t('masterData.productionLines')} subtitle={`${lines.length} lines`}>
             {lines.length === 0 ? (
               <p className="text-indusia-textMuted text-center py-8">{t('masterData.noLines')}</p>
@@ -714,20 +714,20 @@ export default function MasterDataPage() {
 
       {/* Boards Tab */}
       {!masterLoading && activeTab === 'boards' && (
-        <div className="grid grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-6">
           <Card title={t('masterData.boardsModels')} subtitle={`${boards.length} boards`}>
             {boards.length === 0 ? (
               <p className="text-indusia-textMuted text-center py-8">{t('masterData.noBoards')}</p>
             ) : (
-              <table className="w-full">
+              <table className="w-full table-fixed">
                 <thead className="border-b border-indusia-border">
                   <tr>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-indusia-textMuted uppercase">{t('masterData.name')}</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-indusia-textMuted uppercase">{t('masterData.customer')}</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-indusia-textMuted uppercase">{t('masterData.cavity')}</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-indusia-textMuted uppercase">{t('masterData.topFrames')}</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-indusia-textMuted uppercase">{t('masterData.btmFrames')}</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-indusia-textMuted uppercase">{t('common.actions')}</th>
+                    <th className="text-left px-3 py-2 text-xs font-semibold text-indusia-textMuted uppercase w-[30%]">{t('masterData.name')}</th>
+                    <th className="text-left px-3 py-2 text-xs font-semibold text-indusia-textMuted uppercase w-[25%]">{t('masterData.customer')}</th>
+                    <th className="text-center px-2 py-2 text-xs font-semibold text-indusia-textMuted uppercase w-[10%]">{t('masterData.cavity')}</th>
+                    <th className="text-center px-2 py-2 text-xs font-semibold text-indusia-textMuted uppercase w-[12%]">{t('masterData.topFrames')}</th>
+                    <th className="text-center px-2 py-2 text-xs font-semibold text-indusia-textMuted uppercase w-[12%]">{t('masterData.btmFrames')}</th>
+                    <th className="text-center px-2 py-2 text-xs font-semibold text-indusia-textMuted uppercase w-[11%]">{t('common.actions')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -735,13 +735,13 @@ export default function MasterDataPage() {
                     const customer = customers.find(c => c.id === board.customerId);
                     return (
                       <tr key={board.id} className="border-b border-indusia-border hover:bg-indusia-surfaceMuted">
-                        <td className="px-4 py-3 text-sm text-indusia-text">{board.name}</td>
-                        <td className="px-4 py-3 text-sm text-indusia-textMuted">{customer?.name || '-'}</td>
-                        <td className="px-4 py-3 text-sm text-indusia-textMuted font-mono">{board.cavityCount || 1}</td>
-                        <td className="px-4 py-3 text-sm text-indusia-textMuted font-mono">{board.topFrameCount || 1}</td>
-                        <td className="px-4 py-3 text-sm text-indusia-textMuted font-mono">{board.bottomFrameCount || 0}</td>
-                        <td className="px-4 py-3">
-                          <div className="flex gap-2">
+                        <td className="px-3 py-2 text-sm text-indusia-text truncate">{board.name}</td>
+                        <td className="px-3 py-2 text-sm text-indusia-textMuted truncate">{customer?.name || '-'}</td>
+                        <td className="px-2 py-2 text-sm text-indusia-textMuted font-mono text-center">{board.cavityCount || 1}</td>
+                        <td className="px-2 py-2 text-sm text-indusia-textMuted font-mono text-center">{board.topFrameCount || 1}</td>
+                        <td className="px-2 py-2 text-sm text-indusia-textMuted font-mono text-center">{board.bottomFrameCount || 0}</td>
+                        <td className="px-2 py-2">
+                          <div className="flex gap-1 justify-center">
                             <button onClick={() => { setEditingBoard(board); setBoardForm({ ...board, cavityCount: board.cavityCount || 1, topFrameCount: board.topFrameCount || 1, bottomFrameCount: board.bottomFrameCount || 0 }); }} className="p-1 text-indusia-primary hover:bg-indusia-primary/10 rounded">
                               <Edit2 className="w-4 h-4" />
                             </button>
@@ -841,7 +841,7 @@ export default function MasterDataPage() {
 
       {/* False Call Reasons Tab */}
       {!masterLoading && activeTab === 'false-call-reasons' && (
-        <div className="grid grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-6">
           <Card title={t('masterData.falseCallReasons')} subtitle={`${falseCallReasons.length} reasons`}>
             {falseCallLoading ? (
               <div className="flex items-center justify-center py-8">
@@ -850,36 +850,36 @@ export default function MasterDataPage() {
             ) : falseCallReasons.length === 0 ? (
               <p className="text-indusia-textMuted text-center py-8">{t('masterData.noReasons')}</p>
             ) : (
-              <table className="w-full">
+              <table className="w-full table-fixed">
                 <thead className="border-b border-indusia-border">
                   <tr>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-indusia-textMuted uppercase">{t('masterData.code')}</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-indusia-textMuted uppercase">{t('masterData.name')}</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-indusia-textMuted uppercase hidden md:table-cell">{t('masterData.description')}</th>
-                    <th className="text-center px-4 py-3 text-xs font-semibold text-indusia-textMuted uppercase">{t('masterData.status')}</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-indusia-textMuted uppercase">{t('common.actions')}</th>
+                    <th className="text-left px-3 py-2 text-xs font-semibold text-indusia-textMuted uppercase w-[22%]">{t('masterData.code')}</th>
+                    <th className="text-left px-3 py-2 text-xs font-semibold text-indusia-textMuted uppercase w-[22%]">{t('masterData.name')}</th>
+                    <th className="text-left px-3 py-2 text-xs font-semibold text-indusia-textMuted uppercase">{t('masterData.description')}</th>
+                    <th className="text-center px-2 py-2 text-xs font-semibold text-indusia-textMuted uppercase w-[13%]">{t('masterData.status')}</th>
+                    <th className="text-center px-2 py-2 text-xs font-semibold text-indusia-textMuted uppercase w-[11%]">{t('common.actions')}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {falseCallReasons.map(reason => (
                     <tr key={reason.id} className="border-b border-indusia-border hover:bg-indusia-surfaceMuted">
-                      <td className="px-4 py-3">
-                        <code className="px-2 py-1 bg-indusia-bg rounded text-xs text-indusia-primary">{reason.code}</code>
+                      <td className="px-3 py-2">
+                        <code className="px-1.5 py-0.5 bg-indusia-bg rounded text-xs text-indusia-primary truncate block">{reason.code}</code>
                       </td>
-                      <td className="px-4 py-3 text-sm text-indusia-text">{reason.name}</td>
-                      <td className="px-4 py-3 text-sm text-indusia-textMuted hidden md:table-cell">{reason.description || '-'}</td>
-                      <td className="px-4 py-3 text-center">
+                      <td className="px-3 py-2 text-sm text-indusia-text truncate">{reason.name}</td>
+                      <td className="px-3 py-2 text-sm text-indusia-textMuted truncate">{reason.description || '-'}</td>
+                      <td className="px-2 py-2 text-center">
                         <button
                           onClick={() => toggleReasonActive(reason)}
-                          className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs ${
+                          className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs whitespace-nowrap ${
                             reason.is_active ? 'bg-green-500/20 text-green-400' : 'bg-gray-500/20 text-gray-400'
                           }`}
                         >
                           {reason.is_active ? <><CheckCircle className="w-3 h-3" /> {t('masterData.active')}</> : <><XCircle className="w-3 h-3" /> {t('masterData.inactive')}</>}
                         </button>
                       </td>
-                      <td className="px-4 py-3">
-                        <div className="flex gap-2">
+                      <td className="px-2 py-2">
+                        <div className="flex gap-1 justify-center">
                           <button onClick={() => { setEditingReason(reason); setReasonForm({ code: reason.code, name: reason.name, description: reason.description || '', is_active: reason.is_active, display_order: reason.display_order || 0 }); }} className="p-1 text-indusia-primary hover:bg-indusia-primary/10 rounded">
                             <Edit2 className="w-4 h-4" />
                           </button>
@@ -969,7 +969,7 @@ export default function MasterDataPage() {
 
       {/* Users Tab */}
       {!masterLoading && activeTab === 'users' && (
-        <div className="grid grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-6">
           <Card title={t('masterData.registeredUsers')} subtitle={`${filteredUsers.length} users`}>
             <div className="mb-4 flex gap-2">
               {['all', 'operator', 'manager', 'engineer'].map(filter => (

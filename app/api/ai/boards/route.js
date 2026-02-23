@@ -17,7 +17,6 @@ async function handleGET(request) {
     const limit = Math.min(parseInt(searchParams.get('limit') || '50'), 100)
     const offset = (page - 1) * limit
 
-    // Schema: id, name, customer_id, part_number (added via migration 027)
     let query = supabase
       .from('boards')
       .select(`
@@ -26,6 +25,8 @@ async function handleGET(request) {
         part_number,
         customer_id,
         cavity_count,
+        top_frame_count,
+        bottom_frame_count,
         customer:customers(id, name, code)
       `, { count: 'exact' })
 
@@ -54,6 +55,8 @@ async function handleGET(request) {
       partNumber: row.part_number,
       customerId: row.customer_id,
       cavityCount: row.cavity_count || 1,
+      topFrameCount: row.top_frame_count || 1,
+      bottomFrameCount: row.bottom_frame_count || 0,
       customer: row.customer
     }))
 

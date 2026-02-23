@@ -18,6 +18,9 @@ async function handleGET(request, { params }) {
         name,
         part_number,
         customer_id,
+        cavity_count,
+        top_frame_count,
+        bottom_frame_count,
         customer:customers(id, name, code)
       `)
       .eq('id', id)
@@ -36,6 +39,9 @@ async function handleGET(request, { params }) {
       name: data.name,
       partNumber: data.part_number,
       customerId: data.customer_id,
+      cavityCount: data.cavity_count || 1,
+      topFrameCount: data.top_frame_count || 1,
+      bottomFrameCount: data.bottom_frame_count || 0,
       customer: data.customer
     }
 

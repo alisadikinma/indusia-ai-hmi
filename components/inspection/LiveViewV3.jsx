@@ -125,6 +125,8 @@ export function LiveViewV3({
         const data = JSON.parse(localStorage.getItem(key))
         if (data?.counters && (!latest || data.timestamp > latest.timestamp)) latest = data
       }
+      // Skip mock WO counters — meaningless across sessions
+      if (latest?.woId === 'mock-wo-001') return COUNTER_ZERO
       // Expire after 24 hours (stale from previous shift)
       if (latest && (Date.now() - latest.timestamp) < 24 * 60 * 60 * 1000) {
         console.log('[LiveView] Restored sessionCounters from localStorage:', latest.counters)
@@ -134,6 +136,10 @@ export function LiveViewV3({
     return COUNTER_ZERO
   })
   const lastKnownServerRef = useRef(null)
+  // Ref mirror of sessionCounters — allows submitDecision to read current values
+  // without having sessionCounters in its deps (which causes auto-proceed re-triggers)
+  const sessionCountersRef = useRef(sessionCounters)
+  useEffect(() => { sessionCountersRef.current = sessionCounters }, [sessionCounters])
 
   // Persist sessionCounters to localStorage on every change
   useEffect(() => {
@@ -371,11 +377,11 @@ export function LiveViewV3({
         // Line-state recovery: if sessionCounters are zero (no localStorage backup)
         // but line-state has higher effective counters than DB base, recover the delta.
         // This handles the case where updateCounters() failed but line-state was pushed.
-        // IMPORTANT: Only recover if WO ID matches — prevents stale counters from previous WO.
-        if (isOperator && workOrder && newSyncedState.workOrderCounters) {
+        // IMPORTANT: Skip mock WO — 'mock-wo-001' always matches stale line-state across sessions.
+        // IMPORTANT: Only recover if real WO ID matches.
+        const isMockWO = workOrder?.id === 'mock-wo-001'
+        if (isOperator && workOrder && !isMockWO && newSyncedState.workOrderCounters) {
           const lsCounters = newSyncedState.workOrderCounters
-          // Skip recovery if WO IDs don't match or either is missing.
-          // Without this, stale counters from a previous WO contaminate the new WO.
           if (!lsCounters.workOrderId || !workOrder.id || lsCounters.workOrderId !== workOrder.id) {
             console.log('[LiveView] Line-state WO mismatch or missing ID, skipping recovery', { lsWoId: lsCounters.workOrderId, woId: workOrder.id })
           } else {
@@ -1121,16 +1127,18 @@ export function LiveViewV3({
     }
 
     // Client-side guard: block if WO already reached lot size
+    // Read from ref to avoid sessionCounters in useCallback deps (prevents auto-proceed re-triggers)
+    const sc = sessionCountersRef.current
     if (workOrder.lotSize > 0) {
-      const currentTotal = (workOrder.completedQty || 0) + sessionCounters.completedQty
+      const currentTotal = (workOrder.completedQty || 0) + sc.completedQty
       if (currentTotal >= workOrder.lotSize) {
         console.warn('[LiveView] submitDecision blocked: WO lot size reached', { currentTotal, lotSize: workOrder.lotSize })
         if (!completedWoData) {
           setCompletedWoData({
             woNumber: workOrder.woNumber, lotSize: workOrder.lotSize, completedQty: currentTotal,
-            goodQty: (workOrder.goodQty || 0) + sessionCounters.goodQty,
-            ngQty: (workOrder.ngQty || 0) + sessionCounters.ngQty,
-            falseCallQty: (workOrder.falseCallQty || 0) + sessionCounters.falseCallQty,
+            goodQty: (workOrder.goodQty || 0) + sc.goodQty,
+            ngQty: (workOrder.ngQty || 0) + sc.ngQty,
+            falseCallQty: (workOrder.falseCallQty || 0) + sc.falseCallQty,
           })
         }
         setWoCompleted(true)
@@ -1354,11 +1362,10 @@ export function LiveViewV3({
 
         // 7. Auto-stop machine if WO was completed (lot size reached)
         // Check BOTH server auto-complete flag AND client-side session counters.
-        // Session counter check is critical: if some DB counter updates were lost or
-        // delayed, the server might not detect lot_size reached, but the client knows
-        // the real count from optimistic updates.
+        // Read sc from ref (already captured above) for latest values.
+        const scNow = sessionCountersRef.current
         if (!wasAutoCompleted && workOrder.lotSize > 0) {
-          const effectiveTotal = (workOrder.completedQty || 0) + sessionCounters.completedQty
+          const effectiveTotal = (workOrder.completedQty || 0) + scNow.completedQty
           if (effectiveTotal >= workOrder.lotSize) {
             console.log('[LiveView] Client-side lot size reached:', effectiveTotal, '>=', workOrder.lotSize)
             wasAutoCompleted = true
@@ -1366,15 +1373,14 @@ export function LiveViewV3({
         }
         if (wasAutoCompleted) {
           console.log('[LiveView] WO auto-completed — stopping machine')
-          // Capture final WO data before fetchedWO becomes null
-          const finalCompleted = (workOrder.completedQty || 0) + sessionCounters.completedQty
+          const finalCompleted = (workOrder.completedQty || 0) + scNow.completedQty
           setCompletedWoData({
             woNumber: workOrder.woNumber,
             lotSize: workOrder.lotSize,
             completedQty: finalCompleted,
-            goodQty: (workOrder.goodQty || 0) + sessionCounters.goodQty,
-            ngQty: (workOrder.ngQty || 0) + sessionCounters.ngQty,
-            falseCallQty: (workOrder.falseCallQty || 0) + sessionCounters.falseCallQty,
+            goodQty: (workOrder.goodQty || 0) + scNow.goodQty,
+            ngQty: (workOrder.ngQty || 0) + scNow.ngQty,
+            falseCallQty: (workOrder.falseCallQty || 0) + scNow.falseCallQty,
           })
           setWoCompleted(true)
           try {
@@ -1427,7 +1433,7 @@ export function LiveViewV3({
     }
   }, [activeInspection, workOrder, fetchedWO, currentInspection, confirmInspection,
       lineId, sectionId, customerId, user, updateCounters, refreshWO, devMockInspection, activeCavityCount,
-      sessionCounters.completedQty, handleStopProcess])
+      handleStopProcess]) // sessionCounters read via ref to prevent auto-proceed re-triggers
 
   /**
    * Handle GOOD button click

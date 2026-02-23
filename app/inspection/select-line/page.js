@@ -112,14 +112,16 @@ function LineCard({ line, section, isSelected, onSelect, onStartInspection, isSt
   const hasStats = line.inspected > 0 || ['running', 'paused', 'stopped'].includes(line.status);
 
   return (
-    <button
+    <div
+      role="button"
+      tabIndex={isDisabled ? -1 : 0}
       onClick={() => !isDisabled && onSelect(line)}
-      disabled={isDisabled}
+      onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && !isDisabled) { e.preventDefault(); onSelect(line); } }}
       className={cn(
-        "w-full text-left p-4 border-2 transition-all duration-200",
+        "w-full text-left p-4 border-2 transition-all duration-200 cursor-pointer",
         "bg-panel hover:bg-terminal",
-        isSelected 
-          ? "border-phosphor-teal bg-phosphor-teal/5" 
+        isSelected
+          ? "border-phosphor-teal bg-phosphor-teal/5"
           : "border-surface-border hover:border-phosphor-teal/50",
         isDisabled && "opacity-50 cursor-not-allowed hover:bg-panel hover:border-surface-border"
       )}
@@ -381,7 +383,7 @@ function LineCard({ line, section, isSelected, onSelect, onStartInspection, isSt
           </div>
         )}
       </div>
-    </button>
+    </div>
   );
 }
 

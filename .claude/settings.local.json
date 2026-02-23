@@ -58,7 +58,8 @@
       "Bash(python:*)",
       "Bash(pip install:*)",
       "Bash(test:*)",
-      "Read(//d/Projects/indusia-ai-backend/assets/dist/temp/auto_inspect_edge/**)"
+      "Read(//d/Projects/indusia-ai-backend/assets/dist/temp/auto_inspect_edge/**)",
+      "Bash(npx next lint:*)"
     ],
     "deny": [],
     "ask": [],

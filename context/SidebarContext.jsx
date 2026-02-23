@@ -19,7 +19,7 @@ const FULLSCREEN_ROUTES = [
 
 export function SidebarProvider({ children }) {
   const pathname = usePathname();
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(true);
   const [isHidden, setIsHidden] = useState(false);
   const [isFullscreenMode, setIsFullscreenMode] = useState(false);
   const [navigatingTo, setNavigatingTo] = useState(null);
