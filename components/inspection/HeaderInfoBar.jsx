@@ -8,10 +8,9 @@
  */
 
 import { useState, useEffect, useRef } from 'react'
-import { Bell, Cloud, CloudOff, RefreshCw, CheckCircle2, Sun, Moon } from 'lucide-react'
+import { Bell, Cloud, CloudOff, RefreshCw, CheckCircle2 } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 import { useI18n } from '@/context/I18nContext'
-import { useTheme } from '@/context/ThemeContext'
 import { authFetch } from '@/lib/utils/authFetch'
 import { cn } from '@/lib/utils'
 import NotificationDrawer from '@/components/notifications/NotificationDrawer'
@@ -19,7 +18,6 @@ import NotificationDrawer from '@/components/notifications/NotificationDrawer'
 export function HeaderInfoBar({ className }) {
   const { user } = useAuth()
   const { t } = useI18n()
-  const { isDark, toggleTheme } = useTheme()
   const [unreadCount, setUnreadCount] = useState(0)
   const [lastSync, setLastSync] = useState(null)
   const [pendingCount, setPendingCount] = useState(0)
@@ -123,19 +121,6 @@ export function HeaderInfoBar({ className }) {
 
   return (
     <div className={cn("flex items-center gap-3", className)}>
-      {/* Theme Toggle */}
-      <button
-        onClick={toggleTheme}
-        className={cn(
-          "p-2 border transition-all",
-          "border-surface-border bg-terminal text-text-secondary",
-          "hover:border-phosphor-teal hover:text-phosphor-teal"
-        )}
-        title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
-      >
-        {isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-      </button>
-
       {/* Sync Status Indicator */}
       <div className={cn(
         "flex items-center gap-2 px-3 py-1.5 border",

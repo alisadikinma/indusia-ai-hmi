@@ -28,6 +28,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useI18n } from '@/hooks/useI18n';
 import { useSidebar } from '@/context/SidebarContext';
 import { useSystemUpdate } from '@/hooks/useSystemUpdate';
+import { useTheme } from '@/context/ThemeContext';
 import { cn } from '@/lib/utils';
 
 /**
@@ -45,6 +46,8 @@ export default function SideNav() {
   const { t } = useI18n();
   const { isCollapsed, isHidden, toggleCollapse, startNavigation } = useSidebar();
   const { currentVersion } = useSystemUpdate();
+  const { isDark } = useTheme();
+  const logoSrc = isDark ? '/indusiaai-logo.png' : '/indusiaai-light.png';
   const [currentTime, setCurrentTime] = useState('');
   const [systemUptime, setSystemUptime] = useState('00:00:00');
   
@@ -197,7 +200,7 @@ export default function SideNav() {
         {/* Logo */}
         <div className={cn("flex items-center gap-3 mb-4", isCollapsed && "justify-center")}>
           <div className="w-10 h-10 border border-phosphor-teal flex items-center justify-center bg-void relative flex-shrink-0">
-            <img src="/indusiaai-logo.png" alt="INDUSIA AI" className="w-8 h-8 object-contain" />
+            <img src={logoSrc} alt="INDUSIA AI" className="w-8 h-8 object-contain" />
             <div className="absolute -top-px -right-px w-2 h-2 bg-phosphor-green animate-pulse-glow" />
           </div>
           {!isCollapsed && (

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabaseClient'
 import { normalizeRole } from '@/lib/utils/roleUtils'
-import { validateMockCredentials } from '@/data/mockUsers'
+import { validateMockCredentials, findMockUserByEmail } from '@/data/mockUsers'
 import { sanitizeRequestBody } from '@/lib/utils/sanitize'
 import { checkRateLimit, getClientIP, RATE_LIMITS, rateLimitResponse } from '@/lib/utils/rateLimit'
 import { generateCSRFToken, setCSRFCookie } from '@/lib/utils/csrf'
@@ -81,6 +81,25 @@ async function handlePOST(request) {
           } catch (e) {
             console.warn('[login] bcrypt comparison failed')
           }
+
+          // DEV FALLBACK: If bcrypt hash doesn't match (stale seed data),
+          // check against mock user's plaintext password and re-sync the DB hash
+          if (!isValid && isDev) {
+            const mockUser = findMockUserByEmail(normalizedEmail)
+            if (mockUser && mockUser.password === password) {
+              isValid = true
+              console.warn('[login] DEV: Verified via mock user fallback (DB hash out of sync), re-syncing hash...')
+              // Re-sync: update DB hash to match the plaintext password
+              try {
+                const bcrypt = require('bcrypt')
+                const newHash = await bcrypt.hash(password, 12)
+                await supabase.from('users').update({ password: newHash }).eq('id', user.id)
+                console.log('[login] DEV: DB hash re-synced for', normalizedEmail)
+              } catch (e) {
+                console.warn('[login] DEV: Failed to re-sync hash:', e.message)
+              }
+            }
+          }
         } else if (isDev) {
           // SECURITY: Plaintext comparison ONLY in development
           isValid = password === user.password
@@ -92,16 +111,16 @@ async function handlePOST(request) {
 
         if (isValid && user.status === 'active') {
           const { password: _, ...safeUser } = user
-          
+
           // Add normalized role field
           safeUser.role = normalizeRole(safeUser.role_id)
-          
+
           // Generate new CSRF token on successful login
           const csrfToken = generateCSRFToken()
-          
+
           const response = NextResponse.json({
             success: true,
-            data: { 
+            data: {
               user: safeUser,
               csrfToken // Include in response for frontend
             }
@@ -110,10 +129,10 @@ async function handlePOST(request) {
               'X-RateLimit-Remaining': rateCheck.remaining.toString()
             }
           })
-          
+
           // Set CSRF cookie
           setCSRFCookie(response, csrfToken)
-          
+
           return response
         } else if (user.status !== 'active') {
           return NextResponse.json(
@@ -121,6 +140,13 @@ async function handlePOST(request) {
             { status: 403 }
           )
         }
+
+        // DB user exists but password didn't match — do NOT fall through to mock users
+        // This ensures changed passwords in DB take precedence over mock data
+        return NextResponse.json(
+          { success: false, error: 'Invalid email or password' },
+          { status: 401 }
+        )
       }
     } catch (dbError) {
       if (isDev) {

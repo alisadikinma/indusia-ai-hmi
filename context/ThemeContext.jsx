@@ -8,7 +8,7 @@ const STORAGE_KEY = 'indusia_theme'
 const VALID_THEMES = ['dark', 'light']
 
 export function ThemeProvider({ children }) {
-  const [theme, setThemeState] = useState('dark')
+  const [theme, setThemeState] = useState('light')
   const [isClient, setIsClient] = useState(false)
 
   // Initialize from localStorage and apply class
@@ -17,9 +17,14 @@ export function ThemeProvider({ children }) {
     const saved = localStorage.getItem(STORAGE_KEY)
     if (saved && VALID_THEMES.includes(saved)) {
       setThemeState(saved)
-      if (saved === 'light') {
+      if (saved === 'dark') {
+        document.documentElement.classList.remove('light')
+      } else {
         document.documentElement.classList.add('light')
       }
+    } else {
+      // No saved preference — default to light
+      document.documentElement.classList.add('light')
     }
   }, [])
 

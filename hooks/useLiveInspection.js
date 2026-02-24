@@ -199,6 +199,25 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
     setIsConnected(true)
     setIsReconnecting(false)
     setConnectionError(null)
+
+    // On (re)connect, reset hardware to optimistic ONLINE.
+    // Backend will send real device_status events shortly after connection.
+    // This prevents stale OFFLINE status from persisting after backend restart.
+    setHardwareStatus(prev => {
+      const hasStaleOffline = prev.cameras.some(c => c.status === 'OFFLINE') ||
+                               prev.plcs.some(p => p.status === 'OFFLINE')
+      if (!hasStaleOffline && prev.cameras.length > 0) return prev // already ONLINE, keep it
+
+      return {
+        cameras: prev.cameras.length > 0
+          ? prev.cameras.map(c => ({ ...c, status: 'ONLINE' }))
+          : [{ id: 'cam-01', name: 'Inspection Camera', status: 'ONLINE' }],
+        plcs: prev.plcs.length > 0
+          ? prev.plcs.map(p => ({ ...p, status: 'ONLINE' }))
+          : [{ id: 'plc-01', name: 'Conveyor PLC', status: 'ONLINE' }],
+        timestamp: Date.now()
+      }
+    })
   }, [])
 
   const handleError = useCallback((data) => {
@@ -596,17 +615,14 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
         setProcessStatus('RUNNING')
         setSessionStatus(result.data)
 
-        // Only set initial optimistic status if no device_status SSE received yet
-        // Once SSE device_status events arrive, they become the source of truth
-        setHardwareStatus(prev => ({
-          ...prev,
-          cameras: prev.cameras.length > 0
-            ? prev.cameras  // Keep real SSE data
-            : [{ id: 'cam-01', name: 'Inspection Camera', status: 'ONLINE' }],
-          plcs: prev.plcs.length > 0
-            ? prev.plcs     // Keep real SSE data
-            : [{ id: 'plc-01', name: 'Conveyor PLC', status: 'ONLINE' }]
-        }))
+        // Force hardware status to ONLINE on RUN — if hardware were offline,
+        // startInspection() would have failed. Don't preserve stale OFFLINE data.
+        // SSE device_status events will update with real status shortly after.
+        setHardwareStatus({
+          cameras: [{ id: 'cam-01', name: 'Inspection Camera', status: 'ONLINE' }],
+          plcs: [{ id: 'plc-01', name: 'Conveyor PLC', status: 'ONLINE' }],
+          timestamp: Date.now()
+        })
         console.log('[LiveInspection] Process started')
 
         // First board READY is handled by backend Patch 2 (auto-trigger _on_plc_ready).

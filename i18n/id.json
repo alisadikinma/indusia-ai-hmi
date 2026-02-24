@@ -3,6 +3,10 @@
   "app": {
     "name": "INDUSIA AI HMI"
   },
+  "theme": {
+    "switchToLight": "Ganti ke mode terang",
+    "switchToDark": "Ganti ke mode gelap"
+  },
   "nav": {
     "dashboard": "Dasbor",
     "hmi": "Inspeksi",
@@ -51,7 +55,7 @@
     "encrypted": "TERENKRIPSI",
     "checkCredentials": "PERIKSA KREDENSIAL DAN COBA LAGI",
     "authorizedOnly": "HANYA UNTUK PERSONEL RESMI",
-    "systemInfo": "SISTEM INSPEKSI VISUAL AI INDUSIA // KONSOL HMI v1.0.0",
+    "systemInfo": "SISTEM INSPEKSI VISUAL AI INDUSIA",
     "emailRequired": "ERROR: EMAIL_WAJIB",
     "passwordRequired": "ERROR: KATA_SANDI_WAJIB",
     "authFailed": "AUTENTIKASI_GAGAL",
@@ -61,6 +65,30 @@
     "bootModules": "> MEMUAT MODUL AUTENTIKASI...",
     "bootConnection": "> MEMBUAT KONEKSI AMAN...",
     "bootReady": "> SIAP UNTUK INPUT OPERATOR"
+  },
+  "password": {
+    "changePassword": "Ganti Password",
+    "changeTitle": "Ganti Password",
+    "changeDescription": "Masukkan password lama dan pilih password baru.",
+    "currentPassword": "Password Saat Ini",
+    "currentPasswordPlaceholder": "Masukkan password saat ini",
+    "newPassword": "Password Baru",
+    "newPasswordPlaceholder": "Masukkan password baru",
+    "confirmPassword": "Konfirmasi Password Baru",
+    "confirmPasswordPlaceholder": "Masukkan ulang password baru",
+    "reqMinLength": "Minimal 8 karakter",
+    "reqUppercase": "Minimal satu huruf besar",
+    "reqLowercase": "Minimal satu huruf kecil",
+    "reqNumber": "Minimal satu angka",
+    "reqDifferent": "Harus berbeda dari password saat ini",
+    "sameAsCurrent": "Password baru harus berbeda dari password saat ini",
+    "mismatch": "Password tidak cocok",
+    "changeButton": "Ganti Password",
+    "changeSuccess": "Password berhasil diubah",
+    "changeFailed": "Gagal mengubah password",
+    "resetSuccess": "Password berhasil direset",
+    "resetFailed": "Gagal mereset password",
+    "tempPassword": "Password sementara"
   },
   "dashboard": {
     "title": "DASBOR KONTROL",
@@ -801,7 +829,10 @@
     "success": "Berhasil",
     "warning": "Peringatan",
     "info": "Info",
-    "all": "semua"
+    "all": "semua",
+    "cancel": "Batal",
+    "save": "Simpan",
+    "close": "Tutup"
   },
   "table": {
     "board": "Board",

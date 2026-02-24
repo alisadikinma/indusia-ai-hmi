@@ -2,7 +2,8 @@
 
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChevronDown, LogOut, User, HelpCircle, Cloud } from 'lucide-react';
+import { ChevronDown, LogOut, User, HelpCircle, Cloud, Sun, Moon, KeyRound } from 'lucide-react';
+import { useTheme } from '@/context/ThemeContext';
 import { useAuth } from '@/context/AuthContext';
 import { useHelpOverlay } from '@/hooks/useHelpOverlay';
 import { useI18n } from '@/hooks/useI18n';
@@ -10,14 +11,17 @@ import { useSystemHealthContext } from '@/context/SystemHealthContext';
 import { customers, lines } from '@/data/masterData';
 import NotificationBell from '../notifications/NotificationBell';
 import LanguageSwitcher from '../common/LanguageSwitcher';
+import ChangePasswordModal from '../common/ChangePasswordModal';
 
 export default function TopNav() {
   const router = useRouter();
   const { user, logout } = useAuth();
   const { openHelp } = useHelpOverlay();
   const { t } = useI18n();
+  const { isDark, toggleTheme } = useTheme();
   const { statuses } = useSystemHealthContext();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [passwordModalOpen, setPasswordModalOpen] = useState(false);
   const menuRef = useRef(null);
 
   // Use sync data from SystemHealthContext (no separate API call needed)
@@ -81,6 +85,7 @@ export default function TopNav() {
   if (!user) return null;
 
   return (
+    <>
     <header className="sticky top-0 z-30 bg-indusia-surface/95 backdrop-blur-sm border-b border-indusia-border">
       <div className="flex items-center justify-between px-8 py-4">
         <div>
@@ -118,6 +123,15 @@ export default function TopNav() {
             <span className="text-xs font-medium text-indusia-textMuted">
               {t('header.syncLabel')} <span className={lastSync ? 'text-indusia-text' : 'text-indusia-warning'}>{formatSyncTime(lastSync)}</span>
             </span>
+          </button>
+
+          {/* Theme Toggle */}
+          <button
+            onClick={toggleTheme}
+            className="p-2 rounded-lg bg-indusia-surfaceMuted hover:bg-indusia-border transition-colors text-indusia-textMuted hover:text-indusia-text"
+            title={isDark ? t('theme.switchToLight') : t('theme.switchToDark')}
+          >
+            {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
           </button>
 
           {/* Notification Bell - next to user profile */}
@@ -162,6 +176,24 @@ export default function TopNav() {
                 </div>
 
                 <button
+                  onClick={() => { toggleTheme(); setMenuOpen(false); }}
+                  className="w-full px-4 py-3 flex items-center gap-3 hover:bg-indusia-surfaceMuted transition-colors text-left border-b border-indusia-border"
+                >
+                  {isDark ? <Sun className="w-4 h-4 text-indusia-textMuted" /> : <Moon className="w-4 h-4 text-indusia-textMuted" />}
+                  <span className="text-sm text-indusia-text">
+                    {isDark ? t('theme.switchToLight') : t('theme.switchToDark')}
+                  </span>
+                </button>
+
+                <button
+                  onClick={() => { setPasswordModalOpen(true); setMenuOpen(false); }}
+                  className="w-full px-4 py-3 flex items-center gap-3 hover:bg-indusia-surfaceMuted transition-colors text-left border-b border-indusia-border"
+                >
+                  <KeyRound className="w-4 h-4 text-indusia-textMuted" />
+                  <span className="text-sm text-indusia-text">{t('password.changePassword')}</span>
+                </button>
+
+                <button
                   onClick={() => { openHelp('shortcuts'); setMenuOpen(false); }}
                   className="w-full px-4 py-3 flex items-center gap-3 hover:bg-indusia-surfaceMuted transition-colors text-left border-b border-indusia-border"
                 >
@@ -182,5 +214,11 @@ export default function TopNav() {
         </div>
       </div>
     </header>
+
+    <ChangePasswordModal
+      isOpen={passwordModalOpen}
+      onClose={() => setPasswordModalOpen(false)}
+    />
+    </>
   );
 }

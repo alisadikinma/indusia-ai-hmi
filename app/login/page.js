@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { useI18n } from '@/context/I18nContext';
+import { useTheme } from '@/context/ThemeContext';
 import { Eye, EyeOff, Loader2, Shield, AlertTriangle, Terminal } from 'lucide-react';
 
 export default function LoginPage() {
@@ -18,6 +19,9 @@ export default function LoginPage() {
   const [currentTime, setCurrentTime] = useState('');
   const [bootSequence, setBootSequence] = useState(0);
   const { t } = useI18n();
+  const { isDark } = useTheme();
+  const logoSrc = isDark ? '/indusiaai-logo.png' : '/indusiaai-light.png';
+  const appVersion = process.env.NEXT_PUBLIC_APP_VERSION || '0.0.0';
 
   // Boot sequence animation
   useEffect(() => {
@@ -153,7 +157,7 @@ export default function LoginPage() {
           <div className="panel-header">
             <Shield className="w-4 h-4" />
             <span>{t('auth.authTerminal')}</span>
-            <span className="ml-auto text-text-tertiary font-mono text-xxs">v2.4.1</span>
+            <span className="ml-auto text-text-tertiary font-mono text-xxs">v{appVersion}</span>
           </div>
 
           {/* Logo section */}
@@ -163,7 +167,7 @@ export default function LoginPage() {
               <div className="relative">
                 <div className="w-16 h-16 border-2 border-phosphor-teal flex items-center justify-center bg-terminal relative overflow-hidden">
                   <div className="absolute inset-0 bg-phosphor-teal/5" />
-                  <img src="/indusiaai-logo.png" alt="INDUSIA AI" className="w-12 h-12 object-contain" />
+                  <img src={logoSrc} alt="INDUSIA AI" className="w-12 h-12 object-contain" />
                 </div>
                 <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-phosphor-green animate-pulse-glow" />
               </div>

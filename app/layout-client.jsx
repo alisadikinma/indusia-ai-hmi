@@ -2,7 +2,7 @@
 
 import { usePathname, useRouter } from 'next/navigation';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
-import { ThemeProvider } from '@/context/ThemeContext';
+import { ThemeProvider, useTheme } from '@/context/ThemeContext';
 import { SystemHealthProvider } from '@/context/SystemHealthContext';
 import { NotificationProvider } from '@/context/NotificationContext';
 import { HelpOverlayProvider } from '@/context/HelpOverlayContext';
@@ -20,6 +20,8 @@ function LayoutContent({ children }) {
   const router = useRouter();
   const { user, isLoading } = useAuth();
   const { isCollapsed, isHidden, isFullscreenMode, navigatingTo } = useSidebar();
+  const { isDark } = useTheme();
+  const logoSrc = isDark ? '/indusiaai-logo.png' : '/indusiaai-light.png';
 
   const isLoginPage = pathname === '/login';
 
@@ -33,7 +35,7 @@ function LayoutContent({ children }) {
     return (
       <div className="min-h-screen bg-void flex items-center justify-center">
         <div className="text-center">
-          <img src="/indusiaai-logo.png" alt="INDUSIA AI" className="w-48 h-48 object-contain animate-pulse-glow mx-auto mb-4" />
+          <img src={logoSrc} alt="INDUSIA AI" className="w-48 h-48 object-contain animate-pulse-glow mx-auto mb-4" />
           <div className="font-mono text-sm text-text-tertiary">INITIALIZING...</div>
         </div>
       </div>
@@ -149,7 +151,7 @@ function LayoutContent({ children }) {
                     {navigatingTo ? (
                       <div className="flex items-center justify-center h-full">
                         <div className="text-center">
-                          <img src="/indusiaai-logo.png" alt="Loading" className="w-48 h-48 object-contain animate-pulse-glow mx-auto mb-4" />
+                          <img src={logoSrc} alt="Loading" className="w-48 h-48 object-contain animate-pulse-glow mx-auto mb-4" />
                           <div className="font-mono text-xs text-text-tertiary tracking-wider">Loading...</div>
                         </div>
                       </div>

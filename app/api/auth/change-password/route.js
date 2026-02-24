@@ -4,6 +4,7 @@ import { withAuth } from '@/lib/auth/apiAuth'
 import { withCSRF } from '@/lib/utils/csrf'
 import { sanitizeRequestBody } from '@/lib/utils/sanitize'
 import { checkRateLimit, getClientIP, RATE_LIMITS, rateLimitResponse } from '@/lib/utils/rateLimit'
+import { findMockUserById } from '@/data/mockUsers'
 import { z } from 'zod'
 
 // Validation schema
@@ -53,6 +54,14 @@ async function handlePOST(request) {
 
     const { currentPassword, newPassword } = validation.data
 
+    // New password must differ from current password
+    if (currentPassword === newPassword) {
+      return NextResponse.json(
+        { success: false, error: 'New password must be different from current password' },
+        { status: 400 }
+      )
+    }
+
     // SECURITY: Get userId from authenticated session, NOT from request body
     const userId = request.user.id
 
@@ -78,6 +87,16 @@ async function handlePOST(request) {
         isValid = await bcrypt.compare(currentPassword, user.password)
       } catch (e) {
         console.error('[change-password] bcrypt error:', e)
+      }
+
+      // DEV FALLBACK: If bcrypt hash doesn't match (e.g. stale hash from seed data),
+      // also check against mock user's plaintext password
+      if (!isValid && isDev) {
+        const mockUser = findMockUserById(userId)
+        if (mockUser && mockUser.password === currentPassword) {
+          isValid = true
+          console.warn('[change-password] DEV: Verified via mock user fallback (DB hash out of sync)')
+        }
       }
     } else if (isDev) {
       // DEVELOPMENT ONLY: Plaintext comparison

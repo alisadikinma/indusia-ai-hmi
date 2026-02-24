@@ -17,16 +17,20 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { useSidebar } from '@/context/SidebarContext';
 import { useI18n } from '@/context/I18nContext';
+import { useTheme } from '@/context/ThemeContext';
 import { authFetch } from '@/lib/utils/authFetch';
 import {
   Radio, Activity, ChevronRight, Factory,
   Users, Clock, AlertTriangle, CheckCircle2,
   Cpu, Zap, Settings, Lock, Eye, Menu, LogOut, ChevronDown,
   Package, TrendingUp, XCircle, Building2, RefreshCw,
-  Pause, Square, Timer, Brain
+  Pause, Square, Timer, Brain, Sun, Moon, KeyRound, HelpCircle
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { HeaderInfoBar } from '@/components/inspection/HeaderInfoBar';
+import LanguageSwitcher from '@/components/common/LanguageSwitcher';
+import ChangePasswordModal from '@/components/common/ChangePasswordModal';
+import { useHelpOverlay } from '@/hooks/useHelpOverlay';
 
 // Helper: Format duration from start time to now
 function formatDuration(startTime, t) {
@@ -392,11 +396,15 @@ export default function SelectLinePage() {
   const { user, isOperator, activeLineId, activeLineName, setActiveLine, hasActiveLine, hasMenuAccess, logout } = useAuth();
   const { showSidebar, isHidden } = useSidebar();
   const { t } = useI18n();
+  const { isDark, toggleTheme } = useTheme();
+  const { openHelp } = useHelpOverlay();
+  const logoSrc = isDark ? '/indusiaai-logo.png' : '/indusiaai-light.png';
   const [selectedSection, setSelectedSection] = useState('all');
   const [selectedLine, setSelectedLine] = useState(null);
   const [currentTime, setCurrentTime] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [passwordModalOpen, setPasswordModalOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   
   // Data from API
@@ -607,7 +615,7 @@ export default function SelectLinePage() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-void">
         <div className="bg-panel border border-surface-border p-8 max-w-md text-center">
-          <img src="/indusiaai-logo.png" alt="INDUSIA AI" className="w-14 h-14 object-contain animate-pulse-glow mx-auto mb-4" />
+          <img src={logoSrc} alt="INDUSIA AI" className="w-14 h-14 object-contain animate-pulse-glow mx-auto mb-4" />
           <h2 className="text-xl font-display font-bold text-text-primary mb-3">{t('common.loading')}</h2>
           <p className="text-sm font-mono text-text-tertiary">{t('auth.verifyingCredentials')}</p>
         </div>
@@ -619,7 +627,7 @@ export default function SelectLinePage() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-void">
         <div className="bg-panel border border-surface-border p-8 max-w-md text-center">
-          <img src="/indusiaai-logo.png" alt="INDUSIA AI" className="w-14 h-14 object-contain animate-pulse-glow mx-auto mb-4" />
+          <img src={logoSrc} alt="INDUSIA AI" className="w-14 h-14 object-contain animate-pulse-glow mx-auto mb-4" />
           <h2 className="text-xl font-display font-bold text-phosphor-green mb-3">{t('line.resumingSession')}</h2>
           <p className="text-sm font-mono text-text-tertiary">{t('line.connectingTo', { name: activeLineName })}</p>
         </div>
@@ -628,6 +636,7 @@ export default function SelectLinePage() {
   }
 
   return (
+    <>
     <div className="h-screen flex flex-col bg-void overflow-hidden">
       {/* Header */}
       <header className="h-14 shrink-0 bg-panel border-b border-surface-border flex items-center justify-between px-6">
@@ -644,7 +653,7 @@ export default function SelectLinePage() {
           {/* Logo */}
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 border border-phosphor-teal flex items-center justify-center bg-void">
-              <img src="/indusiaai-logo.png" alt="INDUSIA AI" className="w-8 h-8 object-contain" />
+              <img src={logoSrc} alt="INDUSIA AI" className="w-8 h-8 object-contain" />
             </div>
             <div>
               <h1 className="font-display font-bold text-lg tracking-wider text-text-primary">
@@ -690,17 +699,57 @@ export default function SelectLinePage() {
 
             {/* Dropdown Menu */}
             {showUserMenu && (
-              <div className="absolute right-0 top-full mt-1 w-48 bg-panel border border-surface-border shadow-lg z-50">
+              <div className="absolute right-0 top-full mt-1 w-56 bg-panel border border-surface-border shadow-lg z-50">
+                <div className="px-3 py-2 border-b border-surface-border">
+                  <p className="font-mono text-xs text-text-primary">{user?.name}</p>
+                  <p className="font-mono text-xxs text-text-tertiary capitalize">{user?.role || 'User'}</p>
+                </div>
+
+                {/* Language Switcher */}
+                <div className="px-3 py-2 border-b border-surface-border">
+                  <LanguageSwitcher />
+                </div>
+
+                {/* Theme Toggle */}
+                <button
+                  onClick={() => { toggleTheme(); setShowUserMenu(false); }}
+                  className="w-full px-3 py-2 flex items-center gap-2 hover:bg-elevated transition-colors text-left border-b border-surface-border"
+                >
+                  {isDark ? <Sun className="w-4 h-4 text-text-tertiary" /> : <Moon className="w-4 h-4 text-text-tertiary" />}
+                  <span className="font-mono text-xs text-text-primary">
+                    {isDark ? t('theme.switchToLight') : t('theme.switchToDark')}
+                  </span>
+                </button>
+
+                {/* Change Password */}
+                <button
+                  onClick={() => { setPasswordModalOpen(true); setShowUserMenu(false); }}
+                  className="w-full px-3 py-2 flex items-center gap-2 hover:bg-elevated transition-colors text-left border-b border-surface-border"
+                >
+                  <KeyRound className="w-4 h-4 text-text-tertiary" />
+                  <span className="font-mono text-xs text-text-primary">{t('password.changePassword')}</span>
+                </button>
+
+                {/* Help & Shortcuts */}
+                <button
+                  onClick={() => { openHelp('shortcuts'); setShowUserMenu(false); }}
+                  className="w-full px-3 py-2 flex items-center gap-2 hover:bg-elevated transition-colors text-left border-b border-surface-border"
+                >
+                  <HelpCircle className="w-4 h-4 text-text-tertiary" />
+                  <span className="font-mono text-xs text-text-primary">{t('nav.help')}</span>
+                </button>
+
+                {/* Logout */}
                 <button
                   onClick={async () => {
                     setShowUserMenu(false);
                     await logout();
                     router.push('/login');
                   }}
-                  className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-surface-border/30 transition-colors text-phosphor-red"
+                  className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-phosphor-red/10 transition-colors"
                 >
-                  <LogOut size={16} />
-                  <span className="font-mono text-sm">{t('auth.logout')}</span>
+                  <LogOut className="w-4 h-4 text-phosphor-red" />
+                  <span className="font-mono text-xs text-phosphor-red">{t('auth.logout')}</span>
                 </button>
               </div>
             )}
@@ -785,7 +834,7 @@ export default function SelectLinePage() {
             {dataLoading ? (
               <div className="col-span-full flex items-center justify-center py-12">
                 <div className="text-center">
-                  <img src="/indusiaai-logo.png" alt="INDUSIA AI" className="w-14 h-14 object-contain animate-pulse-glow mx-auto mb-4" />
+                  <img src={logoSrc} alt="INDUSIA AI" className="w-14 h-14 object-contain animate-pulse-glow mx-auto mb-4" />
                   <p className="font-mono text-sm text-text-tertiary">{t('line.loadingLines')}</p>
                 </div>
               </div>
@@ -827,5 +876,11 @@ export default function SelectLinePage() {
       </main>
 
     </div>
+
+    <ChangePasswordModal
+      isOpen={passwordModalOpen}
+      onClose={() => setPasswordModalOpen(false)}
+    />
+    </>
   );
 }

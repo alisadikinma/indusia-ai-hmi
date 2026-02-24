@@ -50,5 +50,6 @@ NUL
 
 *.png
 !public/indusiaai-logo.png
+!public/indusiaai-light.png
 *.jpg
 *.jpeg

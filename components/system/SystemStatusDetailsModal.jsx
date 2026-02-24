@@ -195,7 +195,7 @@ export default function SystemStatusDetailsModal({ isOpen, onClose, statuses, se
             <h4 className="text-sm font-semibold text-indusia-text mb-2">{t('systemHealth.systemInformation')}</h4>
             <div className="grid grid-cols-2 gap-2 text-xs">
               <span className="text-indusia-textMuted">{t('systemHealth.hmiVersionLabel')}</span>
-              <span className="text-indusia-text">v1.0.0</span>
+              <span className="text-indusia-text">v{process.env.NEXT_PUBLIC_APP_VERSION || '0.0.0'}</span>
 
               <span className="text-indusia-textMuted">{t('systemHealth.autoRefreshLabel')}</span>
               <span className="text-indusia-text">{t('systemHealth.autoRefreshValue')}</span>

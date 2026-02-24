@@ -37,7 +37,7 @@ import {
   Square, FlaskConical, Menu, LogOut, ChevronDown,
   Layers, RefreshCw, Settings, Camera, Cpu, RotateCcw,
   Loader2, Activity, CircleDot, FileText, ToggleLeft, ToggleRight,
-  Brain, X
+  Brain, X, Sun, Moon, KeyRound, HelpCircle
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useSidebar } from '@/context/SidebarContext'
@@ -56,6 +56,9 @@ import { FalseCallModal } from './FalseCallModal'
 import { CavityReviewOverlay } from './CavityReviewOverlay'
 import { VolumeControl } from './VolumeControl'
 import { HeaderInfoBar } from './HeaderInfoBar'
+import ChangePasswordModal from '@/components/common/ChangePasswordModal'
+import LanguageSwitcher from '@/components/common/LanguageSwitcher'
+import { useHelpOverlay } from '@/hooks/useHelpOverlay'
 
 // Services
 import { saveInspection } from '@/lib/services/inspectionService'
@@ -99,7 +102,8 @@ export function LiveViewV3({
   const { showSidebar } = useSidebar()
   const { logout, clearActiveLine } = useAuth()
   const { t } = useI18n()
-  const { setTheme } = useTheme()
+  const { setTheme, isDark, toggleTheme } = useTheme()
+  const { openHelp } = useHelpOverlay()
 
   // Default to light mode for Live Inspection if operator hasn't chosen a theme yet
   useEffect(() => {
@@ -291,6 +295,7 @@ export function LiveViewV3({
   const [falseCallReasons, setFalseCallReasons] = useState([])
   const [pendingDecision, setPendingDecision] = useState(null) // 'GOOD' or 'NG'
   const [showUserMenu, setShowUserMenu] = useState(false)
+  const [passwordModalOpen, setPasswordModalOpen] = useState(false)
   const userMenuRef = useRef(null)
   
   // Auto-NG toggle state (synced via API for all clients) - default OFF
@@ -1901,6 +1906,7 @@ export function LiveViewV3({
   // ============================================
 
   return (
+    <>
     <div className="h-screen flex flex-col bg-void overflow-hidden">
       {/* ============ HEADER ============ */}
       <header className="h-14 flex-shrink-0 bg-panel border-b border-surface-border flex items-center justify-between px-4">
@@ -2019,11 +2025,47 @@ export function LiveViewV3({
 
             {/* Dropdown Menu */}
             {showUserMenu && (
-              <div className="absolute right-0 top-full mt-1 w-48 bg-panel border border-surface-border shadow-lg z-50">
+              <div className="absolute right-0 top-full mt-1 w-56 bg-panel border border-surface-border shadow-lg z-50">
                 <div className="px-3 py-2 border-b border-surface-border">
                   <p className="font-mono text-xs text-text-primary">{user?.name}</p>
                   <p className="font-mono text-xxs text-text-tertiary capitalize">{user?.role || 'User'}</p>
                 </div>
+
+                {/* Language Switcher */}
+                <div className="px-3 py-2 border-b border-surface-border">
+                  <LanguageSwitcher />
+                </div>
+
+                {/* Theme Toggle */}
+                <button
+                  onClick={() => { toggleTheme(); setShowUserMenu(false) }}
+                  className="w-full px-3 py-2 flex items-center gap-2 hover:bg-elevated transition-colors text-left border-b border-surface-border"
+                >
+                  {isDark ? <Sun className="w-4 h-4 text-text-tertiary" /> : <Moon className="w-4 h-4 text-text-tertiary" />}
+                  <span className="font-mono text-xs text-text-primary">
+                    {isDark ? t('theme.switchToLight') : t('theme.switchToDark')}
+                  </span>
+                </button>
+
+                {/* Change Password */}
+                <button
+                  onClick={() => { setPasswordModalOpen(true); setShowUserMenu(false) }}
+                  className="w-full px-3 py-2 flex items-center gap-2 hover:bg-elevated transition-colors text-left border-b border-surface-border"
+                >
+                  <KeyRound className="w-4 h-4 text-text-tertiary" />
+                  <span className="font-mono text-xs text-text-primary">{t('password.changePassword')}</span>
+                </button>
+
+                {/* Help & Shortcuts */}
+                <button
+                  onClick={() => { openHelp('shortcuts'); setShowUserMenu(false) }}
+                  className="w-full px-3 py-2 flex items-center gap-2 hover:bg-elevated transition-colors text-left border-b border-surface-border"
+                >
+                  <HelpCircle className="w-4 h-4 text-text-tertiary" />
+                  <span className="font-mono text-xs text-text-primary">{t('nav.help')}</span>
+                </button>
+
+                {/* Logout */}
                 <button
                   onClick={() => {
                     setShowUserMenu(false)
@@ -2033,7 +2075,7 @@ export function LiveViewV3({
                   className="w-full px-3 py-2 flex items-center gap-2 hover:bg-phosphor-red/10 transition-colors text-left"
                 >
                   <LogOut className="w-4 h-4 text-phosphor-red" />
-                  <span className="font-mono text-xs text-phosphor-red">Logout</span>
+                  <span className="font-mono text-xs text-phosphor-red">{t('auth.logout')}</span>
                 </button>
               </div>
             )}
@@ -2045,7 +2087,7 @@ export function LiveViewV3({
       <div className="h-14 flex-shrink-0 bg-terminal border-b border-surface-border flex items-center justify-between px-4">
         {/* Left: Machine Control Buttons */}
         <div className="flex items-center gap-3">
-          {/* RUN Button — NOT disabled when woCompleted/woOnHold so user can click and see a toast message */}
+          {/* START Button — NOT disabled when woCompleted/woOnHold so user can click and see a toast message */}
           <button
             onClick={handleRunProcess}
             disabled={!isOperator || !isConnected || isControlling || effectiveProcessStatus === 'RUNNING'}
@@ -2060,7 +2102,7 @@ export function LiveViewV3({
             )}
           >
             <Play className="w-4 h-4" />
-            <span>RUN</span>
+            <span>{t('buttons.start').toUpperCase()}</span>
           </button>
 
           {/* PAUSE Button */}
@@ -2081,16 +2123,16 @@ export function LiveViewV3({
             <span>PAUSE</span>
           </button>
 
-          {/* STOP Button */}
+          {/* STOP Button — only enabled when RUNNING or PAUSED */}
           <button
             onClick={handleStopProcess}
-            disabled={!isOperator || !isConnected || isControlling || effectiveProcessStatus === 'IDLE' || effectiveProcessStatus === 'STOPPED'}
+            disabled={!isOperator || !isConnected || isControlling || (effectiveProcessStatus !== 'RUNNING' && effectiveProcessStatus !== 'PAUSED')}
             className={cn(
               "h-10 px-4 flex items-center gap-2 border-2 transition-all",
               "font-display text-xs font-bold tracking-wider",
               effectiveProcessStatus === 'STOPPED'
                 ? "bg-phosphor-red border-phosphor-red text-void"
-                : isOperator && isConnected && effectiveProcessStatus !== 'IDLE' && effectiveProcessStatus !== 'STOPPED'
+                : effectiveProcessStatus === 'RUNNING' || effectiveProcessStatus === 'PAUSED'
                   ? "border-phosphor-red text-phosphor-red hover:bg-phosphor-red hover:text-void"
                   : "border-surface-border text-text-tertiary cursor-not-allowed"
             )}
@@ -2743,6 +2785,12 @@ export function LiveViewV3({
         )
       })()}
     </div>
+
+    <ChangePasswordModal
+      isOpen={passwordModalOpen}
+      onClose={() => setPasswordModalOpen(false)}
+    />
+    </>
   )
 }
 

@@ -3,6 +3,10 @@
   "app": {
     "name": "INDUSIA AI HMI"
   },
+  "theme": {
+    "switchToLight": "Switch to light mode",
+    "switchToDark": "Switch to dark mode"
+  },
   "nav": {
     "dashboard": "Dashboard",
     "hmi": "Inspection",
@@ -51,7 +55,7 @@
     "encrypted": "ENCRYPTED",
     "checkCredentials": "CHECK CREDENTIALS AND RETRY",
     "authorizedOnly": "AUTHORIZED PERSONNEL ONLY",
-    "systemInfo": "INDUSIA AI VISUAL INSPECTION SYSTEM // HMI CONSOLE v1.0.0",
+    "systemInfo": "INDUSIA AI VISUAL INSPECTION SYSTEM",
     "emailRequired": "ERROR: EMAIL_REQUIRED",
     "passwordRequired": "ERROR: PASSWORD_REQUIRED",
     "authFailed": "AUTH_FAILED",
@@ -61,6 +65,30 @@
     "bootModules": "> LOADING AUTHENTICATION MODULES...",
     "bootConnection": "> ESTABLISHING SECURE CONNECTION...",
     "bootReady": "> READY FOR OPERATOR INPUT"
+  },
+  "password": {
+    "changePassword": "Change Password",
+    "changeTitle": "Change Password",
+    "changeDescription": "Enter your current password and choose a new one.",
+    "currentPassword": "Current Password",
+    "currentPasswordPlaceholder": "Enter current password",
+    "newPassword": "New Password",
+    "newPasswordPlaceholder": "Enter new password",
+    "confirmPassword": "Confirm New Password",
+    "confirmPasswordPlaceholder": "Re-enter new password",
+    "reqMinLength": "Minimum 8 characters",
+    "reqUppercase": "At least one uppercase letter",
+    "reqLowercase": "At least one lowercase letter",
+    "reqNumber": "At least one number",
+    "reqDifferent": "Must be different from current password",
+    "sameAsCurrent": "New password must be different from current password",
+    "mismatch": "Passwords do not match",
+    "changeButton": "Change Password",
+    "changeSuccess": "Password changed successfully",
+    "changeFailed": "Failed to change password",
+    "resetSuccess": "Password has been reset",
+    "resetFailed": "Failed to reset password",
+    "tempPassword": "Temporary password"
   },
   "dashboard": {
     "title": "COMMAND DASHBOARD",
@@ -801,7 +829,10 @@
     "success": "Success",
     "warning": "Warning",
     "info": "Info",
-    "all": "all"
+    "all": "all",
+    "cancel": "Cancel",
+    "save": "Save",
+    "close": "Close"
   },
   "table": {
     "board": "Board",
