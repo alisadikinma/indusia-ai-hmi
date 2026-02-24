@@ -43,6 +43,7 @@ import { cn } from '@/lib/utils'
 import { useSidebar } from '@/context/SidebarContext'
 import { useAuth } from '@/context/AuthContext'
 import { useI18n } from '@/context/I18nContext'
+import { useTheme } from '@/context/ThemeContext'
 import { useActiveWorkOrder, useWorkOrderMutations } from '@/hooks/useWorkOrders'
 import { useLiveInspection } from '@/hooks/useLiveInspection'
 import { useAudioFeedback } from '@/hooks/useAudioFeedback'
@@ -98,7 +99,15 @@ export function LiveViewV3({
   const { showSidebar } = useSidebar()
   const { logout, clearActiveLine } = useAuth()
   const { t } = useI18n()
-  
+  const { setTheme } = useTheme()
+
+  // Default to light mode for Live Inspection if operator hasn't chosen a theme yet
+  useEffect(() => {
+    if (!localStorage.getItem('indusia_theme')) {
+      setTheme('light')
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   // Work Order hooks
   const { workOrder: fetchedWO, hasActiveWO: fetchedHasWO, lastCompleted: lastCompletedWO, loading: woLoading, refresh: refreshWO } = useActiveWorkOrder(lineId)
   const { updateCounters } = useWorkOrderMutations()

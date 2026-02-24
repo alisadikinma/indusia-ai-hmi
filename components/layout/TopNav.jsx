@@ -10,7 +10,6 @@ import { useSystemHealthContext } from '@/context/SystemHealthContext';
 import { customers, lines } from '@/data/masterData';
 import NotificationBell from '../notifications/NotificationBell';
 import LanguageSwitcher from '../common/LanguageSwitcher';
-import VersionBadge from '../system-update/VersionBadge';
 
 export default function TopNav() {
   const router = useRouter();
@@ -109,9 +108,6 @@ export default function TopNav() {
             </div>
           )}
 
-          {/* Version Badge */}
-          <VersionBadge />
-
           {/* Last Sync Indicator */}
           <button
             onClick={() => router.push('/settings/sync')}
@@ -122,16 +118,6 @@ export default function TopNav() {
             <span className="text-xs font-medium text-indusia-textMuted">
               {t('header.syncLabel')} <span className={lastSync ? 'text-indusia-text' : 'text-indusia-warning'}>{formatSyncTime(lastSync)}</span>
             </span>
-          </button>
-
-          <LanguageSwitcher />
-
-          <button
-            onClick={() => openHelp('shortcuts')}
-            className="p-2 rounded-lg text-indusia-textMuted hover:text-indusia-text hover:bg-indusia-bg transition-colors"
-            title={t('nav.help')}
-          >
-            <HelpCircle className="w-5 h-5" />
           </button>
 
           {/* Notification Bell - next to user profile */}
@@ -170,6 +156,18 @@ export default function TopNav() {
                     {user.role}
                   </p>
                 </div>
+
+                <div className="px-4 py-3 border-b border-indusia-border">
+                  <LanguageSwitcher />
+                </div>
+
+                <button
+                  onClick={() => { openHelp('shortcuts'); setMenuOpen(false); }}
+                  className="w-full px-4 py-3 flex items-center gap-3 hover:bg-indusia-surfaceMuted transition-colors text-left border-b border-indusia-border"
+                >
+                  <HelpCircle className="w-4 h-4 text-indusia-textMuted" />
+                  <span className="text-sm text-indusia-text">{t('nav.help')}</span>
+                </button>
 
                 <button
                   onClick={handleLogout}

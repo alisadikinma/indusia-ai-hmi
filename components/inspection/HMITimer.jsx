@@ -6,8 +6,9 @@
  * ISA-101 compliant with color-coded urgency
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Pause, AlertTriangle } from 'lucide-react';
+import { useTheme } from '@/context/ThemeContext';
 
 /**
  * Get timer color based on seconds remaining
@@ -31,8 +32,8 @@ export function HMITimer({
   warningThreshold = 5,
   size = 96,
   strokeWidth = 6,
-  theme = 'dark',
 }) {
+  const { isDark } = useTheme();
   const [timeLeft, setTimeLeft] = useState(duration);
 
   // Calculate SVG properties
@@ -41,10 +42,9 @@ export function HMITimer({
   const strokeDashoffset = circumference - (timeLeft / duration) * circumference;
   const timerColor = isPaused ? '#3B82F6' : getTimerColor(timeLeft, duration);
 
-  // Theme colors
-  const bgColor = theme === 'dark' ? '#2D3E56' : '#D4D4D4';
-  const textColor = theme === 'dark' ? '#E8EDF2' : '#1A1A1A';
-  const mutedColor = theme === 'dark' ? '#8A95A8' : '#666666';
+  // Theme-aware colors for SVG
+  const bgColor = isDark ? '#2D3E56' : '#CBD5E1';
+  const mutedColor = isDark ? '#8A95A8' : '#64748B';
 
   // Countdown effect
   useEffect(() => {

@@ -8,6 +8,17 @@
 
 import { useRef, useEffect, useState } from 'react'
 import { useI18n } from '@/context/I18nContext'
+import { useTheme } from '@/context/ThemeContext'
+
+/** Read a CSS variable (RGB triplet) and return a canvas-usable color string */
+function getCSSColor(varName, alpha = 1) {
+  const rgb = getComputedStyle(document.documentElement)
+    .getPropertyValue(varName).trim()
+  if (!rgb) return '#888'
+  return alpha < 1
+    ? `rgba(${rgb.replace(/ /g, ', ')}, ${alpha})`
+    : `rgb(${rgb.replace(/ /g, ', ')})`
+}
 
 export function DetectionOverlay({
   imageUrl,
@@ -17,18 +28,12 @@ export function DetectionOverlay({
   height = '100%'
 }) {
   const { t } = useI18n()
+  const { theme } = useTheme()
   const containerRef = useRef(null)
   const canvasRef = useRef(null)
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 })
   const [imageLoaded, setImageLoaded] = useState(false)
   const imageRef = useRef(null)
-
-  // Colors - Phosphor theme
-  const resultColors = {
-    pass: '#00FF66',    // phosphor-green
-    fail: '#FF4444',    // phosphor-red
-    review: '#FFAA00'   // phosphor-teal
-  }
 
   const resultLabels = {
     pass: 'PASS',
@@ -87,12 +92,12 @@ export function DetectionOverlay({
     // Clear canvas
     ctx.clearRect(0, 0, w, h)
 
-    // Draw background - void black
-    ctx.fillStyle = '#0A0E14'
+    // Draw background - terminal bg (theme-aware)
+    ctx.fillStyle = getCSSColor('--color-terminal')
     ctx.fillRect(0, 0, w, h)
 
     // Draw grid pattern
-    ctx.strokeStyle = 'rgba(255, 170, 0, 0.06)'
+    ctx.strokeStyle = getCSSColor('--color-phosphor-teal', 0.06)
     ctx.lineWidth = 1
     const gridSize = 20
     for (let x = 0; x <= w; x += gridSize) {
@@ -145,14 +150,14 @@ export function DetectionOverlay({
         const sx2 = drawX + x2 * scaleX
         const sy2 = drawY + y2 * scaleY
 
-        // Color based on severity/confidence
-        let color = '#FFAA00' // default amber
+        // Color based on severity/confidence (theme-aware)
+        let color = getCSSColor('--color-phosphor-teal')
         if (det.severity === 'critical' || det.class_name?.includes('bridge') || det.class_name?.includes('short')) {
-          color = '#FF4444' // red
+          color = getCSSColor('--color-phosphor-red')
         } else if (det.severity === 'warning' || confidence >= 0.75) {
-          color = '#FFAA00' // amber
+          color = getCSSColor('--color-phosphor-teal')
         } else if (det.severity === 'info') {
-          color = '#00DDFF' // cyan
+          color = getCSSColor('--color-phosphor-cyan')
         }
 
         // Draw box - square corners (brutalist)
@@ -168,7 +173,7 @@ export function DetectionOverlay({
         ctx.fillRect(sx1, sy1 - 20, labelWidth, 18)
 
         // Draw label text
-        ctx.fillStyle = '#050608' // void black
+        ctx.fillStyle = getCSSColor('--color-void')
         ctx.textBaseline = 'middle'
         ctx.fillText(label, sx1 + 6, sy1 - 11)
 
@@ -209,12 +214,17 @@ export function DetectionOverlay({
       ctx.font = 'bold 16px "Barlow Condensed", sans-serif'
       const labelWidth = ctx.measureText(resultLabel).width + 20
 
-      // Background
-      ctx.fillStyle = resultColors[result] || '#484F58'
+      // Background - use theme-aware result colors
+      const resultColorMap = {
+        pass: getCSSColor('--color-phosphor-green'),
+        fail: getCSSColor('--color-phosphor-red'),
+        review: getCSSColor('--color-phosphor-teal')
+      }
+      ctx.fillStyle = resultColorMap[result] || getCSSColor('--color-text-tertiary')
       ctx.fillRect(w - labelWidth - 12, 12, labelWidth, 28)
 
       // Text
-      ctx.fillStyle = '#050608'
+      ctx.fillStyle = getCSSColor('--color-void')
       ctx.textBaseline = 'middle'
       ctx.fillText(resultLabel, w - labelWidth - 2, 26)
     }
@@ -222,11 +232,11 @@ export function DetectionOverlay({
     // Draw timestamp
     const timestamp = new Date().toLocaleTimeString('en-US', { hour12: false })
     ctx.font = '11px "JetBrains Mono", monospace'
-    ctx.fillStyle = '#484F58'
+    ctx.fillStyle = getCSSColor('--color-text-tertiary')
     ctx.textBaseline = 'bottom'
     ctx.fillText(timestamp, 8, h - 8)
 
-  }, [imageLoaded, detections, result, dimensions])
+  }, [imageLoaded, detections, result, dimensions, theme])
 
   return (
     <div 

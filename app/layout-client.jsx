@@ -2,6 +2,7 @@
 
 import { usePathname, useRouter } from 'next/navigation';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
+import { ThemeProvider } from '@/context/ThemeContext';
 import { SystemHealthProvider } from '@/context/SystemHealthContext';
 import { NotificationProvider } from '@/context/NotificationContext';
 import { HelpOverlayProvider } from '@/context/HelpOverlayContext';
@@ -180,7 +181,9 @@ function LayoutWithSidebar({ children }) {
 export default function LayoutClient({ children }) {
   return (
     <AuthProvider>
-      <LayoutWithSidebar>{children}</LayoutWithSidebar>
+      <ThemeProvider>
+        <LayoutWithSidebar>{children}</LayoutWithSidebar>
+      </ThemeProvider>
     </AuthProvider>
   );
 }

@@ -12,30 +12,33 @@ import { HMITimer } from './HMITimer';
 import { cn } from '@/lib/utils';
 
 /**
- * Get confidence level info
+ * Get confidence level info (Tailwind class-based for theme support)
  */
 function getConfidenceLevel(confidence) {
   if (confidence >= 85) {
-    return { 
-      color: '#10B981', 
-      bgColor: 'rgba(16, 185, 129, 0.1)',
-      borderColor: 'rgba(16, 185, 129, 0.3)',
-      label: 'High Confidence - Auto-proceed available' 
+    return {
+      textClass: 'text-emerald-500',
+      bgClass: 'bg-emerald-500/10 border-emerald-500/30',
+      dotClass: 'bg-emerald-500',
+      barColor: '#10B981',
+      label: 'High Confidence - Auto-proceed available'
     };
   }
   if (confidence >= 60) {
-    return { 
-      color: '#F59E0B', 
-      bgColor: 'rgba(245, 158, 11, 0.1)',
-      borderColor: 'rgba(245, 158, 11, 0.3)',
-      label: 'Medium Confidence - Review recommended' 
+    return {
+      textClass: 'text-amber-500',
+      bgClass: 'bg-amber-500/10 border-amber-500/30',
+      dotClass: 'bg-amber-500',
+      barColor: '#F59E0B',
+      label: 'Medium Confidence - Review recommended'
     };
   }
-  return { 
-    color: '#EF4444', 
-    bgColor: 'rgba(239, 68, 68, 0.1)',
-    borderColor: 'rgba(239, 68, 68, 0.3)',
-    label: 'Low Confidence - Manual verification required' 
+  return {
+    textClass: 'text-red-500',
+    bgClass: 'bg-red-500/10 border-red-500/30',
+    dotClass: 'bg-red-500',
+    barColor: '#EF4444',
+    label: 'Low Confidence - Manual verification required'
   };
 }
 
@@ -57,24 +60,9 @@ export const HMIActionPanel = forwardRef(function HMIActionPanel({
   onFalseCall,
   onTimeout,
   
-  // Theme
-  theme = 'dark',
-  themeColors,
-  
   // State
   disabled = false,
 }, ref) {
-  
-  // Default theme colors
-  const colors = themeColors || {
-    bg: theme === 'dark' ? '#0A1628' : '#F5F5F5',
-    surface: theme === 'dark' ? '#1A2942' : '#FFFFFF',
-    border: theme === 'dark' ? '#2D3E56' : '#D0D0D0',
-    text: theme === 'dark' ? '#E8EDF2' : '#1A1A1A',
-    textMuted: theme === 'dark' ? '#8A95A8' : '#666666',
-    primary: theme === 'dark' ? '#0FB5BA' : '#0D9488',
-  };
-
   const confidenceInfo = getConfidenceLevel(confidence);
   const hasDefect = defectType !== 'NO DEFECT' && defectType !== 'PASS';
 
@@ -96,37 +84,27 @@ export const HMIActionPanel = forwardRef(function HMIActionPanel({
   }, [disabled, isPaused, onApprove, onReject, onFalseCall]);
 
   return (
-    <div 
+    <div
       ref={ref}
-      className="flex flex-col h-full p-4 gap-4"
-      style={{ backgroundColor: colors.bg }}
+      className="flex flex-col h-full p-4 gap-4 bg-void"
       onKeyDown={handleKeyDown}
       tabIndex={0}
     >
       {/* AI Detection Card */}
-      <div 
-        className="rounded-xl p-4 border transition-colors"
-        style={{ backgroundColor: colors.surface, borderColor: colors.border }}
-      >
-        <h3 
-          className="text-xs font-medium uppercase tracking-wide mb-3"
-          style={{ color: colors.textMuted }}
-        >
+      <div className="rounded-xl p-4 border transition-colors bg-elevated border-surface-border">
+        <h3 className="text-xs font-medium uppercase tracking-wide mb-3 text-text-tertiary">
           AI DETECTION
         </h3>
-        
+
         {/* Defect Type */}
         <div className="flex items-center gap-3 mb-4">
-          <div 
+          <div
             className={cn(
               "w-4 h-4 rounded-full",
               hasDefect ? "bg-red-500 animate-pulse" : "bg-emerald-500"
-            )} 
+            )}
           />
-          <span 
-            className="text-xl font-bold"
-            style={{ color: colors.text }}
-          >
+          <span className="text-xl font-bold text-text-primary">
             {defectType}
           </span>
         </div>
@@ -134,52 +112,34 @@ export const HMIActionPanel = forwardRef(function HMIActionPanel({
         {/* Confidence Meter */}
         <div className="mb-4">
           <div className="flex justify-between items-center mb-2">
-            <span className="text-sm" style={{ color: colors.textMuted }}>
+            <span className="text-sm text-text-tertiary">
               Confidence
             </span>
-            <span 
-              className="text-3xl font-bold"
-              style={{ color: confidenceInfo.color }}
-            >
+            <span className={cn("text-3xl font-bold", confidenceInfo.textClass)}>
               {confidence}%
             </span>
           </div>
-          
+
           {/* Progress Bar */}
-          <div 
-            className="h-3 rounded-full overflow-hidden"
-            style={{ backgroundColor: theme === 'dark' ? '#0D1B2A' : '#E0E0E0' }}
-          >
-            <div 
+          <div className="h-3 rounded-full overflow-hidden bg-terminal">
+            <div
               className="h-full rounded-full transition-all duration-500"
-              style={{ 
+              style={{
                 width: `${confidence}%`,
-                background: `linear-gradient(to right, ${confidenceInfo.color}CC, ${confidenceInfo.color})`
+                background: `linear-gradient(to right, ${confidenceInfo.barColor}CC, ${confidenceInfo.barColor})`
               }}
             />
           </div>
-          
-          <p className="text-xs mt-2" style={{ color: colors.textMuted }}>
+
+          <p className="text-xs mt-2 text-text-tertiary">
             Historically correct {historicalAccuracy}% of the time
           </p>
         </div>
 
         {/* Confidence Badge */}
-        <div 
-          className="flex items-center gap-2 px-3 py-2 rounded-lg"
-          style={{ 
-            backgroundColor: confidenceInfo.bgColor,
-            border: `1px solid ${confidenceInfo.borderColor}`
-          }}
-        >
-          <div 
-            className="w-2 h-2 rounded-full"
-            style={{ backgroundColor: confidenceInfo.color }}
-          />
-          <span 
-            className="text-sm font-medium"
-            style={{ color: confidenceInfo.color }}
-          >
+        <div className={cn("flex items-center gap-2 px-3 py-2 rounded-lg border", confidenceInfo.bgClass)}>
+          <div className={cn("w-2 h-2 rounded-full", confidenceInfo.dotClass)} />
+          <span className={cn("text-sm font-medium", confidenceInfo.textClass)}>
             {confidenceInfo.label}
           </span>
         </div>
@@ -187,23 +147,17 @@ export const HMIActionPanel = forwardRef(function HMIActionPanel({
 
       {/* Auto-Approve Timer */}
       {autoApproveEnabled && (
-        <div 
-          className="rounded-xl p-4 border transition-colors"
-          style={{ backgroundColor: colors.surface, borderColor: colors.border }}
-        >
+        <div className="rounded-xl p-4 border transition-colors bg-elevated border-surface-border">
           <div className="flex items-center justify-between">
             <div>
-              <h3 
-                className="text-xs font-medium uppercase tracking-wide mb-1"
-                style={{ color: colors.textMuted }}
-              >
+              <h3 className="text-xs font-medium uppercase tracking-wide mb-1 text-text-tertiary">
                 AUTO-APPROVE IN
               </h3>
-              <p className="text-xs" style={{ color: colors.textMuted }}>
+              <p className="text-xs text-text-tertiary">
                 {isPaused ? 'Timer paused' : 'Take action or wait'}
               </p>
             </div>
-            
+
             <HMITimer
               duration={autoApproveTimeout}
               isPaused={isPaused}
@@ -211,7 +165,6 @@ export const HMIActionPanel = forwardRef(function HMIActionPanel({
               showWarning={true}
               warningThreshold={5}
               size={96}
-              theme={theme}
             />
           </div>
         </div>
@@ -219,14 +172,11 @@ export const HMIActionPanel = forwardRef(function HMIActionPanel({
 
       {/* Action Buttons */}
       <div className="flex-1 flex flex-col gap-3">
-        <h3 
-          className="text-xs font-medium uppercase tracking-wide"
-          style={{ color: colors.textMuted }}
-        >
+        <h3 className="text-xs font-medium uppercase tracking-wide text-text-tertiary">
           OPERATOR ACTION
         </h3>
-        
-        {/* APPROVE Button - Min 30mm height (~110px) */}
+
+        {/* APPROVE Button */}
         <button
           onClick={onApprove}
           disabled={disabled || isPaused}
@@ -237,7 +187,6 @@ export const HMIActionPanel = forwardRef(function HMIActionPanel({
             "hover:scale-[1.02] active:scale-[0.98]",
             (disabled || isPaused) && "opacity-50 cursor-not-allowed hover:scale-100"
           )}
-          style={{ boxShadow: '0 10px 25px -5px rgba(16, 185, 129, 0.4)' }}
         >
           <Check size={32} strokeWidth={3} />
           <span className="text-2xl font-black tracking-wide">APPROVE</span>
@@ -254,7 +203,6 @@ export const HMIActionPanel = forwardRef(function HMIActionPanel({
             "hover:scale-[1.02] active:scale-[0.98]",
             (disabled || isPaused) && "opacity-50 cursor-not-allowed hover:scale-100"
           )}
-          style={{ boxShadow: '0 10px 25px -5px rgba(239, 68, 68, 0.4)' }}
         >
           <X size={32} strokeWidth={3} />
           <span className="text-2xl font-black tracking-wide">REJECT</span>
@@ -271,7 +219,6 @@ export const HMIActionPanel = forwardRef(function HMIActionPanel({
             "hover:scale-[1.02] active:scale-[0.98]",
             (disabled || isPaused) && "opacity-50 cursor-not-allowed hover:scale-100"
           )}
-          style={{ boxShadow: '0 10px 25px -5px rgba(249, 115, 22, 0.4)' }}
         >
           <AlertTriangle size={28} strokeWidth={2.5} />
           <span className="text-xl font-black tracking-wide">FALSE CALL</span>
@@ -279,35 +226,17 @@ export const HMIActionPanel = forwardRef(function HMIActionPanel({
       </div>
 
       {/* Keyboard Shortcuts */}
-      <div 
-        className="flex items-center justify-center gap-4 text-xs"
-        style={{ color: colors.textMuted }}
-      >
+      <div className="flex items-center justify-center gap-4 text-xs text-text-tertiary">
         <div className="flex items-center gap-1.5">
-          <kbd 
-            className="px-2 py-1 rounded font-mono border"
-            style={{ backgroundColor: colors.surface, borderColor: colors.border }}
-          >
-            A
-          </kbd>
+          <kbd className="px-2 py-1 rounded font-mono border bg-elevated border-surface-border">A</kbd>
           <span>Approve</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <kbd 
-            className="px-2 py-1 rounded font-mono border"
-            style={{ backgroundColor: colors.surface, borderColor: colors.border }}
-          >
-            R
-          </kbd>
+          <kbd className="px-2 py-1 rounded font-mono border bg-elevated border-surface-border">R</kbd>
           <span>Reject</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <kbd 
-            className="px-2 py-1 rounded font-mono border"
-            style={{ backgroundColor: colors.surface, borderColor: colors.border }}
-          >
-            F
-          </kbd>
+          <kbd className="px-2 py-1 rounded font-mono border bg-elevated border-surface-border">F</kbd>
           <span>False</span>
         </div>
       </div>

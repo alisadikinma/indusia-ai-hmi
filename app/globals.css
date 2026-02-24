@@ -88,36 +88,65 @@
    ============================================ */
 
 :root {
-  /* === PHOSPHOR COLOR SYSTEM === */
-  --phosphor-teal: #FFAA00;
-  --phosphor-teal-bright: #FFD93D;
-  --phosphor-teal-dim: #CC8800;
-  --phosphor-green: #00FF66;
-  --phosphor-green-bright: #66FFAA;
-  --phosphor-green-dim: #00CC52;
-  --phosphor-red: #FF4444;
-  --phosphor-red-bright: #FF6B6B;
-  --phosphor-cyan: #00DDFF;
-  --phosphor-cyan-dim: #0099BB;
+  /* === COLOR SYSTEM (RGB triplets for Tailwind opacity support) === */
+  /* Phosphor accents */
+  --color-phosphor-teal: 9 168 164;
+  --color-phosphor-teal-bright: 61 191 188;
+  --color-phosphor-teal-dim: 7 134 130;
+  --color-phosphor-green: 0 255 102;
+  --color-phosphor-green-bright: 102 255 170;
+  --color-phosphor-green-dim: 0 204 82;
+  --color-phosphor-red: 255 68 68;
+  --color-phosphor-red-bright: 255 107 107;
+  --color-phosphor-cyan: 91 157 255;
+  --color-phosphor-cyan-dim: 61 123 224;
+  --color-warning: 230 168 23;
 
-  /* === BACKGROUND SYSTEM === */
-  --void-black: #050608;
-  --terminal-bg: #0A0E14;
-  --panel-bg: #0D1117;
-  --surface-elevated: #161B22;
-  --surface-border: #21262D;
-  --grid-line: rgba(255, 170, 0, 0.06);
+  /* Backgrounds */
+  --color-void: 5 6 8;
+  --color-terminal: 10 14 20;
+  --color-panel: 13 17 23;
+  --color-elevated: 22 27 34;
+  --color-surface-border: 33 38 45;
 
-  /* === TEXT HIERARCHY === */
-  --text-primary: #E6EDF3;
-  --text-secondary: #8B949E;
-  --text-tertiary: #484F58;
-  --text-amber: #FFAA00;
+  /* Text */
+  --color-text-primary: 230 237 243;
+  --color-text-secondary: 139 148 158;
+  --color-text-tertiary: 72 79 88;
 
-  /* === CRT EFFECTS === */
+  /* CRT effects */
   --scanline-opacity: 0.03;
   --glow-intensity: 0.4;
   --noise-opacity: 0.02;
+}
+
+/* === LIGHT THEME === */
+html.light {
+  --color-phosphor-teal: 7 134 130;
+  --color-phosphor-teal-bright: 9 168 164;
+  --color-phosphor-teal-dim: 5 107 104;
+  --color-phosphor-green: 0 204 82;
+  --color-phosphor-green-bright: 0 255 102;
+  --color-phosphor-green-dim: 0 163 65;
+  --color-phosphor-red: 220 38 38;
+  --color-phosphor-red-bright: 239 68 68;
+  --color-phosphor-cyan: 61 123 224;
+  --color-phosphor-cyan-dim: 37 99 235;
+  --color-warning: 202 138 4;
+
+  --color-void: 248 250 252;
+  --color-terminal: 241 245 249;
+  --color-panel: 255 255 255;
+  --color-elevated: 248 250 252;
+  --color-surface-border: 226 232 240;
+
+  --color-text-primary: 15 23 42;
+  --color-text-secondary: 71 85 105;
+  --color-text-tertiary: 148 163 184;
+
+  --scanline-opacity: 0;
+  --glow-intensity: 0;
+  --noise-opacity: 0;
 }
 
 @layer base {
@@ -139,11 +168,12 @@
   }
 
   body {
-    background-color: var(--void-black);
-    color: var(--text-primary);
+    background-color: rgb(var(--color-void));
+    color: rgb(var(--color-text-primary));
     line-height: 1.5;
     position: relative;
     overflow-x: hidden;
+    transition: background-color 0.3s ease, color 0.3s ease;
   }
 
   /* === CRT SCANLINE OVERLAY === */
@@ -184,13 +214,13 @@
 
   /* === SELECTION STYLE === */
   ::selection {
-    background-color: var(--phosphor-teal);
-    color: var(--void-black);
+    background-color: rgb(var(--color-phosphor-teal));
+    color: rgb(var(--color-void));
   }
 
   /* === FOCUS STATES === */
   :focus-visible {
-    outline: 2px solid var(--phosphor-teal);
+    outline: 2px solid rgb(var(--color-phosphor-teal));
     outline-offset: 2px;
   }
 
@@ -217,17 +247,17 @@
   /* === FORM INPUTS === */
   input, select, textarea {
     font-family: 'JetBrains Mono', monospace;
-    background-color: var(--terminal-bg);
-    border: 1px solid var(--surface-border);
-    color: var(--text-primary);
+    background-color: rgb(var(--color-terminal));
+    border: 1px solid rgb(var(--color-surface-border));
+    color: rgb(var(--color-text-primary));
     transition: all 0.15s ease;
   }
 
   input:focus, select:focus, textarea:focus {
-    border-color: var(--phosphor-teal);
-    box-shadow: 0 0 0 1px var(--phosphor-teal),
-                0 0 20px rgba(255, 170, 0, 0.15),
-                inset 0 0 20px rgba(255, 170, 0, 0.03);
+    border-color: rgb(var(--color-phosphor-teal));
+    box-shadow: 0 0 0 1px rgb(var(--color-phosphor-teal)),
+                0 0 20px rgb(var(--color-phosphor-teal) / 0.15),
+                inset 0 0 20px rgb(var(--color-phosphor-teal) / 0.03);
   }
 
   /* === SCROLLBARS === */
@@ -237,29 +267,29 @@
   }
 
   ::-webkit-scrollbar-track {
-    background: var(--terminal-bg);
-    border-left: 1px solid var(--surface-border);
+    background: rgb(var(--color-terminal));
+    border-left: 1px solid rgb(var(--color-surface-border));
   }
 
   ::-webkit-scrollbar-thumb {
-    background: var(--surface-border);
+    background: rgb(var(--color-surface-border));
     border-radius: 0;
   }
 
   ::-webkit-scrollbar-thumb:hover {
-    background: var(--phosphor-teal-dim);
+    background: rgb(var(--color-phosphor-teal-dim));
   }
 
   ::-webkit-scrollbar-corner {
-    background: var(--terminal-bg);
+    background: rgb(var(--color-terminal));
   }
 }
 
 @layer components {
   /* === PANEL SYSTEM === */
   .panel {
-    background-color: var(--panel-bg);
-    border: 1px solid var(--surface-border);
+    background-color: rgb(var(--color-panel));
+    border: 1px solid rgb(var(--color-surface-border));
     position: relative;
   }
 
@@ -272,8 +302,8 @@
     height: 1px;
     background: linear-gradient(90deg,
       transparent,
-      var(--phosphor-teal-dim) 20%,
-      var(--phosphor-teal-dim) 80%,
+      rgb(var(--color-phosphor-teal-dim)) 20%,
+      rgb(var(--color-phosphor-teal-dim)) 80%,
       transparent
     );
     opacity: 0.3;
@@ -281,17 +311,17 @@
 
   .panel-header {
     background: linear-gradient(180deg,
-      rgba(255, 170, 0, 0.08) 0%,
+      rgb(var(--color-phosphor-teal) / 0.08) 0%,
       transparent 100%
     );
-    border-bottom: 1px solid var(--surface-border);
+    border-bottom: 1px solid rgb(var(--color-surface-border));
     padding: 0.75rem 1rem;
     font-family: 'Barlow Condensed', sans-serif;
     font-weight: 600;
     letter-spacing: 0.1em;
     text-transform: uppercase;
     font-size: 0.75rem;
-    color: var(--phosphor-teal);
+    color: rgb(var(--color-phosphor-teal));
     display: flex;
     align-items: center;
     gap: 0.5rem;
@@ -313,7 +343,7 @@
     position: absolute;
     width: 12px;
     height: 12px;
-    border: 1px solid var(--phosphor-teal-dim);
+    border: 1px solid rgb(var(--color-phosphor-teal-dim));
     opacity: 0.4;
   }
 
@@ -333,18 +363,18 @@
 
   /* === STATUS INDICATORS === */
   .status-ok {
-    color: var(--phosphor-green);
-    text-shadow: 0 0 10px var(--phosphor-green);
+    color: rgb(var(--color-phosphor-green));
+    text-shadow: 0 0 10px rgb(var(--color-phosphor-green) / var(--glow-intensity));
   }
 
   .status-warning {
-    color: var(--phosphor-teal);
-    text-shadow: 0 0 10px var(--phosphor-teal);
+    color: rgb(var(--color-phosphor-teal));
+    text-shadow: 0 0 10px rgb(var(--color-phosphor-teal) / var(--glow-intensity));
   }
 
   .status-error {
-    color: var(--phosphor-red);
-    text-shadow: 0 0 10px var(--phosphor-red);
+    color: rgb(var(--color-phosphor-red));
+    text-shadow: 0 0 10px rgb(var(--color-phosphor-red) / var(--glow-intensity));
   }
 
   .status-indicator {
@@ -364,40 +394,40 @@
   }
 
   .status-indicator.ok {
-    background-color: var(--phosphor-green);
-    box-shadow: 0 0 8px var(--phosphor-green);
+    background-color: rgb(var(--color-phosphor-green));
+    box-shadow: 0 0 8px rgb(var(--color-phosphor-green) / var(--glow-intensity));
   }
 
   .status-indicator.ok::after {
-    background-color: var(--phosphor-green);
+    background-color: rgb(var(--color-phosphor-green));
   }
 
   .status-indicator.warning {
-    background-color: var(--phosphor-teal);
-    box-shadow: 0 0 8px var(--phosphor-teal);
+    background-color: rgb(var(--color-phosphor-teal));
+    box-shadow: 0 0 8px rgb(var(--color-phosphor-teal) / var(--glow-intensity));
   }
 
   .status-indicator.warning::after {
-    background-color: var(--phosphor-teal);
+    background-color: rgb(var(--color-phosphor-teal));
   }
 
   .status-indicator.error {
-    background-color: var(--phosphor-red);
-    box-shadow: 0 0 8px var(--phosphor-red);
+    background-color: rgb(var(--color-phosphor-red));
+    box-shadow: 0 0 8px rgb(var(--color-phosphor-red) / var(--glow-intensity));
     animation: blink-error 0.5s ease-in-out infinite;
   }
 
   .status-indicator.error::after {
-    background-color: var(--phosphor-red);
+    background-color: rgb(var(--color-phosphor-red));
   }
 
   /* === BUTTONS === */
   .btn-primary {
     background: linear-gradient(180deg,
-      var(--phosphor-teal) 0%,
-      var(--phosphor-teal-dim) 100%
+      rgb(var(--color-phosphor-teal)) 0%,
+      rgb(var(--color-phosphor-teal-dim)) 100%
     );
-    color: var(--void-black);
+    color: rgb(var(--color-void));
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.1em;
@@ -409,10 +439,10 @@
 
   .btn-primary:hover:not(:disabled) {
     background: linear-gradient(180deg,
-      var(--phosphor-teal-bright) 0%,
-      var(--phosphor-teal) 100%
+      rgb(var(--color-phosphor-teal-bright)) 0%,
+      rgb(var(--color-phosphor-teal)) 100%
     );
-    box-shadow: 0 0 30px rgba(255, 170, 0, 0.4),
+    box-shadow: 0 0 30px rgb(var(--color-phosphor-teal) / 0.4),
                 inset 0 1px 0 rgba(255, 255, 255, 0.2);
   }
 
@@ -422,8 +452,8 @@
 
   .btn-danger {
     background: linear-gradient(180deg,
-      var(--phosphor-red) 0%,
-      #CC3333 100%
+      rgb(var(--color-phosphor-red)) 0%,
+      rgb(var(--color-phosphor-red-bright)) 100%
     );
     color: white;
     font-weight: 700;
@@ -434,32 +464,32 @@
 
   .btn-danger:hover:not(:disabled) {
     background: linear-gradient(180deg,
-      var(--phosphor-red-bright) 0%,
-      var(--phosphor-red) 100%
+      rgb(var(--color-phosphor-red-bright)) 0%,
+      rgb(var(--color-phosphor-red)) 100%
     );
-    box-shadow: 0 0 30px rgba(255, 68, 68, 0.4);
+    box-shadow: 0 0 30px rgb(var(--color-phosphor-red) / 0.4);
   }
 
   .btn-ghost {
     background: transparent;
-    border: 1px solid var(--surface-border);
-    color: var(--text-secondary);
+    border: 1px solid rgb(var(--color-surface-border));
+    color: rgb(var(--color-text-secondary));
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.1em;
   }
 
   .btn-ghost:hover:not(:disabled) {
-    border-color: var(--phosphor-teal);
-    color: var(--phosphor-teal);
-    box-shadow: 0 0 20px rgba(255, 170, 0, 0.1);
+    border-color: rgb(var(--color-phosphor-teal));
+    color: rgb(var(--color-phosphor-teal));
+    box-shadow: 0 0 20px rgb(var(--color-phosphor-teal) / 0.1);
   }
 
   /* === DATA READOUTS === */
   .data-readout {
     font-family: 'JetBrains Mono', monospace;
-    background-color: var(--terminal-bg);
-    border: 1px solid var(--surface-border);
+    background-color: rgb(var(--color-terminal));
+    border: 1px solid rgb(var(--color-surface-border));
     padding: 0.5rem 1rem;
     position: relative;
   }
@@ -471,7 +501,7 @@
     top: 0;
     bottom: 0;
     width: 3px;
-    background-color: var(--phosphor-teal);
+    background-color: rgb(var(--color-phosphor-teal));
   }
 
   .data-label {
@@ -480,33 +510,33 @@
     font-weight: 600;
     letter-spacing: 0.15em;
     text-transform: uppercase;
-    color: var(--text-tertiary);
+    color: rgb(var(--color-text-tertiary));
     margin-bottom: 0.25rem;
   }
 
   .data-value {
     font-size: 1.5rem;
     font-weight: 600;
-    color: var(--phosphor-teal);
-    text-shadow: 0 0 20px rgba(255, 170, 0, 0.3);
+    color: rgb(var(--color-phosphor-teal));
+    text-shadow: 0 0 20px rgb(var(--color-phosphor-teal) / calc(0.3 * var(--glow-intensity)));
     line-height: 1;
   }
 
   .data-value.success {
-    color: var(--phosphor-green);
-    text-shadow: 0 0 20px rgba(0, 255, 102, 0.3);
+    color: rgb(var(--color-phosphor-green));
+    text-shadow: 0 0 20px rgb(var(--color-phosphor-green) / calc(0.3 * var(--glow-intensity)));
   }
 
   .data-value.danger {
-    color: var(--phosphor-red);
-    text-shadow: 0 0 20px rgba(255, 68, 68, 0.3);
+    color: rgb(var(--color-phosphor-red));
+    text-shadow: 0 0 20px rgb(var(--color-phosphor-red) / calc(0.3 * var(--glow-intensity)));
   }
 
   /* === GRID BACKGROUND === */
   .grid-bg {
     background-image:
-      linear-gradient(var(--grid-line) 1px, transparent 1px),
-      linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+      linear-gradient(rgb(var(--color-phosphor-teal) / 0.06) 1px, transparent 1px),
+      linear-gradient(90deg, rgb(var(--color-phosphor-teal) / 0.06) 1px, transparent 1px);
     background-size: 20px 20px;
   }
 
@@ -522,7 +552,7 @@
 
   .terminal-line::before {
     content: '>';
-    color: var(--phosphor-teal);
+    color: rgb(var(--color-phosphor-teal));
     font-weight: bold;
   }
 
@@ -531,8 +561,8 @@
     height: 1px;
     background: linear-gradient(90deg,
       transparent,
-      var(--surface-border) 10%,
-      var(--surface-border) 90%,
+      rgb(var(--color-surface-border)) 10%,
+      rgb(var(--color-surface-border)) 90%,
       transparent
     );
     position: relative;
@@ -545,11 +575,11 @@
     left: 50%;
     top: 50%;
     transform: translate(-50%, -50%);
-    background-color: var(--panel-bg);
+    background-color: rgb(var(--color-panel));
     padding: 0 0.5rem;
     font-family: 'JetBrains Mono', monospace;
     font-size: 0.6rem;
-    color: var(--text-tertiary);
+    color: rgb(var(--color-text-tertiary));
     letter-spacing: 0.2em;
   }
 
@@ -565,27 +595,27 @@
   }
 
   .badge-amber {
-    background-color: rgba(255, 170, 0, 0.1);
-    border-color: var(--phosphor-teal-dim);
-    color: var(--phosphor-teal);
+    background-color: rgb(var(--color-phosphor-teal) / 0.1);
+    border-color: rgb(var(--color-phosphor-teal-dim));
+    color: rgb(var(--color-phosphor-teal));
   }
 
   .badge-green {
-    background-color: rgba(0, 255, 102, 0.1);
-    border-color: var(--phosphor-green-dim);
-    color: var(--phosphor-green);
+    background-color: rgb(var(--color-phosphor-green) / 0.1);
+    border-color: rgb(var(--color-phosphor-green-dim));
+    color: rgb(var(--color-phosphor-green));
   }
 
   .badge-red {
-    background-color: rgba(255, 68, 68, 0.1);
-    border-color: var(--phosphor-red);
-    color: var(--phosphor-red);
+    background-color: rgb(var(--color-phosphor-red) / 0.1);
+    border-color: rgb(var(--color-phosphor-red));
+    color: rgb(var(--color-phosphor-red));
   }
 
   .badge-cyan {
-    background-color: rgba(0, 221, 255, 0.1);
-    border-color: var(--phosphor-cyan-dim);
-    color: var(--phosphor-cyan);
+    background-color: rgb(var(--color-phosphor-cyan) / 0.1);
+    border-color: rgb(var(--color-phosphor-cyan-dim));
+    color: rgb(var(--color-phosphor-cyan));
   }
 
   /* === SYSTEM HEADER === */
@@ -607,22 +637,22 @@
     font-size: 0.85rem;
     letter-spacing: 0.1em;
     text-transform: uppercase;
-    color: var(--text-secondary);
+    color: rgb(var(--color-text-secondary));
     border-left: 2px solid transparent;
     transition: all 0.15s ease;
     cursor: pointer;
   }
 
   .nav-item:hover {
-    color: var(--phosphor-teal);
-    background-color: rgba(255, 170, 0, 0.05);
-    border-left-color: var(--phosphor-teal-dim);
+    color: rgb(var(--color-phosphor-teal));
+    background-color: rgb(var(--color-phosphor-teal) / 0.05);
+    border-left-color: rgb(var(--color-phosphor-teal-dim));
   }
 
   .nav-item.active {
-    color: var(--phosphor-teal);
-    background-color: rgba(255, 170, 0, 0.1);
-    border-left-color: var(--phosphor-teal);
+    color: rgb(var(--color-phosphor-teal));
+    background-color: rgb(var(--color-phosphor-teal) / 0.1);
+    border-left-color: rgb(var(--color-phosphor-teal));
   }
 
   .nav-item.active::after {
@@ -643,12 +673,12 @@
     bottom: 100%;
     left: 50%;
     transform: translateX(-50%);
-    background-color: var(--surface-elevated);
-    border: 1px solid var(--surface-border);
+    background-color: rgb(var(--color-elevated));
+    border: 1px solid rgb(var(--color-surface-border));
     padding: 0.5rem 0.75rem;
     font-family: 'JetBrains Mono', monospace;
     font-size: 0.7rem;
-    color: var(--text-primary);
+    color: rgb(var(--color-text-primary));
     white-space: nowrap;
     opacity: 0;
     pointer-events: none;
@@ -664,33 +694,33 @@
 @layer utilities {
   /* === GLOW EFFECTS === */
   .glow-teal {
-    box-shadow: 0 0 20px rgba(255, 170, 0, 0.3),
-                0 0 40px rgba(255, 170, 0, 0.1);
+    box-shadow: 0 0 20px rgb(var(--color-phosphor-teal) / 0.3),
+                0 0 40px rgb(var(--color-phosphor-teal) / 0.1);
   }
 
   .glow-green {
-    box-shadow: 0 0 20px rgba(0, 255, 102, 0.3),
-                0 0 40px rgba(0, 255, 102, 0.1);
+    box-shadow: 0 0 20px rgb(var(--color-phosphor-green) / 0.3),
+                0 0 40px rgb(var(--color-phosphor-green) / 0.1);
   }
 
   .glow-red {
-    box-shadow: 0 0 20px rgba(255, 68, 68, 0.3),
-                0 0 40px rgba(255, 68, 68, 0.1);
+    box-shadow: 0 0 20px rgb(var(--color-phosphor-red) / 0.3),
+                0 0 40px rgb(var(--color-phosphor-red) / 0.1);
   }
 
   .glow-cyan {
-    box-shadow: 0 0 20px rgba(0, 221, 255, 0.3),
-                0 0 40px rgba(0, 221, 255, 0.1);
+    box-shadow: 0 0 20px rgb(var(--color-phosphor-cyan) / 0.3),
+                0 0 40px rgb(var(--color-phosphor-cyan) / 0.1);
   }
 
   .text-glow-teal {
-    text-shadow: 0 0 10px rgba(255, 170, 0, 0.5),
-                 0 0 20px rgba(255, 170, 0, 0.3);
+    text-shadow: 0 0 10px rgb(var(--color-phosphor-teal) / 0.5),
+                 0 0 20px rgb(var(--color-phosphor-teal) / 0.3);
   }
 
   .text-glow-green {
-    text-shadow: 0 0 10px rgba(0, 255, 102, 0.5),
-                 0 0 20px rgba(0, 255, 102, 0.3);
+    text-shadow: 0 0 10px rgb(var(--color-phosphor-green) / 0.5),
+                 0 0 20px rgb(var(--color-phosphor-green) / 0.3);
   }
 
   /* === ANIMATIONS === */
@@ -780,7 +810,7 @@
   .animate-typing-cursor::after {
     content: '█';
     animation: typing-cursor 1s step-end infinite;
-    color: var(--phosphor-teal);
+    color: rgb(var(--color-phosphor-teal));
   }
 
   /* === INSPECTION STAGE WOW ANIMATIONS === */
@@ -862,12 +892,12 @@
   
   .animate-stage-progress-sweep {
     background: linear-gradient(
-      90deg, 
-      var(--phosphor-teal) 0%, 
+      90deg,
+      rgb(var(--color-phosphor-teal)) 0%,
       #fbbf24 25%,
       #fef3c7 50%,
       #fbbf24 75%,
-      var(--phosphor-teal) 100%
+      rgb(var(--color-phosphor-teal)) 100%
     );
     background-size: 200% 100%;
     animation: stage-progress-sweep 2s linear infinite;
@@ -903,16 +933,16 @@
   }
 
   .scrollbar-brutalist::-webkit-scrollbar-track {
-    background: var(--void-black);
+    background: rgb(var(--color-void));
   }
 
   .scrollbar-brutalist::-webkit-scrollbar-thumb {
-    background: var(--phosphor-teal-dim);
+    background: rgb(var(--color-phosphor-teal-dim));
     border-radius: 0;
   }
 
   .scrollbar-brutalist::-webkit-scrollbar-thumb:hover {
-    background: var(--phosphor-teal);
+    background: rgb(var(--color-phosphor-teal));
   }
 
   /* === NOISE TEXTURE OVERLAY === */
@@ -929,4 +959,29 @@
     pointer-events: none;
     z-index: 1;
   }
+}
+
+/* === LIGHT THEME OVERRIDES === */
+html.light body::before,
+html.light body::after {
+  opacity: 0;
+}
+
+html.light .glow-teal,
+html.light .glow-green,
+html.light .glow-red,
+html.light .glow-cyan {
+  box-shadow: none;
+}
+
+html.light .text-glow-teal,
+html.light .text-glow-green {
+  text-shadow: none;
+}
+
+html.light .shadow-glow-teal,
+html.light .shadow-glow-green,
+html.light .shadow-glow-red,
+html.light .shadow-glow-cyan {
+  box-shadow: none;
 }
