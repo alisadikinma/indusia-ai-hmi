@@ -26,8 +26,8 @@ function Modal({ open, onClose, children }) {
         className="absolute inset-0 bg-black/60 backdrop-blur-sm"
         onClick={onClose}
       />
-      <div className="relative bg-indusia-surface border border-indusia-border rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto m-4">
-        <div className="p-6">
+      <div className="relative bg-indusia-surface border border-indusia-border rounded-xl shadow-2xl w-full max-w-2xl m-4">
+        <div className="p-4">
           {children}
         </div>
       </div>
