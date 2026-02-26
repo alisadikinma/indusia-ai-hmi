@@ -12,7 +12,7 @@ import { CheckCircle2, AlertTriangle, Clock } from 'lucide-react'
 import { isRealPcb } from '@/lib/utils/serialNumber'
 import SidePanel from './SidePanel'
 
-export function InspectionResult({ inspection, className, onFrameClick, reviewingFrameKey, frameDecisions }) {
+export function InspectionResult({ inspection, className, onFrameClick, reviewingFrameKey, frameDecisions, modelName }) {
   if (!inspection) return null
 
   const { results, decision } = inspection
@@ -57,6 +57,7 @@ export function InspectionResult({ inspection, className, onFrameClick, reviewin
             onFrameClick={onFrameClick}
             reviewingFrameKey={reviewingFrameKey}
             frameDecisions={frameDecisions}
+            modelName={modelName}
             className={cn(
               hasSingleSide ? "max-w-3xl w-full" : "flex-1"
             )}
@@ -106,6 +107,7 @@ export function InspectionResult({ inspection, className, onFrameClick, reviewin
             onFrameClick={onFrameClick}
             reviewingFrameKey={reviewingFrameKey}
             frameDecisions={frameDecisions}
+            modelName={modelName}
             className={cn(
               hasSingleSide ? "max-w-3xl w-full" : "flex-1"
             )}

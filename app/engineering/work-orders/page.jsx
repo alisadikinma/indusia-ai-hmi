@@ -5,7 +5,7 @@
 
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { Plus, FileText, AlertTriangle, CheckCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
@@ -36,12 +36,12 @@ function Modal({ open, onClose, children }) {
 }
 
 // Confirm dialog
-function ConfirmDialog({ open, onClose, onConfirm, title, message, confirmText = 'Confirm', loading = false }) {
+function ConfirmDialog({ open, onClose, onConfirm, title, message, confirmText = 'Confirm', loading = false, confirmDisabled = false, children }) {
   if (!open) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div 
+      <div
         className="absolute inset-0 bg-black/60 backdrop-blur-sm"
         onClick={onClose}
       />
@@ -55,6 +55,7 @@ function ConfirmDialog({ open, onClose, onConfirm, title, message, confirmText =
             <p className="text-indusia-textMuted">{message}</p>
           </div>
         </div>
+        {children}
         <div className="flex items-center justify-end gap-3 mt-6">
           <button
             onClick={onClose}
@@ -67,11 +68,11 @@ function ConfirmDialog({ open, onClose, onConfirm, title, message, confirmText =
           </button>
           <button
             onClick={onConfirm}
-            disabled={loading}
+            disabled={loading || confirmDisabled}
             className={cn(
               "px-4 py-2 bg-indusia-primary text-white rounded-lg",
               "hover:bg-indusia-primary/90 transition-colors",
-              loading && "opacity-60 cursor-not-allowed"
+              (loading || confirmDisabled) && "opacity-60 cursor-not-allowed"
             )}
           >
             {loading ? 'Processing...' : confirmText}
@@ -113,16 +114,30 @@ function Toast({ show, type = 'success', message, onClose }) {
 export default function WorkOrdersPage() {
   const { user, hasMenuAccess, isLoading: authLoading } = useAuth();
   
+  const PAGE_SIZE = 10;
+  const [page, setPage] = useState(0);
+
   // ALL HOOKS MUST BE CALLED BEFORE ANY CONDITIONAL RETURNS
-  const { 
-    workOrders, 
-    loading, 
-    error, 
+  const {
+    workOrders,
+    loading,
+    error,
     count,
     filters,
     setFilters,
-    refresh 
-  } = useWorkOrders({ limit: 50, orderBy: 'created_at', orderDirection: 'desc' });
+    refresh
+  } = useWorkOrders({ limit: PAGE_SIZE, offset: page * PAGE_SIZE, orderBy: 'created_at', orderDirection: 'desc' });
+
+  // Re-fetch when page changes
+  const setPageAndFetch = useCallback((pageOrFn) => {
+    setPage(prev => {
+      const newPage = typeof pageOrFn === 'function' ? pageOrFn(prev) : pageOrFn;
+      setFilters({ offset: newPage * PAGE_SIZE });
+      return newPage;
+    });
+  }, [setFilters]);
+
+  const totalPages = useMemo(() => Math.max(1, Math.ceil(count / PAGE_SIZE)), [count]);
 
   const { 
     loading: mutationLoading, 
@@ -137,6 +152,7 @@ export default function WorkOrdersPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingWO, setEditingWO] = useState(null);
   const [confirmDialog, setConfirmDialog] = useState({ open: false, type: null, workOrder: null });
+  const [completionReason, setCompletionReason] = useState('');
   const [toast, setToast] = useState({ show: false, type: 'success', message: '' });
   const [sortBy, setSortBy] = useState('created_at');
   const [sortDirection, setSortDirection] = useState('desc');
@@ -147,9 +163,9 @@ export default function WorkOrdersPage() {
     setTimeout(() => setToast({ show: false, type: 'success', message: '' }), 4000);
   }, []);
 
-  // Show loading while auth is loading
-  if (authLoading) {
-    return <PageLoading message="Loading..." compact />;
+  // Show loading while auth or work orders data is loading
+  if (authLoading || loading) {
+    return <PageLoading />;
   }
 
   // Check access via database permissions
@@ -258,6 +274,7 @@ export default function WorkOrdersPage() {
 
   // Handle complete work order
   const handleComplete = (workOrder) => {
+    setCompletionReason('');
     setConfirmDialog({
       open: true,
       type: 'complete',
@@ -267,9 +284,20 @@ export default function WorkOrdersPage() {
 
   const confirmComplete = async () => {
     const { workOrder } = confirmDialog;
-    const result = await complete(workOrder.id);
+    const isIncomplete = workOrder.completedQty < workOrder.lotSize;
+
+    if (isIncomplete && !completionReason.trim()) {
+      showToast('error', 'Please provide a reason for force-completing this work order');
+      return;
+    }
+
+    const result = await complete(workOrder.id, {
+      reason: completionReason.trim() || null,
+      completedBy: user?.id || user?.userId,
+    });
     setConfirmDialog({ open: false, type: null, workOrder: null });
-    
+    setCompletionReason('');
+
     if (result.success) {
       showToast('success', `Work Order ${result.data.woNumber} completed`);
       refresh();
@@ -307,7 +335,8 @@ export default function WorkOrdersPage() {
 
   // Handle filter change
   const handleFilterChange = (newFilters) => {
-    setFilters(newFilters);
+    setPage(0); // Reset to first page when filters change
+    setFilters({ ...newFilters, offset: 0 });
   };
 
   // Handle sort
@@ -339,12 +368,16 @@ export default function WorkOrdersPage() {
           message: `This will resume ${workOrder?.woNumber} and set it back to active on ${workOrder?.line?.name}. Progress: ${workOrder?.completedQty}/${workOrder?.lotSize}`,
           confirmText: 'Resume WO',
         };
-      case 'complete':
+      case 'complete': {
+        const isIncomplete = workOrder?.completedQty < workOrder?.lotSize;
         return {
-          title: 'Complete Work Order?',
-          message: `This will mark ${workOrder?.woNumber} as completed. Progress: ${workOrder?.completedQty}/${workOrder?.lotSize} (Yield: ${workOrder?.yieldPercent}%)`,
-          confirmText: 'Complete WO',
+          title: isIncomplete ? 'Force Complete Work Order?' : 'Complete Work Order?',
+          message: isIncomplete
+            ? `${workOrder?.woNumber} is only ${workOrder?.completedQty}/${workOrder?.lotSize} (${workOrder?.progress}%). A reason is required to force-complete.`
+            : `This will mark ${workOrder?.woNumber} as completed. Progress: ${workOrder?.completedQty}/${workOrder?.lotSize} (Yield: ${workOrder?.yieldPercent}%)`,
+          confirmText: isIncomplete ? 'Force Complete' : 'Complete WO',
         };
+      }
       case 'delete':
         return {
           title: 'Delete Work Order?',
@@ -426,6 +459,48 @@ export default function WorkOrdersPage() {
         onSort={handleSort}
       />
 
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between mt-4 px-1">
+          <p className="text-sm text-text-secondary font-mono">
+            Showing {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, count)} of {count}
+          </p>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setPageAndFetch(0)}
+              disabled={page === 0}
+              className="px-2 py-1 text-xs font-mono rounded border border-surface-border text-text-secondary hover:bg-elevated disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            >
+              First
+            </button>
+            <button
+              onClick={() => setPageAndFetch(p => Math.max(0, p - 1))}
+              disabled={page === 0}
+              className="px-3 py-1 text-xs font-mono rounded border border-surface-border text-text-secondary hover:bg-elevated disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            >
+              Prev
+            </button>
+            <span className="px-3 py-1 text-xs font-mono text-phosphor-teal">
+              {page + 1} / {totalPages}
+            </span>
+            <button
+              onClick={() => setPageAndFetch(p => Math.min(totalPages - 1, p + 1))}
+              disabled={page >= totalPages - 1}
+              className="px-3 py-1 text-xs font-mono rounded border border-surface-border text-text-secondary hover:bg-elevated disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            >
+              Next
+            </button>
+            <button
+              onClick={() => setPageAndFetch(totalPages - 1)}
+              disabled={page >= totalPages - 1}
+              className="px-2 py-1 text-xs font-mono rounded border border-surface-border text-text-secondary hover:bg-elevated disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            >
+              Last
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Create Modal */}
       <Modal open={showCreateModal} onClose={() => setShowCreateModal(false)}>
         <WorkOrderForm
@@ -448,7 +523,7 @@ export default function WorkOrdersPage() {
       {/* Confirm Dialog */}
       <ConfirmDialog
         open={confirmDialog.open}
-        onClose={() => setConfirmDialog({ open: false, type: null, workOrder: null })}
+        onClose={() => { setConfirmDialog({ open: false, type: null, workOrder: null }); setCompletionReason(''); }}
         onConfirm={
           confirmDialog.type === 'start' ? confirmStart :
           confirmDialog.type === 'hold' ? confirmHold :
@@ -461,7 +536,31 @@ export default function WorkOrdersPage() {
         message={confirmContent.message}
         confirmText={confirmContent.confirmText}
         loading={mutationLoading}
-      />
+        confirmDisabled={
+          confirmDialog.type === 'complete' &&
+          confirmDialog.workOrder?.completedQty < confirmDialog.workOrder?.lotSize &&
+          !completionReason.trim()
+        }
+      >
+        {confirmDialog.type === 'complete' && confirmDialog.workOrder?.completedQty < confirmDialog.workOrder?.lotSize && (
+          <div className="mt-4">
+            <label className="block text-sm font-medium text-yellow-400 mb-2">
+              Reason for force completion (required)
+            </label>
+            <textarea
+              value={completionReason}
+              onChange={(e) => setCompletionReason(e.target.value)}
+              placeholder="Enter reason for completing this incomplete work order..."
+              rows={3}
+              className={cn(
+                "w-full px-3 py-2 bg-indusia-bg border rounded-lg text-indusia-text text-sm",
+                "focus:outline-none focus:ring-2 focus:ring-indusia-primary",
+                !completionReason.trim() ? "border-yellow-500/50" : "border-indusia-border"
+              )}
+            />
+          </div>
+        )}
+      </ConfirmDialog>
 
       {/* Toast */}
       <Toast

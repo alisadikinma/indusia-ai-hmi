@@ -5,7 +5,7 @@
 
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import {
   Play,
   Pause,
@@ -17,10 +17,14 @@ import {
   ChevronDown,
   AlertCircle,
   Clock,
-  Target
+  Target,
+  Info,
+  MessageSquare,
+  UserCheck
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { WorkOrderStatusBadge } from './WorkOrderStatusBadge';
+import CustomerLogo from '@/components/common/CustomerLogo';
 
 /**
  * Format date for display
@@ -66,6 +70,72 @@ function ProgressBar({ current, total, className }) {
       <span className="text-xs text-indusia-textMuted whitespace-nowrap">
         {current}/{total}
       </span>
+    </div>
+  );
+}
+
+/**
+ * Completion info popover — shows reason & who completed on click
+ */
+function CompletionInfoPopover({ workOrder }) {
+  const [open, setOpen] = useState(false);
+  const popoverRef = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function handleClickOutside(e) {
+      if (popoverRef.current && !popoverRef.current.contains(e.target)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [open]);
+
+  return (
+    <div className="relative inline-flex" ref={popoverRef}>
+      <button
+        type="button"
+        onClick={() => setOpen(prev => !prev)}
+        className="ml-1.5 p-0.5 rounded-full text-yellow-400/80 hover:text-yellow-400 hover:bg-yellow-400/10 transition-colors"
+      >
+        <Info className="w-3.5 h-3.5" />
+      </button>
+      {open && (
+        <div className="absolute left-0 top-full mt-1.5 z-50 w-64 bg-indusia-surface border border-indusia-border rounded-lg shadow-xl p-3 space-y-2">
+          <div className="flex items-start gap-2">
+            <MessageSquare className="w-3.5 h-3.5 text-yellow-400 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-[10px] text-indusia-textMuted uppercase tracking-wider mb-0.5">Reason</p>
+              <p className="text-xs text-indusia-text leading-relaxed">
+                {workOrder.completionReason}
+              </p>
+            </div>
+          </div>
+          {workOrder.completedBy && (
+            <div className="flex items-start gap-2 pt-1.5 border-t border-indusia-border">
+              <UserCheck className="w-3.5 h-3.5 text-purple-400 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-[10px] text-indusia-textMuted uppercase tracking-wider mb-0.5">Completed by</p>
+                <p className="text-xs text-indusia-text">
+                  {workOrder.completedByName || workOrder.completedBy}
+                </p>
+              </div>
+            </div>
+          )}
+          {workOrder.completedAt && (
+            <div className="flex items-start gap-2 pt-1.5 border-t border-indusia-border">
+              <CheckCircle className="w-3.5 h-3.5 text-green-400 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-[10px] text-indusia-textMuted uppercase tracking-wider mb-0.5">Completed at</p>
+                <p className="text-xs text-indusia-text">
+                  {formatDateTime(workOrder.completedAt)}
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -343,13 +413,16 @@ export function WorkOrderTable({
 
                 {/* Customer / Board */}
                 <td className="px-4 py-4">
-                  <div className="flex flex-col">
-                    <span className="text-indusia-text">
-                      {wo.customer?.name || '-'}
-                    </span>
-                    <span className="text-xs text-indusia-textMuted">
-                      {wo.board?.name || '-'}
-                    </span>
+                  <div className="flex items-start gap-2">
+                    <CustomerLogo customer={wo.customer} size="sm" className="mt-0.5 flex-shrink-0" />
+                    <div className="flex flex-col">
+                      <span className="text-indusia-text">
+                        {wo.customer?.name || '-'}
+                      </span>
+                      <span className="text-xs text-indusia-textMuted">
+                        {wo.board?.name || '-'}
+                      </span>
+                    </div>
                   </div>
                 </td>
 
@@ -362,7 +435,12 @@ export function WorkOrderTable({
 
                 {/* Status */}
                 <td className="px-4 py-4">
-                  <WorkOrderStatusBadge status={wo.status} size="small" />
+                  <div className="flex items-center">
+                    <WorkOrderStatusBadge status={wo.status} size="small" />
+                    {wo.status === 'completed' && wo.completionReason && (
+                      <CompletionInfoPopover workOrder={wo} />
+                    )}
+                  </div>
                 </td>
 
                 {/* Progress */}

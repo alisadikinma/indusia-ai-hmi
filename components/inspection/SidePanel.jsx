@@ -16,6 +16,7 @@ import { cn } from '@/lib/utils'
 import { ZoomIn, ZoomOut, Maximize2, AlertCircle, CheckCircle2 } from 'lucide-react'
 import { useI18n } from '@/context/I18nContext'
 import { classifySerialNumber, isRealPcb, SN_TYPE } from '@/lib/utils/serialNumber'
+import { getModelImage } from '@/lib/utils/modelImages'
 
 // Defect type color mapping
 const DEFECT_COLORS = {
@@ -46,7 +47,7 @@ function snToColor(sn) {
   return `hsl(${hue}, 75%, 55%)`
 }
 
-export function SidePanel({ side, frames = [], className, onFrameClick, reviewingFrameKey, frameDecisions = {} }) {
+export function SidePanel({ side, frames = [], className, onFrameClick, reviewingFrameKey, frameDecisions = {}, modelName }) {
   const [activeFrameIndex, setActiveFrameIndex] = useState(0)
   const [zoom, setZoom] = useState(1)
   const [showFullscreen, setShowFullscreen] = useState(false)
@@ -58,10 +59,11 @@ export function SidePanel({ side, frames = [], className, onFrameClick, reviewin
   // Check if frames carry serial_number data (legacy/pre-patch data may not have it)
   const hasSerialData = frames.some(f => f.serial_number != null)
 
-  // Current active frame — prefer url (with bbox) but fall back to raw_url
+  // Current active frame — prefer static model image, then raw_url, then url
   const activeFrame = frames[activeFrameIndex] || null
   const activeIsEmpty = hasSerialData && !isRealPcb(activeFrame?.serial_number)
-  const imageUrl = activeFrame?.image_url || activeFrame?.image_raw_url
+  const staticImage = getModelImage(modelName, side)
+  const imageUrl = staticImage || activeFrame?.image_raw_url || activeFrame?.image_url
   const objects = activeFrame?.objects || []
 
   // Use frame-level label (true=NG, false=GOOD) as the authoritative AI verdict.

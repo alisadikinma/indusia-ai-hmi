@@ -41,6 +41,7 @@ export default function LiveInspectionPage() {
   const sectionId = lineDetails?.sectionId || lineDetails?.section_id || user?.selectedSection || null
   const customerId = lineDetails?.customerId || lineDetails?.customer_id || user?.selectedCustomer || null
   const customerName = lineDetails?.customer?.name || lineDetails?.customerName || null
+  const customerLogo = lineDetails?.customer?.logoBase64 || lineDetails?.customerLogo || null
 
   // Fetch line details
   useEffect(() => {
@@ -113,6 +114,7 @@ export default function LiveInspectionPage() {
       sectionId={sectionId}
       customerId={customerId}
       customerName={customerName}
+      customerLogo={customerLogo}
       modelName={modelName}
       user={user}
       onExit={handleExit}

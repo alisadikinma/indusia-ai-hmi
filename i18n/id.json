@@ -90,6 +90,32 @@
     "resetFailed": "Gagal mereset password",
     "tempPassword": "Password sementara"
   },
+  "profile": {
+    "uploadPhoto": "Unggah Foto",
+    "changePhoto": "Ganti Foto",
+    "removePhoto": "Hapus Foto",
+    "photoUpdated": "Foto diperbarui",
+    "photoRemoved": "Foto dihapus",
+    "fileTooLarge": "File terlalu besar. Maksimal 200KB.",
+    "invalidFormat": "Format tidak valid. Gunakan PNG atau JPG.",
+    "companyProfile": "Profil Perusahaan",
+    "companyProfileDesc": "Kelola identitas perusahaan yang ditampilkan di seluruh sistem.",
+    "companyName": "Nama Perusahaan",
+    "companyAddress": "Alamat",
+    "companyWebsite": "Website",
+    "companyPhone": "Telepon",
+    "companyEmail": "Email",
+    "companyLogo": "Logo Perusahaan",
+    "uploadLogo": "Unggah Logo",
+    "changeLogo": "Ganti",
+    "removeLogo": "Hapus",
+    "logoHint": "PNG atau JPG, maks 200KB",
+    "saveChanges": "Simpan Perubahan",
+    "saving": "Menyimpan...",
+    "saved": "Profil perusahaan tersimpan",
+    "saveFailed": "Gagal menyimpan profil perusahaan",
+    "editCompanyProfile": "Edit Profil Perusahaan"
+  },
   "dashboard": {
     "title": "DASBOR KONTROL",
     "subtitle": "ANALITIK WAKTU NYATA",
@@ -262,7 +288,7 @@
     "customers": "Pelanggan",
     "sections": "Bagian",
     "productionLines": "Lini Produksi",
-    "boards": "Board",
+    "boards": "Board / Model",
     "boardsModels": "Board / Model",
     "falseCallReasons": "Alasan False Call",
     "users": "Pengguna",
@@ -930,5 +956,18 @@
     "migrations": "Migrasi",
     "commits": "Commit",
     "toastUpdateAvailable": "Update tersedia: {version} ({commits} commit)"
+  },
+  "companyBranding": {
+    "title": "Branding Perusahaan",
+    "description": "Konfigurasi logo dan nama perusahaan yang ditampilkan di seluruh sistem",
+    "companyName": "Nama Perusahaan",
+    "companyLogo": "Logo Perusahaan",
+    "uploadLogo": "Unggah Logo",
+    "changeLogo": "Ganti Logo",
+    "removeLogo": "Hapus Logo",
+    "logoHint": "PNG atau JPG, maks 200KB. Disarankan: persegi, latar transparan.",
+    "saving": "Menyimpan...",
+    "saved": "Pengaturan tersimpan",
+    "saveFailed": "Gagal menyimpan pengaturan"
   }
 }

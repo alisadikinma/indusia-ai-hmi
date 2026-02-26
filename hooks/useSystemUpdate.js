@@ -3,14 +3,21 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { authFetch } from '@/lib/utils/authFetch'
 
-const CHECK_INTERVAL = 900000 // 15 minutes
+const STORAGE_KEY = 'indusia_auto_update_interval'
+
+// Interval presets in milliseconds
+const INTERVAL_OPTIONS = {
+  off: 0,
+  hourly: 3600000,    // 1 hour
+  daily: 86400000,    // 24 hours
+}
 
 /**
  * useSystemUpdate Hook
  *
  * Manages system version and update availability state.
  * Fetches current version on mount; superadmin callers can enable
- * periodic update checks via autoCheck option.
+ * periodic update checks via autoCheck option or auto-update toggle.
  */
 export function useSystemUpdate({ autoCheck = false } = {}) {
   const [currentVersion, setCurrentVersion] = useState(null)
@@ -22,7 +29,30 @@ export function useSystemUpdate({ autoCheck = false } = {}) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
 
+  // Auto-update interval preference
+  const [autoUpdateInterval, setAutoUpdateIntervalState] = useState('off')
+
   const intervalRef = useRef(null)
+
+  // Load saved preference on mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY)
+      if (saved && INTERVAL_OPTIONS[saved] !== undefined) {
+        setAutoUpdateIntervalState(saved)
+      }
+    } catch { /* localStorage unavailable */ }
+  }, [])
+
+  /**
+   * Set auto-update interval and persist to localStorage
+   */
+  const setAutoUpdateInterval = useCallback((value) => {
+    setAutoUpdateIntervalState(value)
+    try {
+      localStorage.setItem(STORAGE_KEY, value)
+    } catch { /* localStorage unavailable */ }
+  }, [])
 
   /**
    * Fetch current version from /api/system/version
@@ -83,11 +113,22 @@ export function useSystemUpdate({ autoCheck = false } = {}) {
     fetchCurrentVersion()
   }, [fetchCurrentVersion])
 
-  // Auto-check interval for superadmin
+  // Auto-check: runs on mount if autoCheck is true, OR based on user toggle preference
   useEffect(() => {
-    if (autoCheck) {
+    // Clear any existing interval
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current)
+      intervalRef.current = null
+    }
+
+    const intervalMs = INTERVAL_OPTIONS[autoUpdateInterval] || 0
+
+    if (autoCheck || intervalMs > 0) {
+      // Initial check
       checkForUpdate()
-      intervalRef.current = setInterval(checkForUpdate, CHECK_INTERVAL)
+      // Set up recurring interval
+      const ms = intervalMs > 0 ? intervalMs : 900000 // 15 min fallback for autoCheck
+      intervalRef.current = setInterval(checkForUpdate, ms)
     }
 
     return () => {
@@ -96,7 +137,7 @@ export function useSystemUpdate({ autoCheck = false } = {}) {
         intervalRef.current = null
       }
     }
-  }, [autoCheck, checkForUpdate])
+  }, [autoCheck, autoUpdateInterval, checkForUpdate])
 
   return {
     currentVersion,
@@ -109,6 +150,9 @@ export function useSystemUpdate({ autoCheck = false } = {}) {
     error,
     checkForUpdate,
     fetchCurrentVersion,
+    autoUpdateInterval,
+    setAutoUpdateInterval,
+    INTERVAL_OPTIONS,
   }
 }
 

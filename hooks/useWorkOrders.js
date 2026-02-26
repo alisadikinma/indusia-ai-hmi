@@ -300,14 +300,16 @@ export function useWorkOrderMutations() {
     }
   }, []);
 
-  const complete = useCallback(async (id) => {
+  const complete = useCallback(async (id, { reason, completedBy } = {}) => {
     setLoading(true);
     setError(null);
 
     try {
-      const response = await authFetch(`/api/work-orders/${id}/complete`, {
-        method: 'POST',
-      });
+      const options = { method: 'POST' };
+      if (reason || completedBy) {
+        options.body = JSON.stringify({ reason, completedBy });
+      }
+      const response = await authFetch(`/api/work-orders/${id}/complete`, options);
 
       const result = await response.json();
 

@@ -10,10 +10,11 @@ import SectionHeader from '@/components/common/SectionHeader';
 import StatusBadge from '@/components/common/StatusBadge';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { Plus, Edit, Trash2, Shield, X, Loader2 } from 'lucide-react';
+import PageLoading from '@/components/common/PageLoading';
 
 export default function RolesManagementPage() {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, isLoading: authLoading } = useAuth();
   const { showToast } = useToast();
   const { roles, loading, create, update, remove } = useRoles();
   const { users } = useUsers();
@@ -27,6 +28,8 @@ export default function RolesManagementPage() {
 
   const [formData, setFormData] = useState({ id: '', name: '', description: '' });
   const [formErrors, setFormErrors] = useState({});
+
+  if (authLoading || loading) return <PageLoading />;
 
   if (!user || user.role !== 'superadmin') {
     return (

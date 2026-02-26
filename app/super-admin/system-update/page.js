@@ -25,6 +25,8 @@ export default function SystemUpdatePage() {
     changelog,
     loading: checkLoading,
     checkForUpdate,
+    autoUpdateInterval,
+    setAutoUpdateInterval,
   } = useSystemUpdate({ autoCheck: isSuperAdmin })
 
   // Page state
@@ -245,14 +247,30 @@ export default function SystemUpdatePage() {
             </div>
           </div>
 
-          <button
-            onClick={checkForUpdate}
-            disabled={checkLoading || isUpdating}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg border border-surface-border text-text-secondary hover:text-text-primary hover:bg-elevated transition-colors disabled:opacity-50 font-mono text-xs"
-          >
-            <RefreshCw className={`w-4 h-4 ${checkLoading ? 'animate-spin' : ''}`} />
-            {t('systemUpdate.checkNow')}
-          </button>
+          <div className="flex flex-col items-end gap-3">
+            <button
+              onClick={checkForUpdate}
+              disabled={checkLoading || isUpdating}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg border border-surface-border text-text-secondary hover:text-text-primary hover:bg-elevated transition-colors disabled:opacity-50 font-mono text-xs"
+            >
+              <RefreshCw className={`w-4 h-4 ${checkLoading ? 'animate-spin' : ''}`} />
+              {t('systemUpdate.checkNow')}
+            </button>
+
+            {/* Auto-update check toggle */}
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-text-tertiary font-mono">Auto-check:</span>
+              <select
+                value={autoUpdateInterval}
+                onChange={(e) => setAutoUpdateInterval(e.target.value)}
+                className="bg-terminal border border-surface-border rounded px-2 py-1 text-xs font-mono text-text-secondary focus:outline-none focus:ring-1 focus:ring-phosphor-teal"
+              >
+                <option value="off">Off</option>
+                <option value="hourly">Every Hour</option>
+                <option value="daily">Every Day</option>
+              </select>
+            </div>
+          </div>
         </div>
       </div>
 

@@ -31,14 +31,36 @@ async function handlePOST(request, { params }) {
       );
     }
 
-    if (currentWO.data.status !== 'active') {
+    if (currentWO.data.status !== 'active' && currentWO.data.status !== 'on_hold') {
       return NextResponse.json(
-        { success: false, error: 'Can only complete active work orders' },
+        { success: false, error: 'Can only complete active or on-hold work orders' },
         { status: 400 }
       );
     }
 
-    const result = await workOrderRepo.complete(id);
+    // Parse optional body for completion reason
+    let reason = null;
+    try {
+      const body = await request.json();
+      reason = body.reason || null;
+    } catch {
+      // No body provided — allowed for 100% complete WOs
+    }
+
+    // Require reason if WO is not fully completed
+    const wo = currentWO.data;
+    const isIncomplete = wo.completedQty < wo.lotSize;
+    if (isIncomplete && !reason?.trim()) {
+      return NextResponse.json(
+        { success: false, error: 'Reason is required for incomplete work orders' },
+        { status: 400 }
+      );
+    }
+
+    // Always use authenticated user — never trust client-provided completedBy
+    const completedBy = request.user?.id || request.user?.userId || null;
+
+    const result = await workOrderRepo.complete(id, { reason, completedBy });
 
     if (!result.success) {
       return NextResponse.json(

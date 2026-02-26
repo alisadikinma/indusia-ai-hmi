@@ -12,19 +12,21 @@
  * - Full i18n support
  */
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { useSidebar } from '@/context/SidebarContext';
 import { useI18n } from '@/context/I18nContext';
 import { useTheme } from '@/context/ThemeContext';
+import { useSystemSettings } from '@/hooks/useSystemSettings';
 import { authFetch } from '@/lib/utils/authFetch';
 import {
   Radio, Activity, ChevronRight, Factory,
   Users, Clock, AlertTriangle, CheckCircle2,
   Cpu, Zap, Settings, Lock, Eye, Menu, LogOut, ChevronDown,
   Package, TrendingUp, XCircle, Building2, RefreshCw,
-  Pause, Square, Timer, Brain, Sun, Moon, KeyRound, HelpCircle
+  Pause, Square, Timer, Brain, Sun, Moon, KeyRound, HelpCircle,
+  User, Camera, Trash2
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { HeaderInfoBar } from '@/components/inspection/HeaderInfoBar';
@@ -144,13 +146,17 @@ function LineCard({ line, section, isSelected, onSelect, onStartInspection, isSt
           </div>
           <div>
             <h3 className={cn(
-              "font-display font-bold tracking-wide",
+              "font-display font-bold tracking-wide flex items-center gap-2",
               isSelected ? "text-phosphor-teal" : "text-text-primary"
             )}>
               {line.name}
               {line.customerName && (
-                <span className="text-phosphor-cyan font-normal text-sm ml-2">
-                  - {line.customerName}{line.customerCode && ` (${line.customerCode})`}
+                <span className="text-phosphor-cyan font-normal text-sm flex items-center gap-1.5">
+                  -
+                  {line.customerLogo && (
+                    <img src={line.customerLogo} alt="" className="w-5 h-5 object-contain inline-block" />
+                  )}
+                  {line.customerName}{line.customerCode && ` (${line.customerCode})`}
                 </span>
               )}
             </h3>
@@ -398,6 +404,7 @@ export default function SelectLinePage() {
   const { t } = useI18n();
   const { isDark, toggleTheme } = useTheme();
   const { openHelp } = useHelpOverlay();
+  const { companyLogo, companyName } = useSystemSettings();
   const logoSrc = isDark ? '/indusiaai-logo.png' : '/indusiaai-light.png';
   const [selectedSection, setSelectedSection] = useState('all');
   const [selectedLine, setSelectedLine] = useState(null);
@@ -406,6 +413,68 @@ export default function SelectLinePage() {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [passwordModalOpen, setPasswordModalOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [userAvatar, setUserAvatar] = useState(null);
+  const photoInputRef = useRef(null);
+  const menuRef = useRef(null);
+
+  // Determine which image to show: personal avatar first, then company logo as fallback
+  const avatarImage = userAvatar || companyLogo;
+  const isCompanyLogo = !userAvatar && !!companyLogo;
+
+  // Fetch user avatar on mount
+  useEffect(() => {
+    if (!user?.id) return;
+    authFetch(`/api/users/${user.id}`)
+      .then(res => res.json())
+      .then(json => {
+        if (json.success && (json.data?.avatarBase64 || json.data?.avatar_base64)) {
+          setUserAvatar(json.data.avatarBase64 || json.data.avatar_base64);
+        }
+      })
+      .catch(() => {});
+  }, [user?.id]);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (menuRef.current && !menuRef.current.contains(event.target)) {
+        setShowUserMenu(false);
+      }
+    }
+    if (showUserMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showUserMenu]);
+
+  // Handle user photo file selection
+  const handlePhotoSelect = useCallback(async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    if (file.size > 200 * 1024) { alert(t('profile.fileTooLarge')); return; }
+    if (!file.type.startsWith('image/')) { alert(t('profile.invalidFormat')); return; }
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const base64 = reader.result;
+      try {
+        const res = await authFetch('/api/users/me/avatar', { method: 'PUT', body: JSON.stringify({ avatar_base64: base64 }) });
+        const json = await res.json();
+        if (json.success) setUserAvatar(base64);
+        else alert(json.error || 'Failed');
+      } catch (err) { alert(err.message); }
+    };
+    reader.readAsDataURL(file);
+  }, [t]);
+
+  // Handle remove user photo
+  const handleRemovePhoto = useCallback(async () => {
+    try {
+      const res = await authFetch('/api/users/me/avatar', { method: 'DELETE' });
+      const json = await res.json();
+      if (json.success) setUserAvatar(null);
+    } catch (_) {}
+  }, []);
   
   // Data from API
   const [sections, setSections] = useState([]);
@@ -552,19 +621,6 @@ export default function SelectLinePage() {
     fetchData();
   };
 
-  // Check access via database permissions
-  if (!user || !hasMenuAccess('menu_inspection')) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-center">
-          <AlertTriangle className="w-12 h-12 text-red-500 mx-auto mb-4" />
-          <h2 className="text-lg font-semibold text-text-primary mb-2">{t('auth.accessDenied')}</h2>
-          <p className="text-text-secondary">{t('auth.noPermission')}</p>
-        </div>
-      </div>
-    );
-  }
-
   useEffect(() => {
     const updateTime = () => {
       const now = new Date();
@@ -611,6 +667,7 @@ export default function SelectLinePage() {
     router.push(`/inspection/live/${selectedLine.id}${modelParam}`);
   };
 
+  // Check access — loading state when no user yet
   if (!user) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-void">
@@ -618,6 +675,19 @@ export default function SelectLinePage() {
           <img src={logoSrc} alt="INDUSIA AI" className="w-14 h-14 object-contain animate-pulse-glow mx-auto mb-4" />
           <h2 className="text-xl font-display font-bold text-text-primary mb-3">{t('common.loading')}</h2>
           <p className="text-sm font-mono text-text-tertiary">{t('auth.verifyingCredentials')}</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Check access via database permissions (must be after all hooks)
+  if (!hasMenuAccess('menu_inspection')) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <AlertTriangle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+          <h2 className="text-lg font-semibold text-text-primary mb-2">{t('auth.accessDenied')}</h2>
+          <p className="text-text-secondary">{t('auth.noPermission')}</p>
         </div>
       </div>
     );
@@ -677,20 +747,29 @@ export default function SelectLinePage() {
           <span className="font-mono text-sm text-phosphor-teal">{currentTime}</span>
 
           {/* User Profile Dropdown */}
-          <div className="relative">
+          <div className="relative" ref={menuRef}>
             <button
               onClick={() => setShowUserMenu(!showUserMenu)}
               className="flex items-center gap-3 px-4 py-2 bg-terminal border border-surface-border hover:border-phosphor-teal/50 transition-colors"
             >
-              <div className="w-8 h-8 border border-phosphor-teal/50 bg-void flex items-center justify-center">
-                <span className="font-mono text-xs text-phosphor-teal">
-                  {user.name?.charAt(0).toUpperCase() || 'U'}
-                </span>
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center overflow-hidden ${isCompanyLogo ? 'bg-white p-0.5' : 'bg-indusia-primary'}`}>
+                {avatarImage ? (
+                  <img src={avatarImage} alt="" className={`w-full h-full ${isCompanyLogo ? 'object-contain' : 'object-cover'}`} />
+                ) : (
+                  <User className="w-4 h-4 text-white" />
+                )}
               </div>
               <div className="text-left">
                 <p className="font-display text-sm text-text-primary">{user.name}</p>
-                <p className="font-mono text-xxs text-text-tertiary uppercase">{user.role}</p>
+                <p className="font-mono text-xxs text-text-tertiary capitalize">
+                  {companyName || user.role}
+                </p>
               </div>
+              {companyLogo && userAvatar && (
+                <div className="w-6 h-6 rounded bg-white p-0.5 flex items-center justify-center shrink-0 ml-1">
+                  <img src={companyLogo} alt="" className="w-full h-full object-contain" />
+                </div>
+              )}
               <ChevronDown size={16} className={cn(
                 "text-text-tertiary transition-transform",
                 showUserMenu && "rotate-180"
@@ -699,24 +778,69 @@ export default function SelectLinePage() {
 
             {/* Dropdown Menu */}
             {showUserMenu && (
-              <div className="absolute right-0 top-full mt-1 w-56 bg-panel border border-surface-border shadow-lg z-50">
-                <div className="px-3 py-2 border-b border-surface-border">
-                  <p className="font-mono text-xs text-text-primary">{user?.name}</p>
-                  <p className="font-mono text-xxs text-text-tertiary capitalize">{user?.role || 'User'}</p>
+              <div className="absolute right-0 top-full mt-1 w-64 bg-panel border border-surface-border shadow-xl z-50 overflow-hidden">
+                {/* Profile header — same design as TopNav for ALL roles */}
+                <div className="px-4 py-3 border-b border-surface-border">
+                  <div className="flex items-center gap-3">
+                    <div className="relative group shrink-0">
+                      <div className={`w-12 h-12 rounded-full flex items-center justify-center overflow-hidden ${isCompanyLogo ? 'bg-white p-1' : 'bg-indusia-primary'}`}>
+                        {avatarImage ? (
+                          <img src={avatarImage} alt="" className={`w-full h-full ${isCompanyLogo ? 'object-contain' : 'object-cover'}`} />
+                        ) : (
+                          <User className="w-5 h-5 text-white" />
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); photoInputRef.current?.click(); }}
+                        className="absolute inset-0 rounded-full bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                        title={userAvatar ? t('profile.changePhoto') : t('profile.uploadPhoto')}
+                      >
+                        <Camera className="w-4 h-4 text-white" />
+                      </button>
+                      {userAvatar && (
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); handleRemovePhoto(); }}
+                          className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-red-500 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                          title={t('profile.removePhoto')}
+                        >
+                          <Trash2 className="w-3 h-3 text-white" />
+                        </button>
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-text-primary truncate">{user.name}</p>
+                      <p className="text-xs text-text-tertiary capitalize">{user.role}</p>
+                      {companyName && (
+                        <p className="text-[10px] text-phosphor-teal/70 mt-0.5 truncate">{companyName}</p>
+                      )}
+                      <p className="text-[10px] text-text-tertiary mt-0.5">
+                        {userAvatar ? t('profile.changePhoto') : t('profile.uploadPhoto')}
+                      </p>
+                    </div>
+                  </div>
+                  <input
+                    ref={photoInputRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    onChange={handlePhotoSelect}
+                    className="hidden"
+                  />
                 </div>
 
                 {/* Language Switcher */}
-                <div className="px-3 py-2 border-b border-surface-border">
+                <div className="px-4 py-3 border-b border-surface-border">
                   <LanguageSwitcher />
                 </div>
 
                 {/* Theme Toggle */}
                 <button
                   onClick={() => { toggleTheme(); setShowUserMenu(false); }}
-                  className="w-full px-3 py-2 flex items-center gap-2 hover:bg-elevated transition-colors text-left border-b border-surface-border"
+                  className="w-full px-4 py-3 flex items-center gap-3 hover:bg-elevated transition-colors text-left border-b border-surface-border"
                 >
                   {isDark ? <Sun className="w-4 h-4 text-text-tertiary" /> : <Moon className="w-4 h-4 text-text-tertiary" />}
-                  <span className="font-mono text-xs text-text-primary">
+                  <span className="text-sm text-text-primary">
                     {isDark ? t('theme.switchToLight') : t('theme.switchToDark')}
                   </span>
                 </button>
@@ -724,19 +848,19 @@ export default function SelectLinePage() {
                 {/* Change Password */}
                 <button
                   onClick={() => { setPasswordModalOpen(true); setShowUserMenu(false); }}
-                  className="w-full px-3 py-2 flex items-center gap-2 hover:bg-elevated transition-colors text-left border-b border-surface-border"
+                  className="w-full px-4 py-3 flex items-center gap-3 hover:bg-elevated transition-colors text-left border-b border-surface-border"
                 >
                   <KeyRound className="w-4 h-4 text-text-tertiary" />
-                  <span className="font-mono text-xs text-text-primary">{t('password.changePassword')}</span>
+                  <span className="text-sm text-text-primary">{t('password.changePassword')}</span>
                 </button>
 
                 {/* Help & Shortcuts */}
                 <button
                   onClick={() => { openHelp('shortcuts'); setShowUserMenu(false); }}
-                  className="w-full px-3 py-2 flex items-center gap-2 hover:bg-elevated transition-colors text-left border-b border-surface-border"
+                  className="w-full px-4 py-3 flex items-center gap-3 hover:bg-elevated transition-colors text-left border-b border-surface-border"
                 >
                   <HelpCircle className="w-4 h-4 text-text-tertiary" />
-                  <span className="font-mono text-xs text-text-primary">{t('nav.help')}</span>
+                  <span className="text-sm text-text-primary">{t('nav.help')}</span>
                 </button>
 
                 {/* Logout */}
@@ -746,11 +870,23 @@ export default function SelectLinePage() {
                     await logout();
                     router.push('/login');
                   }}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-phosphor-red/10 transition-colors"
+                  className="w-full px-4 py-3 flex items-center gap-3 hover:bg-elevated transition-colors text-left"
                 >
                   <LogOut className="w-4 h-4 text-phosphor-red" />
-                  <span className="font-mono text-xs text-phosphor-red">{t('auth.logout')}</span>
+                  <span className="text-sm text-phosphor-red">{t('auth.logout')}</span>
                 </button>
+
+                {/* Company branding footer */}
+                {companyName && (
+                  <div className="px-4 py-2 border-t border-surface-border bg-void/50 flex items-center gap-2">
+                    {companyLogo && (
+                      <div className="w-5 h-5 rounded bg-white p-0.5 flex items-center justify-center shrink-0">
+                        <img src={companyLogo} alt="" className="w-full h-full object-contain" />
+                      </div>
+                    )}
+                    <span className="text-[10px] text-text-tertiary font-mono truncate">{companyName}</span>
+                  </div>
+                )}
               </div>
             )}
           </div>
