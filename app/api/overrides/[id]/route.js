@@ -37,6 +37,9 @@ function computeCounterAdjustment(action, override, frameDecisions) {
     const frames = parseFrameDetails(override)
     if (!frames.length) return null
 
+    // Detect key format: per-object ("TOP-0-OBJ-1") vs per-frame ("TOP-0")
+    const isPerObject = Object.keys(frameDecisions || {}).some(k => k.includes('-OBJ-'))
+
     // Group frames by serial number (same as SN tabs in UI)
     const snGroups = {}
     frames.forEach(f => {
@@ -45,13 +48,25 @@ function computeCounterAdjustment(action, override, frameDecisions) {
       snGroups[sn].push(f)
     })
 
-    // Count PCBs where manager rejected at least one frame
+    // Count PCBs where manager rejected at least one frame/object
     let rejectedPcbs = 0
     for (const snFrames of Object.values(snGroups)) {
-      const hasRejection = snFrames.some(f => {
-        const key = `${f.side}-${f.frameIndex}`
-        return frameDecisions?.[key] === 'rejected'
-      })
+      let hasRejection = false
+      if (isPerObject) {
+        // Per-object: check if any object in any frame of this SN is rejected
+        hasRejection = snFrames.some(f => {
+          return (f.objects || []).some((_, objIdx) => {
+            const key = `${f.side}-${f.frameIndex}-OBJ-${objIdx}`
+            return frameDecisions?.[key] === 'rejected'
+          })
+        })
+      } else {
+        // Per-frame (legacy): check frame-level keys
+        hasRejection = snFrames.some(f => {
+          const key = `${f.side}-${f.frameIndex}`
+          return frameDecisions?.[key] === 'rejected'
+        })
+      }
       if (hasRejection) rejectedPcbs++
     }
 
@@ -101,7 +116,9 @@ async function handleGET(request, { params }) {
  * PATCH /api/overrides/:id
  * Body: { action: 'approve'|'reject'|'review', reviewerId, reviewerName, reviewNotes, frameDecisions? }
  *
- * action='review': Per-frame review with frameDecisions object { "TOP-0": "approved", ... }
+ * action='review': Per-object review with frameDecisions/objectDecisions
+ *   - New format (per-object): { "TOP-0-OBJ-0": "approved", "TOP-0-OBJ-1": "rejected", ... }
+ *   - Legacy format (per-frame): { "TOP-0": "approved", ... }
  * action='approve'/'reject': Legacy single-decision review
  * Image upload to cloud storage happens during sync-to-cloud process.
  */
@@ -124,9 +141,11 @@ async function handlePATCH(request, { params }) {
       )
     }
 
-    if (body.action === 'review' && (!body.frameDecisions || Object.keys(body.frameDecisions).length === 0)) {
+    // Accept either frameDecisions (legacy per-frame) or objectDecisions (new per-object)
+    const decisions = body.frameDecisions || body.objectDecisions
+    if (body.action === 'review' && (!decisions || Object.keys(decisions).length === 0)) {
       return NextResponse.json(
-        { success: false, error: 'frameDecisions is required for review action' },
+        { success: false, error: 'frameDecisions or objectDecisions is required for review action' },
         { status: 400 }
       )
     }
@@ -161,7 +180,7 @@ async function handlePATCH(request, { params }) {
         id,
         body.reviewerId,
         body.reviewerName,
-        body.frameDecisions,
+        decisions,
         body.reviewNotes || ''
       )
     }
@@ -173,10 +192,10 @@ async function handlePATCH(request, { params }) {
       )
     }
 
-    // Patch WO counters based on review outcome (rejected frames flip GOOD→NG)
+    // Patch WO counters based on review outcome (rejected objects/frames flip GOOD→NG)
     let counterAdjustment = null
     try {
-      counterAdjustment = computeCounterAdjustment(body.action, existing.data, body.frameDecisions)
+      counterAdjustment = computeCounterAdjustment(body.action, existing.data, decisions)
       if (counterAdjustment) {
         const { woId, ...deltas } = counterAdjustment
         const patchResult = await updateWorkOrderCounters(woId, deltas)

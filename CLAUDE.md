@@ -180,7 +180,7 @@ Use the `useAuth()` hook which provides:
 ### Component Organization
 
 - `components/ui/` - shadcn/ui primitives (Radix UI + Tailwind)
-- `components/common/` - Reusable UI components (Card, Badge, StatusBadge, EmptyState, PageLoading, etc.)
+- `components/common/` - Reusable UI components (Card, Badge, StatusBadge, EmptyState, PageLoading, CustomerLogo, ImageViewer, CompanyProfileModal, ChangePasswordModal, etc.)
 - `components/layout/` - SideNav, TopNav
 - `components/system/` - SystemHealthBar, SystemStatusChip, SystemStatusDetailsModal
 - `components/notifications/` - NotificationBell, NotificationDrawer, NotificationFilters
@@ -245,7 +245,7 @@ Hooks (hooks/) → API Routes (app/api/) → Repositories (lib/repos/) → Supab
 **Repository Layer** (`lib/repos/`):
 - Direct Supabase queries with error handling
 - Case conversion utilities: `toCamelCase()`, `toSnakeCase()` in `lib/repos/index.js`
-- Key repos: `overridesRepo`, `usersRepo`, `rolesRepo`, `masterDataRepo`, `notificationsRepo`, `modelsRepo`, `eventLogRepo`, `dashboardRepo`, `inspectionFramesRepo`, `systemHealthRepo`
+- Key repos: `overridesRepo`, `usersRepo`, `rolesRepo`, `masterDataRepo`, `notificationsRepo`, `modelsRepo`, `eventLogRepo`, `dashboardRepo`, `inspectionFramesRepo`, `systemHealthRepo`, `workOrderRepo`
 
 **API Routes** (`app/api/`):
 - RESTful endpoints with authentication/authorization via `withAuth()` middleware
@@ -736,6 +736,31 @@ The app implements defense-in-depth with multiple security layers:
 
 ## Key Implementation Patterns
 
+### Work Order Completion Tracking
+
+Force-completing a WO (progress < 100%) requires a reason. Normal completion (100%) allows optional reason.
+
+- `work_orders.completion_reason` (TEXT) — reason for force completion
+- `work_orders.completed_by` (TEXT) — user ID who completed (always server-side `request.user.id`, never trust client body)
+- `workOrderRepo.getWorkOrders()` batch-resolves `completed_by` IDs to names via single query to `users` table
+- `CompletionInfoPopover` in `WorkOrderTable.jsx` — click info icon on COMPLETED status to see reason/who/when
+- Migration: `migrations/004_add_wo_completion_fields.sql`
+
+### System Settings & Company Profile
+
+System-level settings (company name, logo, contact info) stored in `system_settings` table.
+
+- `useSystemSettings()` hook — fetches from public `/api/system-settings` (no auth required for GET)
+- `PUT /api/system-settings` — superadmin only (`withAuth('system:configure')`)
+- `CompanyProfileModal` — superadmin-only modal for editing company profile
+- `TopNav.jsx` profile dropdown — **identical design for ALL roles**:
+  - Avatar: personal avatar first, company logo as fallback, generic User icon if neither
+  - Company name shown in teal below role for all roles
+  - Camera overlay for photo upload available to ALL roles
+  - Only difference: superadmin gets "Company Profile" menu item
+- User avatar: `PUT/DELETE /api/users/me/avatar` — any authenticated user, 200KB max, base64 data URI
+- Migrations: `006_create_system_settings.sql`, `007_add_user_avatar.sql`
+
 ### Override Workflow
 
 False call overrides follow this flow:
@@ -826,8 +851,11 @@ Key tables:
 - `overrides` - False call override submissions
 - `notifications`, `event_log` - Activity tracking
 - `system_events` - System health events
+- `system_settings` - Company profile (name, logo, address, website, phone, email)
+- `override_object_decisions` - Per-object decisions for override review
 - `schema_migrations` - Tracks applied SQL migrations (version, filename, applied_at)
 - `update_log` - OTA update attempt history (from/to version, status, migrations, commits)
+- Notable columns: `work_orders.completion_reason/completed_by`, `customers.logo_base64`, `users.avatar_base64`
 
 When implementing Supabase queries, use Row Level Security (RLS) policies based on user roles.
 

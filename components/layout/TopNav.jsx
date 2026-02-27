@@ -1,27 +1,34 @@
 'use client';
 
-import { useState, useRef, useEffect, useMemo } from 'react';
+import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChevronDown, LogOut, User, HelpCircle, Cloud, Sun, Moon, KeyRound } from 'lucide-react';
+import { ChevronDown, LogOut, User, HelpCircle, Cloud, Sun, Moon, KeyRound, Camera, Building2, Trash2 } from 'lucide-react';
 import { useTheme } from '@/context/ThemeContext';
 import { useAuth } from '@/context/AuthContext';
 import { useHelpOverlay } from '@/hooks/useHelpOverlay';
 import { useI18n } from '@/hooks/useI18n';
 import { useSystemHealthContext } from '@/context/SystemHealthContext';
+import { useSystemSettings } from '@/hooks/useSystemSettings';
+import { authFetch } from '@/lib/utils/authFetch';
 import { customers, lines } from '@/data/masterData';
 import NotificationBell from '../notifications/NotificationBell';
 import LanguageSwitcher from '../common/LanguageSwitcher';
 import ChangePasswordModal from '../common/ChangePasswordModal';
+import CompanyProfileModal from '../common/CompanyProfileModal';
 
 export default function TopNav() {
   const router = useRouter();
-  const { user, logout } = useAuth();
+  const { user, logout, isSuperAdmin } = useAuth();
   const { openHelp } = useHelpOverlay();
   const { t } = useI18n();
   const { isDark, toggleTheme } = useTheme();
   const { statuses } = useSystemHealthContext();
+  const { companyLogo, companyName } = useSystemSettings();
   const [menuOpen, setMenuOpen] = useState(false);
   const [passwordModalOpen, setPasswordModalOpen] = useState(false);
+  const [companyProfileOpen, setCompanyProfileOpen] = useState(false);
+  const [userAvatar, setUserAvatar] = useState(null);
+  const photoInputRef = useRef(null);
   const menuRef = useRef(null);
 
   // Use sync data from SystemHealthContext (no separate API call needed)
@@ -81,6 +88,68 @@ export default function TopNav() {
     logout();
     router.push('/login');
   };
+
+  // Fetch user avatar on mount
+  useEffect(() => {
+    if (!user?.id) return;
+    authFetch(`/api/users/${user.id}`)
+      .then(res => res.json())
+      .then(json => {
+        if (json.success && (json.data?.avatarBase64 || json.data?.avatar_base64)) {
+          setUserAvatar(json.data.avatarBase64 || json.data.avatar_base64);
+        }
+      })
+      .catch(() => {});
+  }, [user?.id]);
+
+  // Handle user photo file selection (non-superadmin)
+  const handlePhotoSelect = useCallback(async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+
+    if (file.size > 200 * 1024) {
+      alert(t('profile.fileTooLarge'));
+      return;
+    }
+    if (!file.type.startsWith('image/')) {
+      alert(t('profile.invalidFormat'));
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const base64 = reader.result;
+      try {
+        const res = await authFetch('/api/users/me/avatar', {
+          method: 'PUT',
+          body: JSON.stringify({ avatar_base64: base64 }),
+        });
+        const json = await res.json();
+        if (json.success) {
+          setUserAvatar(base64);
+        } else {
+          alert(json.error || 'Failed');
+        }
+      } catch (err) {
+        alert(err.message);
+      }
+    };
+    reader.readAsDataURL(file);
+  }, [t]);
+
+  // Handle remove user photo (non-superadmin)
+  const handleRemovePhoto = useCallback(async () => {
+    try {
+      const res = await authFetch('/api/users/me/avatar', { method: 'DELETE' });
+      const json = await res.json();
+      if (json.success) setUserAvatar(null);
+    } catch (_) {}
+  }, []);
+
+  // Determine which image to show: personal avatar first, then company logo as fallback
+  const avatarImage = userAvatar || companyLogo;
+  const isCompanyLogo = !userAvatar && !!companyLogo;
 
   if (!user) return null;
 
@@ -142,17 +211,26 @@ export default function TopNav() {
               onClick={() => setMenuOpen(!menuOpen)}
               className="flex items-center gap-3 px-4 py-2 rounded-lg bg-indusia-surfaceMuted hover:bg-indusia-border transition-colors"
             >
-              <div className="w-8 h-8 rounded-full bg-indusia-primary flex items-center justify-center">
-                <User className="w-4 h-4 text-white" />
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center overflow-hidden ${isCompanyLogo ? 'bg-white p-0.5' : 'bg-indusia-primary'}`}>
+                {avatarImage ? (
+                  <img src={avatarImage} alt="" className={`w-full h-full ${isCompanyLogo ? 'object-contain' : 'object-cover'}`} />
+                ) : (
+                  <User className="w-4 h-4 text-white" />
+                )}
               </div>
               <div className="text-left">
                 <p className="text-sm font-medium text-indusia-text">
                   {user.name}
                 </p>
                 <p className="text-xs text-indusia-textMuted capitalize">
-                  {user.role}
+                  {companyName || user.role}
                 </p>
               </div>
+              {companyLogo && userAvatar && (
+                <div className="w-6 h-6 rounded bg-white p-0.5 flex items-center justify-center shrink-0 ml-1">
+                  <img src={companyLogo} alt="" className="w-full h-full object-contain" />
+                </div>
+              )}
               <ChevronDown
                 className={`w-4 h-4 text-indusia-textMuted transition-transform ${
                   menuOpen ? 'rotate-180' : ''
@@ -161,19 +239,78 @@ export default function TopNav() {
             </button>
 
             {menuOpen && (
-              <div className="absolute right-0 mt-2 w-56 bg-indusia-surface rounded-lg shadow-xl border border-indusia-border overflow-hidden z-[70]">
+              <div className="absolute right-0 mt-2 w-64 bg-indusia-surface rounded-lg shadow-xl border border-indusia-border overflow-hidden z-[70]">
+                {/* Profile header — same design for ALL roles */}
                 <div className="px-4 py-3 border-b border-indusia-border">
-                  <p className="text-sm font-medium text-indusia-text">
-                    {user.name}
-                  </p>
-                  <p className="text-xs text-indusia-textMuted mt-1 capitalize">
-                    {user.role}
-                  </p>
+                  <div className="flex items-center gap-3">
+                    <div className="relative group shrink-0">
+                      <div className={`w-12 h-12 rounded-full flex items-center justify-center overflow-hidden ${isCompanyLogo ? 'bg-white p-1' : 'bg-indusia-primary'}`}>
+                        {avatarImage ? (
+                          <img src={avatarImage} alt="" className={`w-full h-full ${isCompanyLogo ? 'object-contain' : 'object-cover'}`} />
+                        ) : (
+                          <User className="w-5 h-5 text-white" />
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); photoInputRef.current?.click(); }}
+                        className="absolute inset-0 rounded-full bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                        title={userAvatar ? t('profile.changePhoto') : t('profile.uploadPhoto')}
+                      >
+                        <Camera className="w-4 h-4 text-white" />
+                      </button>
+                      {userAvatar && (
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); handleRemovePhoto(); }}
+                          className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-red-500 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                          title={t('profile.removePhoto')}
+                        >
+                          <Trash2 className="w-3 h-3 text-white" />
+                        </button>
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-indusia-text truncate">
+                        {user.name}
+                      </p>
+                      <p className="text-xs text-indusia-textMuted capitalize">
+                        {user.role}
+                      </p>
+                      {companyName && (
+                        <p className="text-[10px] text-phosphor-teal/70 mt-0.5 truncate">
+                          {companyName}
+                        </p>
+                      )}
+                      <p className="text-[10px] text-indusia-textMuted mt-0.5">
+                        {userAvatar ? t('profile.changePhoto') : t('profile.uploadPhoto')}
+                      </p>
+                    </div>
+                  </div>
+                  {/* Hidden file input for photo upload */}
+                  <input
+                    ref={photoInputRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    onChange={handlePhotoSelect}
+                    className="hidden"
+                  />
                 </div>
 
                 <div className="px-4 py-3 border-b border-indusia-border">
                   <LanguageSwitcher />
                 </div>
+
+                {/* Super admin: Company Profile menu item */}
+                {isSuperAdmin && (
+                  <button
+                    onClick={() => { setCompanyProfileOpen(true); setMenuOpen(false); }}
+                    className="w-full px-4 py-3 flex items-center gap-3 hover:bg-indusia-surfaceMuted transition-colors text-left border-b border-indusia-border"
+                  >
+                    <Building2 className="w-4 h-4 text-indusia-textMuted" />
+                    <span className="text-sm text-indusia-text">{t('profile.companyProfile')}</span>
+                  </button>
+                )}
 
                 <button
                   onClick={() => { toggleTheme(); setMenuOpen(false); }}
@@ -208,6 +345,18 @@ export default function TopNav() {
                   <LogOut className="w-4 h-4 text-indusia-textMuted" />
                   <span className="text-sm text-indusia-text">{t('auth.logout')}</span>
                 </button>
+
+                {/* Company branding footer — visible to ALL roles */}
+                {companyName && (
+                  <div className="px-4 py-2 border-t border-indusia-border bg-indusia-bg/50 flex items-center gap-2">
+                    {companyLogo && (
+                      <div className="w-5 h-5 rounded bg-white p-0.5 flex items-center justify-center shrink-0">
+                        <img src={companyLogo} alt="" className="w-full h-full object-contain" />
+                      </div>
+                    )}
+                    <span className="text-[10px] text-indusia-textMuted font-mono truncate">{companyName}</span>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -219,6 +368,13 @@ export default function TopNav() {
       isOpen={passwordModalOpen}
       onClose={() => setPasswordModalOpen(false)}
     />
+
+    {isSuperAdmin && (
+      <CompanyProfileModal
+        isOpen={companyProfileOpen}
+        onClose={() => setCompanyProfileOpen(false)}
+      />
+    )}
     </>
   );
 }

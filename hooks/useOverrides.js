@@ -346,7 +346,9 @@ export function useOverrides(initialFilters = {}) {
     }
   };
 
-  const reviewOverride = async (id, reviewerId, reviewerName, frameDecisions, notes = '') => {
+  const reviewOverride = async (id, reviewerId, reviewerName, decisions, notes = '') => {
+    // Detect key format: per-object ("TOP-0-OBJ-1") vs per-frame ("TOP-0")
+    const isPerObject = Object.keys(decisions || {}).some(k => k.includes('-OBJ-'))
     try {
       const res = await authFetch(`/api/overrides/${id}`, {
         method: 'PATCH',
@@ -354,7 +356,8 @@ export function useOverrides(initialFilters = {}) {
           action: 'review',
           reviewerId,
           reviewerName,
-          frameDecisions,
+          // Send under correct key for the API
+          ...(isPerObject ? { objectDecisions: decisions } : { frameDecisions: decisions }),
           reviewNotes: notes
         })
       });

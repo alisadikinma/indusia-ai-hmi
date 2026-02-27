@@ -59,6 +59,7 @@ import { HeaderInfoBar } from './HeaderInfoBar'
 import ChangePasswordModal from '@/components/common/ChangePasswordModal'
 import LanguageSwitcher from '@/components/common/LanguageSwitcher'
 import { useHelpOverlay } from '@/hooks/useHelpOverlay'
+import { useSystemSettings } from '@/hooks/useSystemSettings'
 
 // Services
 import { saveInspection } from '@/lib/services/inspectionService'
@@ -93,6 +94,7 @@ export function LiveViewV3({
   customerId,
   customerName,
   customerCode,
+  customerLogo,
   modelName,
   user,
   onExit,
@@ -234,6 +236,30 @@ export function LiveViewV3({
     lastKnownServerRef.current = serverNow
   }, [fetchedWO])
 
+  // ─── Review State Persistence ───
+  // Survives page refresh so operator doesn't lose NG review progress
+  const REVIEW_STORAGE_KEY = `indusia_review_state_${lineId}`
+  const REVIEW_EXPIRY_MS = 5 * 60 * 1000 // 5 minutes
+
+  // Read once on mount — hold in ref for use by the NG processing effect
+  const restoredReviewRef = useRef(() => {
+    if (typeof window === 'undefined') return null
+    try {
+      const raw = localStorage.getItem(REVIEW_STORAGE_KEY)
+      if (!raw) return null
+      const data = JSON.parse(raw)
+      if (Date.now() - data.timestamp > REVIEW_EXPIRY_MS) {
+        localStorage.removeItem(REVIEW_STORAGE_KEY)
+        return null
+      }
+      return data
+    } catch { return null }
+  })
+  // Evaluate the lazy init function once
+  if (typeof restoredReviewRef.current === 'function') {
+    restoredReviewRef.current = restoredReviewRef.current()
+  }
+
   // Model selector state (fallback to localStorage if prop is empty)
   // Must be defined BEFORE useLiveInspection so the resolved model name is available
   const [currentModel, setCurrentModel] = useState(() => {
@@ -267,6 +293,7 @@ export function LiveViewV3({
     reconnect,
     checkAiBackend,
     clearInspection,
+    restoreInspection,
     runProcess,
     pauseProcess,
     stopProcess,
@@ -287,10 +314,14 @@ export function LiveViewV3({
     testAudio 
   } = useAudioFeedback()
 
+  // Company profile (for user dropdown)
+  const { companyLogo, companyName } = useSystemSettings()
+
   // UI State
   const [isPaused, setIsPaused] = useState(false)
   const [showFalseCallModal, setShowFalseCallModal] = useState(false)
   const [showCavityOverlay, setShowCavityOverlay] = useState(false)
+  const [cavityObjectDecisions, setCavityObjectDecisions] = useState({}) // Per-object decisions from CavityReviewOverlay
   const falseCallInspectionRef = useRef(null) // Capture inspection data when modal opens
   const [falseCallReasons, setFalseCallReasons] = useState([])
   const [pendingDecision, setPendingDecision] = useState(null) // 'GOOD' or 'NG'
@@ -381,6 +412,12 @@ export function LiveViewV3({
         setSyncedState(newSyncedState)
         setSyncLoaded(true)
 
+        // Operator: restore inspection from line-state if SSE hasn't delivered yet
+        // This handles page refresh — line-state has the last pushed inspection data
+        if (isOperator && result.data.currentInspection) {
+          restoreInspection(result.data.currentInspection)
+        }
+
         // Initialize cycle time from persisted state on first load (operator only)
         // This ensures the cycle time indicator shows immediately after page reload
         if (isOperator && newSyncedState.cycleTime != null && lastCycleTimeRef.current == null) {
@@ -420,7 +457,7 @@ export function LiveViewV3({
     } catch (error) {
       console.warn('[LiveView] Failed to fetch line state:', error)
     }
-  }, [lineId, isOperator, refreshWO]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [lineId, isOperator, refreshWO, restoreInspection]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Save line state to API (full state sync)
   const saveLineState = useCallback(async (updates) => {
@@ -524,7 +561,33 @@ export function LiveViewV3({
     if (!isOperator) return
     setAutoNgEnabled(prev => !prev)
   }, [isOperator])
-  
+
+  // ─── Persist review state to localStorage on change ───
+  // Saves: modal open, frame index, inline decisions — keyed by inspectionId
+  useEffect(() => {
+    if (!isOperator) return
+    const inspectionId = currentInspection?.inspection_id || currentInspection?.inspectionId
+    // Only persist when there's an active inspection being reviewed
+    if (!inspectionId || (!showCavityOverlay && !ngFrameReview)) {
+      return
+    }
+    try {
+      localStorage.setItem(REVIEW_STORAGE_KEY, JSON.stringify({
+        inspectionId,
+        showCavityOverlay,
+        cavityInitialIndex,
+        cavityObjectDecisions,
+        ngFrameReview,
+        timestamp: Date.now(),
+      }))
+    } catch { /* quota or private browsing */ }
+  }, [isOperator, currentInspection, showCavityOverlay, cavityInitialIndex, cavityObjectDecisions, ngFrameReview, REVIEW_STORAGE_KEY])
+
+  // ─── Clear review state helper ───
+  const clearReviewState = useCallback(() => {
+    try { localStorage.removeItem(REVIEW_STORAGE_KEY) } catch { /* ignore */ }
+  }, [REVIEW_STORAGE_KEY])
+
   // WO completion state — shows overlay and blocks further production
   const [woCompleted, setWoCompleted] = useState(false)
   const [woOnHold, setWoOnHold] = useState(false)
@@ -876,25 +939,55 @@ export function LiveViewV3({
     const hasNGFrames = ngFrames.length > 0
     const aiNG = currentInspection.decision === 'FAIL'
 
+    // Check for restored review state from localStorage (page refresh recovery)
+    const inspectionId = currentInspection.inspection_id || currentInspection.inspectionId
+    const restored = restoredReviewRef.current
+    const hasRestoredState = restored && restored.inspectionId === inspectionId
+    // Consume restored state — only use once
+    if (hasRestoredState) restoredReviewRef.current = null
+
     if (hasNGFrames) {
-      if (autoNgEnabled) {
-        // AUTO-NG mode: 5s delay before showing CavityReviewOverlay
-        overlayDelayRef.current = setTimeout(() => {
-          setCavityInitialIndex(0)
+      // Check if NG frames have per-object data (for per-object review in CavityReviewOverlay)
+      const hasObjects = ngFrames.some(f => f.objects && f.objects.length > 0)
+
+      if (hasObjects) {
+        // Per-object mode: operator opens CavityReviewOverlay by clicking SidePanel image
+        processedInspectionRef.current = inspectionId
+        falseCallInspectionRef.current = currentInspection
+
+        // Restore review state if returning from page refresh
+        if (hasRestoredState) {
+          if (restored.showCavityOverlay) {
+            setCavityInitialIndex(restored.cavityInitialIndex || 0)
+            setCavityObjectDecisions(restored.cavityObjectDecisions || {})
+            setShowCavityOverlay(true)
+          }
+          if (restored.ngFrameReview) {
+            setNgFrameReview(restored.ngFrameReview)
+          }
+        }
+      } else if (autoNgEnabled) {
+        // Legacy mode (no objects): AUTO-NG with overlay delay
+        if (hasRestoredState && restored.showCavityOverlay) {
+          // Restore immediately without delay
+          setCavityInitialIndex(restored.cavityInitialIndex || 0)
           setShowCavityOverlay(true)
-          overlayDelayRef.current = null
-        }, 5000)
+        } else {
+          overlayDelayRef.current = setTimeout(() => {
+            setCavityInitialIndex(0)
+            setShowCavityOverlay(true)
+            overlayDelayRef.current = null
+          }, 5000)
+        }
       } else {
-        // Manual mode: initialize inline per-frame review (no overlay)
-        // Mark as processed so auto-proceed effect doesn't interfere
-        const inspectionId = currentInspection.inspection_id || currentInspection.inspectionId
+        // Legacy mode (no objects): Manual inline per-frame review
         processedInspectionRef.current = inspectionId
         falseCallInspectionRef.current = currentInspection
         setShowCavityOverlay(false)
         setNgFrameReview({
           frames: ngFrames,
-          currentIndex: 0,
-          decisions: {}
+          currentIndex: hasRestoredState ? (restored.ngFrameReview?.currentIndex || 0) : 0,
+          decisions: hasRestoredState ? (restored.ngFrameReview?.decisions || {}) : {}
         })
       }
     } else {
@@ -1104,6 +1197,9 @@ export function LiveViewV3({
    * (Defined first as other handlers depend on it)
    */
   const submitDecision = useCallback(async (operatorDecision, falseCallData = null) => {
+    // Clear persisted review state — decision is being finalized
+    clearReviewState()
+
     // Serialization guard: queue if another submitDecision is already running.
     // This prevents concurrent DB counter updates that cause race conditions
     // (two reads of the same base value → both write base+1 → one increment lost).
@@ -1276,13 +1372,15 @@ export function LiveViewV3({
           // Only include optional fields if they have actual values
           // (null values cause Zod validation to fail — .optional() rejects null)
           // ng_frame_details must be conditional to avoid PostgREST error if column doesn't exist yet
-          if (frameDetails) overridePayload.ng_frame_details = JSON.stringify(frameDetails)
+          if (frameDetails?.length > 0) overridePayload.ng_frame_details = JSON.stringify(frameDetails)
           if (sectionId) overridePayload.section_id = sectionId
           if (lineId) overridePayload.line_id = lineId
           if (workOrder?.id) overridePayload.work_order_id = workOrder.id
           if (customerId) overridePayload.customer_id = customerId
           if (user?.id) overridePayload.operator_id = user.id
           if (user?.name) overridePayload.operator_name = user.name
+          const effectiveModel = currentModel || modelName
+          if (effectiveModel) overridePayload.model_name = effectiveModel
 
           console.log('[LiveView] Creating override:', { boardId, overrideType, reason: overridePayload.reason })
 
@@ -1447,7 +1545,7 @@ export function LiveViewV3({
     }
   }, [activeInspection, workOrder, fetchedWO, currentInspection, confirmInspection,
       lineId, sectionId, customerId, user, updateCounters, refreshWO, devMockInspection, activeCavityCount,
-      handleStopProcess]) // sessionCounters read via ref to prevent auto-proceed re-triggers
+      handleStopProcess, clearReviewState]) // sessionCounters read via ref to prevent auto-proceed re-triggers
 
   /**
    * Handle GOOD button click
@@ -1522,6 +1620,8 @@ export function LiveViewV3({
    */
   const handleCavityConfirmNG = useCallback(async (info) => {
     setShowCavityOverlay(false)
+    setCavityObjectDecisions({})
+    clearReviewState()
     if (info?.reason) {
       // Mixed: some false calls + some real NG → pass per-frame decisions for override + counter splitting
       await submitDecision('NG', {
@@ -1534,15 +1634,17 @@ export function LiveViewV3({
       // Pure NG: all frames confirmed as real NG — still pass pcbCounts for accurate counting
       await submitDecision('NG', info?.pcbCounts ? { pcbCounts: info.pcbCounts } : null)
     }
-  }, [submitDecision])
+  }, [submitDecision, clearReviewState])
 
   /**
    * Handle cavity overlay GOOD confirmation (False Call)
    */
   const handleCavityConfirmGood = useCallback(async (reason, decisions, pcbCounts) => {
     setShowCavityOverlay(false)
+    setCavityObjectDecisions({})
+    clearReviewState()
     await submitDecision('GOOD', { reason, notes: '', perFrameDecisions: decisions || null, pcbCounts: pcbCounts || null })
-  }, [submitDecision])
+  }, [submitDecision, clearReviewState])
 
   // ============================================
   // Inline NG Frame Review (Manual Mode)
@@ -1564,6 +1666,7 @@ export function LiveViewV3({
     setNgFrameReview(null)
     setInlineReasonInput(false)
     setInlineSelectedReason('')
+    clearReviewState()
     if (hasRealNG) {
       await submitDecision('NG', hasFalseCall
         ? { reason: firstReason, notes: '', perFrameDecisions: allDecisions, pcbCounts }
@@ -1571,7 +1674,7 @@ export function LiveViewV3({
     } else {
       await submitDecision('GOOD', { reason: firstReason, notes: '', perFrameDecisions: allDecisions, pcbCounts })
     }
-  }, [submitDecision, ngFrameReview])
+  }, [submitDecision, ngFrameReview, clearReviewState])
 
   const handleInlineFrameNG = useCallback(() => {
     if (!ngFrameReview) return
@@ -1763,6 +1866,14 @@ export function LiveViewV3({
     setDevMockInspection(mockInspection)
   }, [workOrder, activeInspection])
 
+  // Check if current NG inspection has per-object data → should use CavityReviewOverlay
+  const ngHasObjects = (() => {
+    if (!activeInspection || activeInspection.decision !== 'FAIL') return false
+    const topFrames = activeInspection.results?.top || []
+    const bottomFrames = activeInspection.results?.bottom || []
+    return [...topFrames, ...bottomFrames].some(f => f.label == true && f.objects && f.objects.length > 0)
+  })()
+
   // ============================================
   // Keyboard Shortcuts
   // ============================================
@@ -1790,6 +1901,17 @@ export function LiveViewV3({
 
       if (!isOperator || isConfirming || !activeInspection) return
 
+      // When NG has per-object data, R/G/N all open CavityReviewOverlay
+      if (ngHasObjects && (key === 'r' || key === 'g' || key === 'n')) {
+        e.preventDefault()
+        setCavityInitialIndex(0)
+        setShowCavityOverlay(true)
+        falseCallInspectionRef.current = activeInspection
+        const inspectionId = activeInspection?.inspection_id || activeInspection?.inspectionId
+        processedInspectionRef.current = inspectionId
+        return
+      }
+
       switch (key) {
         case 'g':
           handleGoodClick()
@@ -1807,7 +1929,7 @@ export function LiveViewV3({
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [isOperator, isConfirming, showFalseCallModal, showCavityOverlay, inlineReasonInput, activeInspection, workOrder,
-      handleGoodClick, handleNGClick, aiBackendAvailable, simulateInspection])
+      handleGoodClick, handleNGClick, aiBackendAvailable, simulateInspection, ngHasObjects])
 
   // ============================================
   // Helper Functions
@@ -1920,9 +2042,15 @@ export function LiveViewV3({
           </button>
 
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 border border-phosphor-teal flex items-center justify-center bg-terminal">
-              <span className="font-display font-bold text-lg text-phosphor-teal">IN</span>
-            </div>
+            {(customerLogo || workOrder?.customer?.logo_base64) ? (
+              <div className="w-10 h-10 border border-phosphor-teal flex items-center justify-center bg-white p-0.5">
+                <img src={customerLogo || workOrder?.customer?.logo_base64} alt="" className="w-full h-full object-contain" />
+              </div>
+            ) : (
+              <div className="w-10 h-10 border border-phosphor-teal flex items-center justify-center bg-terminal">
+                <span className="font-display font-bold text-lg text-phosphor-teal">IN</span>
+              </div>
+            )}
             <div>
               <h1 className="font-display font-bold text-sm tracking-wider text-text-primary">
                 {lineName || `Line ${lineId}`}
@@ -2010,12 +2138,18 @@ export function LiveViewV3({
               onClick={() => setShowUserMenu(!showUserMenu)}
               className={cn(
                 "flex items-center gap-2 px-3 py-2 bg-terminal border transition-colors",
-                showUserMenu 
-                  ? "border-phosphor-cyan" 
+                showUserMenu
+                  ? "border-phosphor-cyan"
                   : "border-surface-border hover:border-text-tertiary"
               )}
             >
-              <User className="w-4 h-4 text-text-tertiary" />
+              {companyLogo ? (
+                <div className="w-5 h-5 rounded bg-white p-0.5 flex items-center justify-center shrink-0">
+                  <img src={companyLogo} alt="" className="w-full h-full object-contain" />
+                </div>
+              ) : (
+                <User className="w-4 h-4 text-text-tertiary" />
+              )}
               <span className="font-mono text-xs text-text-primary">{user?.name || 'Unknown'}</span>
               <ChevronDown className={cn(
                 "w-3 h-3 text-text-tertiary transition-transform",
@@ -2027,8 +2161,20 @@ export function LiveViewV3({
             {showUserMenu && (
               <div className="absolute right-0 top-full mt-1 w-56 bg-panel border border-surface-border shadow-lg z-50">
                 <div className="px-3 py-2 border-b border-surface-border">
-                  <p className="font-mono text-xs text-text-primary">{user?.name}</p>
-                  <p className="font-mono text-xxs text-text-tertiary capitalize">{user?.role || 'User'}</p>
+                  <div className="flex items-center gap-2">
+                    {companyLogo && (
+                      <div className="w-8 h-8 rounded bg-white p-0.5 flex items-center justify-center shrink-0">
+                        <img src={companyLogo} alt="" className="w-full h-full object-contain" />
+                      </div>
+                    )}
+                    <div className="min-w-0">
+                      <p className="font-mono text-xs text-text-primary truncate">{user?.name}</p>
+                      <p className="font-mono text-xxs text-text-tertiary capitalize">{user?.role || 'User'}</p>
+                      {companyName && (
+                        <p className="font-mono text-xxs text-phosphor-teal/70 truncate">{companyName}</p>
+                      )}
+                    </div>
+                  </div>
                 </div>
 
                 {/* Language Switcher */}
@@ -2368,11 +2514,18 @@ export function LiveViewV3({
             <InspectionResult
               inspection={activeInspection}
               className="flex-1"
-              onFrameClick={inlineReviewActive ? handleNGFrameClick : undefined}
+              onFrameClick={inlineReviewActive ? handleNGFrameClick : ngHasObjects ? (frame, index, side) => {
+                setCavityInitialIndex(0)
+                setShowCavityOverlay(true)
+                falseCallInspectionRef.current = activeInspection
+                const inspectionId = activeInspection?.inspection_id || activeInspection?.inspectionId
+                processedInspectionRef.current = inspectionId
+              } : undefined}
               reviewingFrameKey={inlineReviewActive && ngFrameReview?.frames[ngFrameReview.currentIndex]
                 ? `${ngFrameReview.frames[ngFrameReview.currentIndex].side}-${ngFrameReview.frames[ngFrameReview.currentIndex].frameIndex}`
                 : undefined}
               frameDecisions={ngFrameReview?.decisions}
+              modelName={currentModel || modelName || activeInspection?.modelName || activeInspection?.modelId}
             />
           ) : (
             /* Inspection Stage Progress */
@@ -2602,6 +2755,29 @@ export function LiveViewV3({
                 CANCEL
               </button>
             </div>
+          ) : ngHasObjects ? (
+            /* Per-object NG review mode: single REVIEW button opens CavityReviewOverlay */
+            <button
+              onClick={() => {
+                setCavityInitialIndex(0)
+                setShowCavityOverlay(true)
+                falseCallInspectionRef.current = activeInspection
+                const inspectionId = activeInspection?.inspection_id || activeInspection?.inspectionId
+                processedInspectionRef.current = inspectionId
+              }}
+              disabled={actionsDisabled}
+              className={cn(
+                "h-20 px-6 md:px-8 lg:px-10 xl:px-14 flex items-center gap-2 md:gap-4 border-4 transition-all",
+                "font-display text-lg md:text-xl xl:text-2xl font-bold tracking-wider",
+                actionsDisabled
+                  ? "bg-surface-border/20 border-surface-border text-text-tertiary cursor-not-allowed"
+                  : "bg-phosphor-red/10 border-phosphor-red text-phosphor-red hover:bg-phosphor-red hover:text-void hover:shadow-glow-red"
+              )}
+            >
+              <AlertCircle className="w-6 h-6 md:w-7 md:h-7 xl:w-8 xl:h-8" />
+              <span>REVIEW NG</span>
+              <span className="font-mono text-xs md:text-sm opacity-60">(R)</span>
+            </button>
           ) : (
             /* Default GOOD/NG Buttons (non-review mode) */
             <>
@@ -2649,6 +2825,7 @@ export function LiveViewV3({
       {showCavityOverlay && currentInspection && isOperator && (
         <CavityReviewOverlay
           inspection={currentInspection}
+          modelName={currentModel || modelName}
           queuePosition={panelProgress.confirmed + 1}
           queueTotal={panelProgress.total || panelProgress.confirmed + 1 + queueLength}
           autoNgEnabled={autoNgEnabled}
@@ -2658,6 +2835,7 @@ export function LiveViewV3({
           falseCallReasons={falseCallReasons}
           initialFrameIndex={cavityInitialIndex}
           initialDecisions={ngFrameReview?.decisions || {}}
+          initialObjectDecisions={cavityObjectDecisions}
           cavityCount={activeCavityCount}
           topFrameCount={activeTopFrameCount}
           bottomFrameCount={activeBottomFrameCount}
@@ -2667,6 +2845,7 @@ export function LiveViewV3({
               decisions: { ...prev.decisions, [key]: value }
             } : prev)
           }}
+          onObjectDecisionsChange={setCavityObjectDecisions}
         />
       )}
 

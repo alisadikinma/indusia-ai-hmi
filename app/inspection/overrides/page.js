@@ -185,12 +185,12 @@ export default function OverrideApprovalsPage() {
     }
   };
 
-  const handleReviewFrames = async (id, frameDecisions, reviewerNotes) => {
+  const handleReviewFrames = async (id, objectDecisions, reviewerNotes) => {
     try {
-      await reviewOverride(id, user?.id, user?.name, frameDecisions, reviewerNotes);
+      await reviewOverride(id, user?.id, user?.name, objectDecisions, reviewerNotes);
       showToast({
         title: 'Review Submitted',
-        description: `${Object.values(frameDecisions).filter(d => d === 'approved').length} approved, ${Object.values(frameDecisions).filter(d => d === 'rejected').length} rejected`,
+        description: `${Object.values(objectDecisions).filter(d => d === 'approved').length} approved, ${Object.values(objectDecisions).filter(d => d === 'rejected').length} rejected`,
         variant: 'success',
       });
       setReviewModalOpen(false);
@@ -221,6 +221,7 @@ export default function OverrideApprovalsPage() {
     approved: stats?.approved ?? overrides.filter((o) => o.status === 'approved').length,
     rejected: stats?.rejected ?? overrides.filter((o) => o.status === 'rejected').length,
     reviewed: stats?.reviewed ?? overrides.filter((o) => o.status === 'reviewed').length,
+    appealed: stats?.appealed ?? overrides.filter((o) => o.status === 'appealed').length,
   };
 
   const statusLabels = {
@@ -229,6 +230,7 @@ export default function OverrideApprovalsPage() {
     approved: t('manager.approved'),
     rejected: t('manager.rejected'),
     reviewed: 'Reviewed',
+    appealed: 'Appealed',
   };
 
   return (
@@ -239,7 +241,7 @@ export default function OverrideApprovalsPage() {
       />
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-5 gap-4 mb-6">
+      <div className="grid grid-cols-6 gap-4 mb-6">
         <div className="bg-indusia-surface rounded-lg border border-indusia-border p-4">
           <p className="text-xs text-indusia-textMuted uppercase tracking-wide mb-1">{t('common.total')}</p>
           <p className="text-2xl font-bold text-indusia-text">{statusCounts.all}</p>
@@ -251,6 +253,10 @@ export default function OverrideApprovalsPage() {
         <div className="bg-indusia-surface rounded-lg border border-indusia-border p-4">
           <p className="text-xs text-indusia-textMuted uppercase tracking-wide mb-1">Reviewed</p>
           <p className="text-2xl font-bold text-phosphor-cyan">{statusCounts.reviewed}</p>
+        </div>
+        <div className="bg-indusia-surface rounded-lg border border-indusia-border p-4">
+          <p className="text-xs text-indusia-textMuted uppercase tracking-wide mb-1">Appealed</p>
+          <p className="text-2xl font-bold text-yellow-400">{statusCounts.appealed}</p>
         </div>
         <div className="bg-indusia-surface rounded-lg border border-indusia-border p-4">
           <p className="text-xs text-indusia-textMuted uppercase tracking-wide mb-1">{t('manager.approved')}</p>
@@ -266,7 +272,7 @@ export default function OverrideApprovalsPage() {
       <div className="bg-indusia-surface rounded-lg border border-indusia-border p-6 mb-6">
         <div className="flex items-center justify-between gap-6">
           <div className="flex items-center gap-2">
-            {['all', 'pending', 'reviewed', 'approved', 'rejected'].map((status) => (
+            {['all', 'pending', 'reviewed', 'appealed', 'approved', 'rejected'].map((status) => (
               <button
                 key={status}
                 onClick={() => handleStatusFilterChange(status)}
@@ -418,8 +424,8 @@ export default function OverrideApprovalsPage() {
                         </p>
                       </td>
                       <td className="px-4 py-4">
-                        {override.status === 'reviewed' && override.frameDecisions ? (
-                          <FrameStatusSummary frameDecisions={override.frameDecisions} />
+                        {override.status === 'reviewed' && (override.frameDecisions || override.objectDecisions) ? (
+                          <FrameStatusSummary frameDecisions={override.frameDecisions || override.objectDecisions} />
                         ) : (
                           <StatusBadge
                             status={override.status}

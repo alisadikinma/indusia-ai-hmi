@@ -90,6 +90,32 @@
     "resetFailed": "Failed to reset password",
     "tempPassword": "Temporary password"
   },
+  "profile": {
+    "uploadPhoto": "Upload Photo",
+    "changePhoto": "Change Photo",
+    "removePhoto": "Remove Photo",
+    "photoUpdated": "Photo updated",
+    "photoRemoved": "Photo removed",
+    "fileTooLarge": "File too large. Maximum 200KB.",
+    "invalidFormat": "Invalid format. Use PNG or JPG.",
+    "companyProfile": "Company Profile",
+    "companyProfileDesc": "Manage your company identity displayed across the system.",
+    "companyName": "Company Name",
+    "companyAddress": "Address",
+    "companyWebsite": "Website",
+    "companyPhone": "Phone",
+    "companyEmail": "Email",
+    "companyLogo": "Company Logo",
+    "uploadLogo": "Upload Logo",
+    "changeLogo": "Change",
+    "removeLogo": "Remove",
+    "logoHint": "PNG or JPG, max 200KB",
+    "saveChanges": "Save Changes",
+    "saving": "Saving...",
+    "saved": "Company profile saved",
+    "saveFailed": "Failed to save company profile",
+    "editCompanyProfile": "Edit Company Profile"
+  },
   "dashboard": {
     "title": "COMMAND DASHBOARD",
     "subtitle": "REAL-TIME ANALYTICS",
@@ -262,8 +288,8 @@
     "customers": "Customers",
     "sections": "Sections",
     "productionLines": "Production Lines",
-    "boards": "Boards",
-    "boardsModels": "Boards / Models",
+    "boards": "Board / Model",
+    "boardsModels": "Board / Model",
     "falseCallReasons": "False Call Reasons",
     "users": "Users",
     "registeredUsers": "Registered Users",
@@ -930,5 +956,18 @@
     "migrations": "Migrations",
     "commits": "Commits",
     "toastUpdateAvailable": "Update available: {version} ({commits} commits)"
+  },
+  "companyBranding": {
+    "title": "Company Branding",
+    "description": "Configure factory operator logo and company name displayed across the system",
+    "companyName": "Company Name",
+    "companyLogo": "Company Logo",
+    "uploadLogo": "Upload Logo",
+    "changeLogo": "Change Logo",
+    "removeLogo": "Remove Logo",
+    "logoHint": "PNG or JPG, max 200KB. Recommended: square, transparent background.",
+    "saving": "Saving...",
+    "saved": "Settings saved",
+    "saveFailed": "Failed to save settings"
   }
 }

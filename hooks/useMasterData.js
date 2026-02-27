@@ -1,10 +1,20 @@
 /**
  * useMasterData Hook
  * Fetches master data from batch API - single request instead of 5
+ *
+ * Uses a window event ('masterdata-updated') so all hook instances
+ * across different pages/components refetch when any instance mutates data.
  */
 
 import { useState, useEffect, useCallback } from 'react';
 import { authFetch } from '@/lib/utils/authFetch';
+
+const MASTER_DATA_UPDATED_EVENT = 'masterdata-updated';
+
+/** Notify all useMasterData instances to refetch */
+export function notifyMasterDataUpdated() {
+  window.dispatchEvent(new Event(MASTER_DATA_UPDATED_EVENT));
+}
 
 export function useMasterData() {
   const [customers, setCustomers] = useState([]);
@@ -42,6 +52,12 @@ export function useMasterData() {
 
   useEffect(() => {
     fetchMasterData();
+  }, [fetchMasterData]);
+
+  // Listen for cross-instance refresh signals
+  useEffect(() => {
+    window.addEventListener(MASTER_DATA_UPDATED_EVENT, fetchMasterData);
+    return () => window.removeEventListener(MASTER_DATA_UPDATED_EVENT, fetchMasterData);
   }, [fetchMasterData]);
 
   // Helper functions

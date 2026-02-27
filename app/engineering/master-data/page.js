@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
-import { useMasterData } from '@/hooks/useMasterData';
+import { useMasterData, notifyMasterDataUpdated } from '@/hooks/useMasterData';
 import { useUsers } from '@/hooks/useUsers';
 import { useRoles } from '@/hooks/useRoles';
 import SectionHeader from '@/components/common/SectionHeader';
@@ -13,6 +13,7 @@ import { authFetch } from '@/lib/utils/authFetch';
 import { useToast } from '@/hooks/useToast';
 import { useI18n } from '@/context/I18nContext';
 import PageLoading from '@/components/common/PageLoading';
+import CustomerLogo from '@/components/common/CustomerLogo';
 
 export default function MasterDataPage() {
   const router = useRouter();
@@ -36,8 +37,14 @@ export default function MasterDataPage() {
     boards, 
     loading: masterLoading, 
     error: masterError,
-    refreshMasterData 
+    refreshMasterData: _refreshMasterData
   } = useMasterData();
+
+  // Wrap refresh to also notify other useMasterData instances (e.g., WorkOrderForm)
+  const refreshMasterData = async () => {
+    await _refreshMasterData();
+    notifyMasterDataUpdated();
+  };
 
   // Only fetch users if role has permission (superadmin, manager)
   const canManageUsers = ['superadmin', 'manager'].includes(user?.roleId || user?.role_id || user?.role);
@@ -52,7 +59,7 @@ export default function MasterDataPage() {
 
   // Form states
   const [editingCustomer, setEditingCustomer] = useState(null);
-  const [customerForm, setCustomerForm] = useState({ id: '', name: '' });
+  const [customerForm, setCustomerForm] = useState({ id: '', name: '', logoBase64: '' });
   const [savingCustomer, setSavingCustomer] = useState(false);
 
   const [editingSection, setEditingSection] = useState(null);
@@ -121,15 +128,18 @@ export default function MasterDataPage() {
       
       const res = await authFetch(endpoint, {
         method: editingCustomer ? 'PATCH' : 'POST',
-        body: JSON.stringify({ name: customerForm.name })
+        body: JSON.stringify({
+          name: customerForm.name,
+          logo_base64: customerForm.logoBase64 || null,
+        })
       });
-      
+
       const json = await res.json();
       if (!json.success) throw new Error(json.error || 'Failed to save customer');
-      
+
       showToast({ title: `Customer ${editingCustomer ? 'updated' : 'created'}`, variant: 'success' });
       await refreshMasterData();
-      setCustomerForm({ id: '', name: '' });
+      setCustomerForm({ id: '', name: '', logoBase64: '' });
       setEditingCustomer(null);
     } catch (err) {
       showToast({ title: 'Error', description: err.message, variant: 'error' });
@@ -495,7 +505,12 @@ export default function MasterDataPage() {
                 <tbody>
                   {customers.map(customer => (
                     <tr key={customer.id} className="border-b border-indusia-border hover:bg-indusia-surfaceMuted">
-                      <td className="px-4 py-3 text-sm text-indusia-text">{customer.name}</td>
+                      <td className="px-4 py-3 text-sm text-indusia-text">
+                        <div className="flex items-center gap-2">
+                          <CustomerLogo customer={customer} size="xs" />
+                          {customer.name}
+                        </div>
+                      </td>
                       <td className="px-4 py-3 text-sm text-indusia-textMuted font-mono">{customer.id}</td>
                       <td className="px-4 py-3">
                         <div className="flex gap-2">
@@ -523,8 +538,43 @@ export default function MasterDataPage() {
                   value={customerForm.name}
                   onChange={(e) => setCustomerForm(prev => ({ ...prev, name: e.target.value }))}
                   placeholder={t('masterData.enterCustomerName')}
-                  className="w-full px-4 py-2 bg-indusia-bg border border-indusia-border rounded-lg text-indusia-text focus:outline-none focus:ring-2 focus:ring-indusia-primary" 
+                  className="w-full px-4 py-2 bg-indusia-bg border border-indusia-border rounded-lg text-indusia-text focus:outline-none focus:ring-2 focus:ring-indusia-primary"
                 />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-indusia-text mb-2">Company Logo</label>
+                <div className="flex items-center gap-3">
+                  {customerForm.logoBase64 && (
+                    <div className="relative">
+                      <img src={customerForm.logoBase64} alt="Logo preview" className="w-12 h-12 rounded object-contain bg-white/5 border border-indusia-border" />
+                      <button
+                        type="button"
+                        onClick={() => setCustomerForm(prev => ({ ...prev, logoBase64: '' }))}
+                        className="absolute -top-1 -right-1 w-4 h-4 bg-indusia-fail rounded-full flex items-center justify-center text-white text-[10px]"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  )}
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/svg+xml"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      if (file.size > 200 * 1024) {
+                        showToast({ title: 'Error', description: 'Logo must be under 200KB', variant: 'error' });
+                        e.target.value = '';
+                        return;
+                      }
+                      const reader = new FileReader();
+                      reader.onload = () => setCustomerForm(prev => ({ ...prev, logoBase64: reader.result }));
+                      reader.readAsDataURL(file);
+                    }}
+                    className="text-sm text-indusia-textMuted file:mr-3 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-sm file:bg-indusia-primary/20 file:text-indusia-primary hover:file:bg-indusia-primary/30"
+                  />
+                </div>
+                <p className="text-xs text-indusia-textMuted mt-1">PNG, JPG, or SVG. Max 200KB.</p>
               </div>
               <div className="flex gap-2">
                 <button 
@@ -536,7 +586,7 @@ export default function MasterDataPage() {
                   {editingCustomer ? t('buttons.update') : t('buttons.add')}
                 </button>
                 {editingCustomer && (
-                  <button onClick={() => { setEditingCustomer(null); setCustomerForm({ id: '', name: '' }); }} className="px-4 py-2 bg-indusia-surfaceMuted text-indusia-text rounded-lg font-medium hover:bg-indusia-border flex items-center gap-2">
+                  <button onClick={() => { setEditingCustomer(null); setCustomerForm({ id: '', name: '', logoBase64: '' }); }} className="px-4 py-2 bg-indusia-surfaceMuted text-indusia-text rounded-lg font-medium hover:bg-indusia-border flex items-center gap-2">
                     <X className="w-4 h-4" /> {t('buttons.cancel')}
                   </button>
                 )}

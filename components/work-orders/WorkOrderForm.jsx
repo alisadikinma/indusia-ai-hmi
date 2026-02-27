@@ -88,16 +88,12 @@ export function WorkOrderForm({
       setFilteredBoards(boards.filter(b => b.customerId === formData.customerId));
       setFilteredLines(lines.filter(l => l.customerId === formData.customerId));
 
-      // Get unique sections from filtered lines
-      const sectionIds = [...new Set(lines
-        .filter(l => l.customerId === formData.customerId)
-        .map(l => l.sectionId)
-      )];
-      setFilteredSections(sections.filter(s => sectionIds.includes(s.id)));
+      // Show all sections (not filtered by customer lines) so newly created sections appear
+      setFilteredSections(sections);
     } else {
       setFilteredBoards([]);
       setFilteredLines([]);
-      setFilteredSections([]);
+      setFilteredSections(sections);
     }
   }, [formData.customerId, boards, lines, sections]);
 
@@ -277,6 +273,7 @@ export function WorkOrderForm({
                   setErrors(prev => ({ ...prev, woNumber: null }));
                 }
               }}
+              onFocus={(e) => e.target.select()}
               onBlur={handleWoNumberBlur}
               onKeyDown={handleWoNumberKeyDown}
               placeholder={woNumberLoading ? 'Generating...' : 'WO-YYYYMMDD-XXXX'}

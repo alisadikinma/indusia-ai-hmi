@@ -1,17 +1,18 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabaseClient';
+import { withAuth } from '@/lib/auth/apiAuth';
 
 /**
  * GET /api/master-data/customers/[id]
  * Get single customer by ID
  */
-export async function GET(request, { params }) {
+async function handleGET(request, { params }) {
   try {
     const { id } = await params;
 
     const { data, error } = await supabase
       .from('customers')
-      .select('id, name, code')
+      .select('id, name, code, logo_base64')
       .eq('id', id)
       .single();
 
@@ -43,7 +44,7 @@ export async function GET(request, { params }) {
  * PATCH /api/master-data/customers/[id]
  * Update customer
  */
-export async function PATCH(request, { params }) {
+async function handlePATCH(request, { params }) {
   try {
     const { id } = await params;
     const body = await request.json();
@@ -51,6 +52,7 @@ export async function PATCH(request, { params }) {
     const updateData = {};
     if (body.name !== undefined) updateData.name = body.name;
     if (body.code !== undefined) updateData.code = body.code;
+    if (body.logo_base64 !== undefined) updateData.logo_base64 = body.logo_base64 || null;
 
     if (Object.keys(updateData).length === 0) {
       return NextResponse.json(
@@ -94,7 +96,7 @@ export async function PATCH(request, { params }) {
  * DELETE /api/master-data/customers/[id]
  * Delete customer (checks for dependencies first)
  */
-export async function DELETE(request, { params }) {
+async function handleDELETE(request, { params }) {
   try {
     const { id } = await params;
 
@@ -163,3 +165,7 @@ export async function DELETE(request, { params }) {
     );
   }
 }
+
+export const GET = withAuth()(handleGET)
+export const PATCH = withAuth('master-data:update')(handlePATCH)
+export const DELETE = withAuth('master-data:delete')(handleDELETE)

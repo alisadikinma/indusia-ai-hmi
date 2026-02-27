@@ -17,7 +17,7 @@ export async function GET(request, { params }) {
         section_id,
         customer_id,
         sections:section_id (id, name),
-        customers:customer_id (id, name, code)
+        customers:customer_id (id, name, code, logo_base64)
       `)
       .eq('id', id)
       .single();
@@ -47,6 +47,7 @@ export async function GET(request, { params }) {
         id: data.customers.id,
         name: data.customers.name,
         code: data.customers.code,
+        logoBase64: data.customers.logo_base64 || null,
       } : null,
     };
 

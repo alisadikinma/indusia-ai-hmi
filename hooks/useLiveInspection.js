@@ -908,6 +908,16 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
     }))
   }, [])
 
+  // Restore inspection from external source (e.g., line-state API on page refresh)
+  // Only sets if SSE hasn't already delivered a fresh inspection
+  const restoreInspection = useCallback((inspectionData) => {
+    if (!inspectionData) return
+    if (currentInspectionRef.current) return // SSE already delivered, don't overwrite
+    console.log('[LiveInspection] Restoring inspection from line-state:', inspectionData.inspection_id || inspectionData.inspectionId)
+    setCurrentInspection(inspectionData)
+    currentInspectionRef.current = inspectionData
+  }, [])
+
   // ============================================
   // Return Hook Interface
   // ============================================
@@ -954,6 +964,7 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
 
     // Inspection control
     clearInspection,
+    restoreInspection,
 
     // Process Control Methods
     runProcess,

@@ -116,9 +116,9 @@ export async function POST(request) {
         const annotatedPath = `${dateFolder}/${wo}/${annotatedFilename}`
         const annotatedResult = await saveToLocal(frame.image_url, annotatedPath, `${sideLabel} F${i} annotated`)
 
-        // Save raw image (original camera capture) - new mode only
+        // Save raw image (original camera capture)
         let rawResult = null
-        if (perFrameDecisions && frame.image_raw_url) {
+        if (frame.image_raw_url) {
           const rawFilename = `${baseFilename}_raw.png`
           const rawPath = `${dateFolder}/${wo}/${rawFilename}`
           rawResult = await saveToLocal(frame.image_raw_url, rawPath, `${sideLabel} F${i} raw`)
@@ -131,26 +131,24 @@ export async function POST(request) {
           }
           savedPaths[sideKey].push(pathEntry)
 
-          // Build frame detail for ng_frame_details
-          if (perFrameDecisions) {
-            frameDetails.push({
-              side: sideLabel,
-              frameIndex: i,
-              position: frame.position ?? null,
-              serialNumber: frame.serial_number || null,
-              falseCallReason: falseCallDecision,
-              imageAnnotatedPath: annotatedResult.localPath,
-              imageRawPath: rawResult?.success ? rawResult.localPath : null,
-              objects: (frame.objects || [])
-                .filter(obj => obj.label === 1)
-                .map(obj => ({
-                  name: obj.name,
-                  box: obj.box,
-                  score: obj.score,
-                  label: obj.label
-                }))
-            })
-          }
+          // Always build frame detail for ng_frame_details (enables per-object review by manager)
+          frameDetails.push({
+            side: sideLabel,
+            frameIndex: i,
+            position: frame.position ?? null,
+            serialNumber: frame.serial_number || null,
+            falseCallReason: falseCallDecision || null,
+            imageAnnotatedPath: annotatedResult.localPath,
+            imageRawPath: rawResult?.success ? rawResult.localPath : null,
+            objects: (frame.objects || [])
+              .filter(obj => obj.label === 1)
+              .map(obj => ({
+                name: obj.name,
+                box: obj.box,
+                score: obj.score,
+                label: obj.label
+              }))
+          })
         } else {
           errors.push(`${sideLabel} F${i}: ${annotatedResult.error}`)
         }

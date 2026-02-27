@@ -54,7 +54,7 @@ export async function GET() {
           id, wo_number, lot_size, side_count,
           completed_qty, good_qty, ng_qty, false_call_qty,
           status, line_id, started_at, created_at,
-          customer:customers(id, name, code),
+          customer:customers(id, name, code, logo_base64),
           board:boards(id, name)
         `)
         .eq('status', 'active')
@@ -89,6 +89,7 @@ export async function GET() {
         status: 'idle',
         customerName: line.customers?.name || null,
         customerCode: line.customers?.code || null,
+        customerLogo: line.customers?.logoBase64 || line.customers?.logo_base64 || null,
         woNumber: null,
         woBoardName: null,
         woRemaining: 0,
@@ -120,6 +121,7 @@ export async function GET() {
         if (wo.customer?.name) {
           lineData.customerName = wo.customer.name
           lineData.customerCode = wo.customer.code || lineData.customerCode
+          lineData.customerLogo = wo.customer.logo_base64 || lineData.customerLogo
         }
       }
 
