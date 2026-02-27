@@ -208,22 +208,51 @@ export function CavityReviewOverlay({
           serialNumber: frame.serial_number,
           imageUrl: frame.image_raw_url || frame.image_url,
           key: objKey(frame.side, frame.frameIndex, objIdx),
+          cavityIndex: 0,
         })
       })
     })
-    // Sort: NG objects first (sorted by Y then X coordinate), GOOD objects after
+
+    // Assign cavity index from spatial X position within each frame
+    if (cavityCount > 1) {
+      const frameGroups = new Map()
+      result.forEach(obj => {
+        const fk = `${obj.frameSide}-${obj.frameIndex}`
+        if (!frameGroups.has(fk)) frameGroups.set(fk, [])
+        frameGroups.get(fk).push(obj)
+      })
+      for (const objs of frameGroups.values()) {
+        let maxX = 0
+        objs.forEach(obj => {
+          if (!obj.box || obj.box.length < 4) return
+          const [, , x2] = normalizeBox(obj.box)
+          maxX = Math.max(maxX, x2)
+        })
+        if (maxX <= 0) continue
+        const cavityW = maxX / cavityCount
+        objs.forEach(obj => {
+          if (!obj.box || obj.box.length < 4) return
+          const [bx1, , bx2] = normalizeBox(obj.box)
+          const centerX = (bx1 + bx2) / 2
+          obj.cavityIndex = Math.min(Math.floor(centerX / cavityW), cavityCount - 1)
+        })
+      }
+    }
+
+    // Sort: NG first → cavity → Y → X, then GOOD → cavity → Y → X
     const isNG = o => o.label === 1 || o.label === true
     result.sort((a, b) => {
       const aNg = isNG(a) ? 0 : 1
       const bNg = isNG(b) ? 0 : 1
       if (aNg !== bNg) return aNg - bNg
-      // Within same group, sort by Y coordinate then X
+      // Within same group, sort by cavity then Y then X
+      if (a.cavityIndex !== b.cavityIndex) return a.cavityIndex - b.cavityIndex
       const [ax1, ay1] = normalizeBox(a.box || [0,0,0,0])
       const [bx1, by1] = normalizeBox(b.box || [0,0,0,0])
       return ay1 - by1 || ax1 - bx1
     })
     return result
-  }, [ngFrames])
+  }, [ngFrames, cavityCount])
 
   const totalObjects = allObjects.length
   // Fall back to per-frame review if no objects detected (legacy data)
@@ -232,8 +261,39 @@ export function CavityReviewOverlay({
   const ngOnlyObjects = useMemo(() => allObjects.filter(o => o.label === 1 || o.label === true), [allObjects])
   const ngOnlyCount = ngOnlyObjects.length
 
+  // Pre-compute render lists with cavity headers (avoids tracking state in .map())
+  const ngRenderList = useMemo(() => {
+    const items = []
+    let lastCav = -1
+    allObjects.forEach((obj, idx) => {
+      if (!(obj.label === 1 || obj.label === true)) return
+      if (cavityCount > 1 && obj.cavityIndex !== lastCav) {
+        items.push({ type: 'header', cavityIndex: obj.cavityIndex, key: `ng-cav-${obj.cavityIndex}` })
+        lastCav = obj.cavityIndex
+      }
+      items.push({ type: 'obj', obj, idx, key: obj.key })
+    })
+    return items
+  }, [allObjects, cavityCount])
+
+  const goodRenderList = useMemo(() => {
+    const items = []
+    let lastCav = -1
+    allObjects.forEach((obj, idx) => {
+      if (obj.label === 1 || obj.label === true) return
+      if (cavityCount > 1 && obj.cavityIndex !== lastCav) {
+        items.push({ type: 'header', cavityIndex: obj.cavityIndex, key: `good-cav-${obj.cavityIndex}` })
+        lastCav = obj.cavityIndex
+      }
+      items.push({ type: 'obj', obj, idx, key: obj.key })
+    })
+    return items
+  }, [allObjects, cavityCount])
+
   // Per-object review state — start with no object selected (full PCB view)
   const [activeObjectIdx, setActiveObjectIdx] = useState(null)
+  // focusTrigger: increment to re-trigger ImageViewer zoom (handles re-click on same object)
+  const [focusTrigger, setFocusTrigger] = useState(0)
   // Active frame index for multi-frame navigation (thumbnail strip)
   const [activeFrameIdx, setActiveFrameIdx] = useState(0)
   const [objectDecisions, setObjectDecisions] = useState(initialObjectDecisions)
@@ -287,9 +347,16 @@ export function CavityReviewOverlay({
     onObjectDecisionsChange?.(objectDecisions)
   }, [objectDecisions]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Select object + trigger ImageViewer zoom
+  const handleSelectObject = useCallback((idx) => {
+    setActiveObjectIdx(idx)
+    setFocusTrigger(prev => prev + 1)
+  }, [])
+
   // Reset when inspection changes
   useEffect(() => {
     setActiveObjectIdx(null)
+    setFocusTrigger(0)
     setActiveFrameIdx(0)
     setObjectDecisions(initialObjectDecisions)
     setFrameDecisions(initialDecisions)
@@ -378,6 +445,7 @@ export function CavityReviewOverlay({
       const isNG = allObjects[i].label === 1 || allObjects[i].label === true
       if (isNG && !allObjDecisions[allObjects[i].key]) {
         setActiveObjectIdx(i)
+        setFocusTrigger(prev => prev + 1)
         return
       }
     }
@@ -386,6 +454,7 @@ export function CavityReviewOverlay({
       const isNG = allObjects[i].label === 1 || allObjects[i].label === true
       if (isNG && !allObjDecisions[allObjects[i].key]) {
         setActiveObjectIdx(i)
+        setFocusTrigger(prev => prev + 1)
         return
       }
     }
@@ -396,7 +465,7 @@ export function CavityReviewOverlay({
   const handleObjectNG = useCallback(() => {
     if (hasObjects) {
       // If no object selected yet, select first object instead of confirming
-      if (activeObjectIdx == null) { setActiveObjectIdx(0); return }
+      if (activeObjectIdx == null) { handleSelectObject(0); return }
       if (!activeObject) return
       if (countdownRef.current) clearInterval(countdownRef.current)
       const newDecisions = { ...objectDecisions, [activeObject.key]: 'REAL_NG' }
@@ -421,16 +490,16 @@ export function CavityReviewOverlay({
       if (nextIdx !== -1) setReviewIndex(nextIdx)
     }
   }, [hasObjects, activeObject, activeObjectIdx, objectDecisions, advanceToNextObject, onDecisionChange,
-      currentFrame, frameDecisions, reviewIndex, ngFrames])
+      currentFrame, frameDecisions, reviewIndex, ngFrames, handleSelectObject])
 
   useEffect(() => { handleObjectNGRef.current = handleObjectNG }, [handleObjectNG])
 
   const handleObjectGood = useCallback(() => {
     // If no object selected yet, select first object instead
-    if (hasObjects && activeObjectIdx == null) { setActiveObjectIdx(0); return }
+    if (hasObjects && activeObjectIdx == null) { handleSelectObject(0); return }
     if (countdownRef.current) clearInterval(countdownRef.current)
     setShowReasonInput(true)
-  }, [hasObjects, activeObjectIdx])
+  }, [hasObjects, activeObjectIdx, handleSelectObject])
 
   const handleSubmitFalseCall = useCallback(() => {
     const effectiveReason = selectedReason === 'other' ? otherText.trim() : selectedReason.trim()
@@ -485,9 +554,9 @@ export function CavityReviewOverlay({
     const obj = allObjects[idx]
     if (!obj || objectDecisions[obj.key] != null) return
     if (countdownRef.current) clearInterval(countdownRef.current)
-    setActiveObjectIdx(idx)
+    handleSelectObject(idx)
     setShowReasonInput(true)
-  }, [allObjects, objectDecisions])
+  }, [allObjects, objectDecisions, handleSelectObject])
 
   // ── Bulk actions ──
   const unreviewed = useMemo(() =>
@@ -603,9 +672,11 @@ export function CavityReviewOverlay({
       } else if (hasObjects && (e.key === 'ArrowDown' || e.key === 'ArrowRight') && !e.ctrlKey) {
         e.preventDefault()
         setActiveObjectIdx(prev => prev == null ? 0 : Math.min(allObjects.length - 1, prev + 1))
+        setFocusTrigger(prev => prev + 1)
       } else if (hasObjects && (e.key === 'ArrowUp' || e.key === 'ArrowLeft') && !e.ctrlKey) {
         e.preventDefault()
         setActiveObjectIdx(prev => prev == null ? 0 : Math.max(0, prev - 1))
+        setFocusTrigger(prev => prev + 1)
       } else if (ngFrames.length > 1 && (e.key === 'ArrowRight' || e.key === 'ArrowDown') && e.ctrlKey) {
         // Ctrl+Arrow: switch frames
         e.preventDefault()
@@ -724,12 +795,13 @@ export function CavityReviewOverlay({
                 alt={`${currentFrame.side} frame ${currentFrame.frameIndex + 1}`}
                 objects={currentFrameObjects}
                 activeObjectIndex={hasObjects ? activeObjectFrameIdx : -1}
+                focusTrigger={focusTrigger}
                 onObjectClick={hasObjects ? (idx) => {
                   // Find the global index for this frame object
                   const clickedKey = currentFrameObjects[idx]?._key
                   if (clickedKey) {
                     const globalIdx = allObjects.findIndex(o => o.key === clickedKey)
-                    if (globalIdx !== -1) setActiveObjectIdx(globalIdx)
+                    if (globalIdx !== -1) handleSelectObject(globalIdx)
                   }
                 } : undefined}
                 className="w-full h-full"
@@ -885,9 +957,17 @@ export function CavityReviewOverlay({
               {/* ── NG Items (scrollable, fills space when expanded) ── */}
               {expandedSection === 'ng' && ngOnlyCount > 0 && (
                 <div className="flex-1 overflow-y-auto min-h-0">
-                  {allObjects.map((obj, idx) => {
-                    const isObjNG = obj.label === 1 || obj.label === true
-                    if (!isObjNG) return null
+                  {ngRenderList.map(item => {
+                    if (item.type === 'header') {
+                      return (
+                        <div key={item.key} className="px-3 py-1 bg-void/40 border-b border-surface-border/30 sticky top-0 z-[1]">
+                          <span className="text-[10px] font-mono text-phosphor-teal/70 uppercase tracking-wider">
+                            PCB {item.cavityIndex + 1}
+                          </span>
+                        </div>
+                      )
+                    }
+                    const { obj, idx } = item
                     const isActive = idx === activeObjectIdx
                     const decision = objectDecisions[obj.key]
                     const decisionIsNG = decision === 'REAL_NG'
@@ -895,7 +975,7 @@ export function CavityReviewOverlay({
                     return (
                       <ObjectRow key={obj.key} obj={obj} idx={idx} isActive={isActive} isObjNG
                         isReviewed={isReviewed} decisionIsNG={decisionIsNG}
-                        onSelect={setActiveObjectIdx} onGood={handleInlineGood} onNG={handleInlineNG}
+                        onSelect={handleSelectObject} onGood={handleInlineGood} onNG={handleInlineNG}
                         showCheckbox={!isReviewed} isChecked={effectiveBulkSelected.has(obj.key)}
                         onToggleCheck={toggleBulkSelect} />
                     )
@@ -915,14 +995,22 @@ export function CavityReviewOverlay({
               {/* ── GOOD Items (scrollable, fills space when expanded) ── */}
               {expandedSection === 'good' && totalObjects - ngOnlyCount > 0 && (
                 <div className="flex-1 overflow-y-auto min-h-0">
-                  {allObjects.map((obj, idx) => {
-                    const isObjNG = obj.label === 1 || obj.label === true
-                    if (isObjNG) return null
+                  {goodRenderList.map(item => {
+                    if (item.type === 'header') {
+                      return (
+                        <div key={item.key} className="px-3 py-1 bg-void/40 border-b border-surface-border/30 sticky top-0 z-[1]">
+                          <span className="text-[10px] font-mono text-phosphor-green/60 uppercase tracking-wider">
+                            PCB {item.cavityIndex + 1}
+                          </span>
+                        </div>
+                      )
+                    }
+                    const { obj, idx } = item
                     const isActive = idx === activeObjectIdx
                     return (
                       <ObjectRow key={obj.key} obj={obj} idx={idx} isActive={isActive} isObjNG={false}
                         isReviewed={false} decisionIsNG={false}
-                        onSelect={setActiveObjectIdx} />
+                        onSelect={handleSelectObject} />
                     )
                   })}
                 </div>

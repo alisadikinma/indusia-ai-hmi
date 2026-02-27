@@ -23,6 +23,7 @@ const ZOOM_TO_BBOX_MIN = 3 // minimum zoom when jumping to bbox
  * - objects: [{ name, box: [x1,y1,x2,y2], score, label }]
  * - activeObjectIndex: highlight and auto-zoom to this object (-1 = none)
  * - onObjectClick: (index) => void
+ * - focusTrigger: increment to re-trigger zoom (for re-clicking same object)
  * - imageNaturalSize: { width, height } if known
  * - className: wrapper class
  * - showControls: show zoom controls (default true)
@@ -35,6 +36,7 @@ export default function ImageViewer({
   objects = [],
   activeObjectIndex = -1,
   onObjectClick,
+  focusTrigger = 0,
   imageNaturalSize,
   className,
   showControls = true,
@@ -52,6 +54,11 @@ export default function ImageViewer({
   const [imgLoaded, setImgLoaded] = useState(false)
   const [naturalSize, setNaturalSize] = useState(imageNaturalSize || null)
   const [fitScale, setFitScale] = useState(1) // scale factor: fitScale * zoom = actual CSS scale
+
+  // Refs for non-reactive reads in focus effect (avoids re-triggering on every render)
+  const fitScaleRef = useRef(1)
+  const bboxScaleRef = useRef({ x: 1, y: 1 })
+  const prevFocusRef = useRef(activeObjectIndex)
 
   // Calculate fit scale: how much to shrink the natural image to fit container
   const calcFitScale = useCallback(() => {
@@ -128,8 +135,69 @@ export default function ImageViewer({
     [naturalSize, objects]
   )
 
-  // Auto-zoom to bbox removed — operator prefers full PCB view at all times.
-  // Clicking an object in the list highlights its bbox but does NOT zoom/pan.
+  // Keep refs in sync for non-reactive reads
+  useEffect(() => { fitScaleRef.current = fitScale }, [fitScale])
+  useEffect(() => { bboxScaleRef.current = bboxScale }, [bboxScale])
+
+  // Auto-zoom to bbox: center the active object in the viewport with precise transform math.
+  // Uses refs for fitScale/bboxScale to avoid re-triggering on every render.
+  useEffect(() => {
+    // Deselect → reset to fit view
+    if (activeObjectIndex == null || activeObjectIndex < 0) {
+      if (prevFocusRef.current != null && prevFocusRef.current >= 0) {
+        setZoom(1)
+        // translate will be reset by the centering effect (zoom === 1)
+      }
+      prevFocusRef.current = activeObjectIndex
+      return
+    }
+    prevFocusRef.current = activeObjectIndex
+
+    // Guard: need loaded image, natural size, container, and valid object
+    if (!imgLoaded || !naturalSize || !containerRef.current) return
+    const obj = objects[activeObjectIndex]
+    if (!obj || !obj.box || obj.box.length < 4) return
+
+    const rect = containerRef.current.getBoundingClientRect()
+    const containerW = rect.width
+    const containerH = rect.height
+    if (containerW === 0 || containerH === 0) return
+
+    const fs = fitScaleRef.current
+    const bs = bboxScaleRef.current
+
+    // Map bbox coords to natural image pixel space (accounting for resolution mismatch)
+    const [rx1, ry1, rx2, ry2] = normalizeBox(obj.box)
+    const x1 = rx1 * bs.x, y1 = ry1 * bs.y
+    const x2 = rx2 * bs.x, y2 = ry2 * bs.y
+
+    // Bbox center and size in natural image pixels
+    const cx = (x1 + x2) / 2
+    const cy = (y1 + y2) / 2
+    const bboxW = Math.max(x2 - x1, 1) // prevent division by zero
+    const bboxH = Math.max(y2 - y1, 1)
+
+    // Compute zoom so bbox fills ~40% of container (fit the larger dimension)
+    const zoomForWidth = (containerW * 0.4) / (bboxW * fs)
+    const zoomForHeight = (containerH * 0.4) / (bboxH * fs)
+    const targetZoom = Math.max(
+      ZOOM_TO_BBOX_MIN,
+      Math.min(Math.min(zoomForWidth, zoomForHeight), MAX_ZOOM)
+    )
+
+    // Compute translate so bbox center maps to container center.
+    // With transform-origin: top-left, point (cx, cy) in natural coords
+    // appears at screen position (tx + cx * actualScale, ty + cy * actualScale).
+    // Setting that equal to (containerW/2, containerH/2):
+    const newActualScale = fs * targetZoom
+    const tx = containerW / 2 - cx * newActualScale
+    const ty = containerH / 2 - cy * newActualScale
+
+    setZoom(targetZoom)
+    setTranslate({ x: tx, y: ty })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeObjectIndex, focusTrigger, imgLoaded, naturalSize])
+  // objects, fitScale, bboxScale deliberately excluded — read from refs to avoid loops
 
   // Zoom controls (relative zoom)
   const zoomIn = useCallback(() => {

@@ -71,6 +71,7 @@ export default function OverrideReviewModal({
   // Per-object review state
   const [objectDecisions, setObjectDecisions] = useState({});
   const [activeObjectKey, setActiveObjectKey] = useState(null);
+  const [focusTrigger, setFocusTrigger] = useState(0);
   const [showSummary, setShowSummary] = useState(false);
 
   // Bulk selection state
@@ -176,6 +177,12 @@ export default function OverrideReviewModal({
   const isPending = override?.status === 'pending';
   const canAppeal = override?.status === 'reviewed' || override?.status === 'appealed';
 
+  // Select object + trigger ImageViewer zoom
+  const handleSelectObject = useCallback((key) => {
+    setActiveObjectKey(key);
+    setFocusTrigger(prev => prev + 1);
+  }, []);
+
   // Reset state when override changes
   useEffect(() => {
     if (!override) return;
@@ -185,6 +192,7 @@ export default function OverrideReviewModal({
     setShowSummary(false);
     setIsProcessing(false);
     setActiveObjectKey(null);
+    setFocusTrigger(0);
     setAppealingKey(null);
     setAppealReason('');
     setAppealProcessing(false);
@@ -451,11 +459,11 @@ export default function OverrideReviewModal({
       } else if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
         e.preventDefault();
         const idx = allObjects.findIndex(o => o.key === activeObjectKey);
-        if (idx < allObjects.length - 1) setActiveObjectKey(allObjects[idx + 1].key);
+        if (idx < allObjects.length - 1) handleSelectObject(allObjects[idx + 1].key);
       } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
         e.preventDefault();
         const idx = allObjects.findIndex(o => o.key === activeObjectKey);
-        if (idx > 0) setActiveObjectKey(allObjects[idx - 1].key);
+        if (idx > 0) handleSelectObject(allObjects[idx - 1].key);
       } else if (e.key === 'Escape') {
         e.preventDefault();
         handleClose();
@@ -526,7 +534,7 @@ export default function OverrideReviewModal({
                 objectsBySn={objectsBySn}
                 snList={snList}
                 objectDecisions={objectDecisions}
-                onClickObject={(key) => { setShowSummary(false); setActiveObjectKey(key); }}
+                onClickObject={(key) => { setShowSummary(false); handleSelectObject(key); }}
                 t={t}
               />
               {isPending && (
@@ -596,9 +604,10 @@ export default function OverrideReviewModal({
                     alt={`${activeFrame?.side} frame ${activeFrame?.frameIndex}`}
                     objects={activeFrameObjects}
                     activeObjectIndex={activeObjectFrameIndex}
+                    focusTrigger={focusTrigger}
                     onObjectClick={(idx) => {
                       const obj = activeFrameObjects[idx];
-                      if (obj?._key) setActiveObjectKey(obj._key);
+                      if (obj?._key) handleSelectObject(obj._key);
                     }}
                     className="w-full h-full"
                     showControls={true}
@@ -623,7 +632,7 @@ export default function OverrideReviewModal({
                           onClick={() => {
                             // Find first object in this frame
                             const obj = allObjects.find(o => o.frameSide === frame.side && o.frameIndex === frame.frameIndex);
-                            if (obj) setActiveObjectKey(obj.key);
+                            if (obj) handleSelectObject(obj.key);
                           }}
                           className={cn(
                             "relative flex-shrink-0 w-16 h-12 rounded overflow-hidden border-2 transition-all",
@@ -713,7 +722,7 @@ export default function OverrideReviewModal({
                   return (
                     <div key={obj.key}>
                       <div
-                        onClick={() => setActiveObjectKey(obj.key)}
+                        onClick={() => handleSelectObject(obj.key)}
                         className={cn(
                           "flex items-center gap-2 px-3 py-1.5 cursor-pointer transition-all border-l-2",
                           isActive
