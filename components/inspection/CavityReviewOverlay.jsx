@@ -85,7 +85,7 @@ function ObjectRow({ obj, idx, isActive, isObjNG, isReviewed, decisionIsNG, onSe
               : "bg-phosphor-green/5 border-l-phosphor-green/50"
             : isObjNG
               ? "border-l-phosphor-red/30 hover:bg-elevated/50"
-              : "bg-phosphor-green/5 border-l-phosphor-green/30"
+              : "border-l-surface-border hover:bg-elevated/50"
       )}
     >
       <div className="flex items-center gap-2">
@@ -263,12 +263,18 @@ export function CavityReviewOverlay({
 
   // Pre-compute render lists with cavity headers (avoids tracking state in .map())
   const ngRenderList = useMemo(() => {
+    // Count NG objects per cavity for header badges
+    const cavityCounts = {}
+    allObjects.forEach(obj => {
+      if (!(obj.label === 1 || obj.label === true)) return
+      cavityCounts[obj.cavityIndex] = (cavityCounts[obj.cavityIndex] || 0) + 1
+    })
     const items = []
     let lastCav = -1
     allObjects.forEach((obj, idx) => {
       if (!(obj.label === 1 || obj.label === true)) return
       if (cavityCount > 1 && obj.cavityIndex !== lastCav) {
-        items.push({ type: 'header', cavityIndex: obj.cavityIndex, key: `ng-cav-${obj.cavityIndex}` })
+        items.push({ type: 'header', cavityIndex: obj.cavityIndex, count: cavityCounts[obj.cavityIndex] || 0, key: `ng-cav-${obj.cavityIndex}` })
         lastCav = obj.cavityIndex
       }
       items.push({ type: 'obj', obj, idx, key: obj.key })
@@ -277,12 +283,17 @@ export function CavityReviewOverlay({
   }, [allObjects, cavityCount])
 
   const goodRenderList = useMemo(() => {
+    const cavityCounts = {}
+    allObjects.forEach(obj => {
+      if (obj.label === 1 || obj.label === true) return
+      cavityCounts[obj.cavityIndex] = (cavityCounts[obj.cavityIndex] || 0) + 1
+    })
     const items = []
     let lastCav = -1
     allObjects.forEach((obj, idx) => {
       if (obj.label === 1 || obj.label === true) return
       if (cavityCount > 1 && obj.cavityIndex !== lastCav) {
-        items.push({ type: 'header', cavityIndex: obj.cavityIndex, key: `good-cav-${obj.cavityIndex}` })
+        items.push({ type: 'header', cavityIndex: obj.cavityIndex, count: cavityCounts[obj.cavityIndex] || 0, key: `good-cav-${obj.cavityIndex}` })
         lastCav = obj.cavityIndex
       }
       items.push({ type: 'obj', obj, idx, key: obj.key })
@@ -302,6 +313,15 @@ export function CavityReviewOverlay({
   const [otherText, setOtherText] = useState('')
   // Accordion: 'ng' or 'good' — only one expanded at a time
   const [expandedSection, setExpandedSection] = useState('ng')
+  // Collapsible PCB groups — exclusive accordion (only one PCB open at a time per section)
+  const [expandedPcb, setExpandedPcb] = useState(() => {
+    const firstCav = ngRenderList.find(item => item.type === 'header')
+    return firstCav != null ? firstCav.cavityIndex : 0
+  })
+  const [expandedGoodPcb, setExpandedGoodPcb] = useState(() => {
+    const firstCav = goodRenderList.find(item => item.type === 'header')
+    return firstCav != null ? firstCav.cavityIndex : 0
+  })
   // Bulk action: when true, footer shows reason picker for bulk OK
   const [bulkReasonMode, setBulkReasonMode] = useState(false)
   // Bulk selection: set of object keys selected for bulk action
@@ -348,15 +368,20 @@ export function CavityReviewOverlay({
   }, [objectDecisions]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Select object + trigger ImageViewer zoom (toggle: click same → deselect + reset)
+  // Also toggles bulk checkbox so click = select + tick, click again = deselect + untick
   const handleSelectObject = useCallback((idx) => {
+    const obj = allObjects[idx]
     if (idx === activeObjectIdx) {
-      // Toggle off: deselect → ImageViewer resets to fit view
+      // Toggle off: deselect → ImageViewer resets to fit view, untick checkbox
       setActiveObjectIdx(null)
+      if (obj) setBulkSelected(prev => { const next = new Set(prev); next.delete(obj.key); return next })
       return
     }
     setActiveObjectIdx(idx)
     setFocusTrigger(prev => prev + 1)
-  }, [activeObjectIdx])
+    // Auto-tick checkbox on select
+    if (obj) setBulkSelected(prev => { const next = new Set(prev); next.add(obj.key); return next })
+  }, [activeObjectIdx, allObjects])
 
   // Reset when inspection changes
   useEffect(() => {
@@ -372,7 +397,20 @@ export function CavityReviewOverlay({
     setBulkReasonMode(false)
     setBulkSelected(new Set())
     setReviewIndex(initialFrameIndex)
+    // Reset collapsible PCBs — expand only the first cavity
+    const firstNgCav = ngRenderList.find(item => item.type === 'header')
+    setExpandedPcb(firstNgCav != null ? firstNgCav.cavityIndex : 0)
+    const firstGoodCav = goodRenderList.find(item => item.type === 'header')
+    setExpandedGoodPcb(firstGoodCav != null ? firstGoodCav.cavityIndex : 0)
   }, [inspection]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-expand PCB group when active object advances into a different group
+  useEffect(() => {
+    if (activeObjectIdx == null || cavityCount <= 1) return
+    const obj = allObjects[activeObjectIdx]
+    if (!obj) return
+    setExpandedPcb(prev => prev === obj.cavityIndex ? prev : obj.cavityIndex)
+  }, [activeObjectIdx, allObjects, cavityCount])
 
   // Complete review — derive frame decisions from object decisions, then call parent
   const completeReview = useCallback((allObjDecisions) => {
@@ -964,14 +1002,23 @@ export function CavityReviewOverlay({
                 <div className="flex-1 overflow-y-auto min-h-0">
                   {ngRenderList.map(item => {
                     if (item.type === 'header') {
+                      const isExpanded = expandedPcb === item.cavityIndex
                       return (
-                        <div key={item.key} className="px-3 py-1 bg-void/40 border-b border-surface-border/30 sticky top-0 z-[1]">
+                        <button
+                          key={item.key}
+                          onClick={() => setExpandedPcb(prev => prev === item.cavityIndex ? null : item.cavityIndex)}
+                          className="w-full px-3 py-1.5 bg-void/40 border-b border-surface-border/30 sticky top-0 z-[1] flex items-center gap-1.5 hover:bg-elevated/40 transition-colors cursor-pointer"
+                        >
+                          <ChevronDown className={cn("w-3 h-3 text-phosphor-teal/70 transition-transform", isExpanded ? "rotate-0" : "-rotate-90")} />
                           <span className="text-[10px] font-mono text-phosphor-teal/70 uppercase tracking-wider">
                             PCB {item.cavityIndex + 1}
                           </span>
-                        </div>
+                          <span className="text-[9px] font-mono text-text-tertiary/50">({item.count})</span>
+                        </button>
                       )
                     }
+                    // Hide objects when their PCB group is collapsed
+                    if (cavityCount > 1 && expandedPcb !== item.obj.cavityIndex) return null
                     const { obj, idx } = item
                     const isActive = idx === activeObjectIdx
                     const decision = objectDecisions[obj.key]
@@ -1002,14 +1049,22 @@ export function CavityReviewOverlay({
                 <div className="flex-1 overflow-y-auto min-h-0">
                   {goodRenderList.map(item => {
                     if (item.type === 'header') {
+                      const isExpanded = expandedGoodPcb === item.cavityIndex
                       return (
-                        <div key={item.key} className="px-3 py-1 bg-void/40 border-b border-surface-border/30 sticky top-0 z-[1]">
-                          <span className="text-[10px] font-mono text-phosphor-green/60 uppercase tracking-wider">
+                        <button
+                          key={item.key}
+                          onClick={() => setExpandedGoodPcb(prev => prev === item.cavityIndex ? null : item.cavityIndex)}
+                          className="w-full px-3 py-1.5 bg-void/40 border-b border-surface-border/30 sticky top-0 z-[1] flex items-center gap-1.5 hover:bg-elevated/40 transition-colors cursor-pointer"
+                        >
+                          <ChevronDown className={cn("w-3 h-3 text-text-tertiary transition-transform", isExpanded ? "rotate-0" : "-rotate-90")} />
+                          <span className="text-[10px] font-mono text-text-tertiary uppercase tracking-wider">
                             PCB {item.cavityIndex + 1}
                           </span>
-                        </div>
+                          <span className="text-[9px] font-mono text-text-tertiary/50">({item.count})</span>
+                        </button>
                       )
                     }
+                    if (cavityCount > 1 && expandedGoodPcb !== item.obj.cavityIndex) return null
                     const { obj, idx } = item
                     const isActive = idx === activeObjectIdx
                     return (
