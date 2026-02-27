@@ -347,11 +347,16 @@ export function CavityReviewOverlay({
     onObjectDecisionsChange?.(objectDecisions)
   }, [objectDecisions]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Select object + trigger ImageViewer zoom
+  // Select object + trigger ImageViewer zoom (toggle: click same → deselect + reset)
   const handleSelectObject = useCallback((idx) => {
+    if (idx === activeObjectIdx) {
+      // Toggle off: deselect → ImageViewer resets to fit view
+      setActiveObjectIdx(null)
+      return
+    }
     setActiveObjectIdx(idx)
     setFocusTrigger(prev => prev + 1)
-  }, [])
+  }, [activeObjectIdx])
 
   // Reset when inspection changes
   useEffect(() => {
@@ -884,7 +889,7 @@ export function CavityReviewOverlay({
 
         {/* Right — Object list panel (only when objects exist) */}
         {hasObjects && (
-          <div className="w-72 flex flex-col shrink-0 bg-terminal border-l border-surface-border overflow-hidden">
+          <div className="w-80 flex flex-col shrink-0 bg-terminal border-l border-surface-border overflow-hidden">
             {/* Panel header */}
             <div className="px-3 py-2 border-b border-surface-border shrink-0">
               <div className="flex items-center justify-between">

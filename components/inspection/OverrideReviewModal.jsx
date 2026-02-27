@@ -177,11 +177,15 @@ export default function OverrideReviewModal({
   const isPending = override?.status === 'pending';
   const canAppeal = override?.status === 'reviewed' || override?.status === 'appealed';
 
-  // Select object + trigger ImageViewer zoom
+  // Select object + trigger ImageViewer zoom (toggle: click same → deselect + reset)
   const handleSelectObject = useCallback((key) => {
+    if (key === activeObjectKey) {
+      setActiveObjectKey(null);
+      return;
+    }
     setActiveObjectKey(key);
     setFocusTrigger(prev => prev + 1);
-  }, []);
+  }, [activeObjectKey]);
 
   // Reset state when override changes
   useEffect(() => {
