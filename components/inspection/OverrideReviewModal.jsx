@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { X, FileText, CheckCircle, XCircle, ImageIcon, Eye, Layers, Hash, ChevronDown, ChevronUp, MessageSquare, AlertTriangle } from 'lucide-react';
+import { X, CheckCircle, XCircle, ImageIcon, Eye, Layers, ChevronDown, MessageSquare, AlertTriangle, Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
 import { useI18n } from '@/context/I18nContext';
@@ -9,7 +9,7 @@ import { logOverrideApproved, logOverrideRejected } from '@/lib/eventLogger';
 import { notifyOverrideApproved, notifyOverrideRejected } from '@/lib/notificationHelper';
 import { authFetch } from '@/lib/utils/authFetch';
 import ImageViewer from '@/components/common/ImageViewer';
-import { getModelImage } from '@/lib/utils/modelImages';
+import { normalizeBox } from '@/lib/utils/inspectionReview';
 
 /**
  * Helper: build a unique key for an object within a frame.
@@ -44,6 +44,15 @@ function flattenObjects(allFrames) {
   return result;
 }
 
+/** Format a timestamp string into a compact display format */
+function formatTime(ts) {
+  if (!ts) return '';
+  try {
+    const d = new Date(ts);
+    return d.toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+  } catch { return ''; }
+}
+
 export default function OverrideReviewModal({
   isOpen,
   onClose,
@@ -64,11 +73,17 @@ export default function OverrideReviewModal({
   const [activeObjectKey, setActiveObjectKey] = useState(null);
   const [showSummary, setShowSummary] = useState(false);
 
+  // Bulk selection state
+  const [bulkSelected, setBulkSelected] = useState(() => new Set());
+
   // Appeal state
-  const [appealingKey, setAppealingKey] = useState(null); // object key being appealed
+  const [appealingKey, setAppealingKey] = useState(null);
   const [appealReason, setAppealReason] = useState('');
   const [appealProcessing, setAppealProcessing] = useState(false);
-  const [appealDecisions, setAppealDecisions] = useState({}); // parsed from override
+  const [appealDecisions, setAppealDecisions] = useState({});
+
+  // History collapsed state
+  const [historyCollapsed, setHistoryCollapsed] = useState(true);
 
   // Parse ng_frame_details into flat frame list
   const allFrames = useMemo(() => {
@@ -135,7 +150,7 @@ export default function OverrideReviewModal({
     return activeObject.objectIndex;
   }, [activeObject, activeFrame]);
 
-  // Group objects by serial number for the object list sidebar
+  // Group objects by serial number (kept for SummaryView)
   const objectsBySn = useMemo(() => {
     const groups = {};
     allObjects.forEach(obj => {
@@ -151,7 +166,6 @@ export default function OverrideReviewModal({
   // Load existing object/frame decisions for read-only view
   const existingDecisions = useMemo(() => {
     if (!override) return null;
-    // Check for per-object decisions first, then fall back to per-frame
     const raw = override.objectDecisions || override.object_decisions ||
                 override.frameDecisions || override.frame_decisions;
     if (!raw) return null;
@@ -174,13 +188,13 @@ export default function OverrideReviewModal({
     setAppealingKey(null);
     setAppealReason('');
     setAppealProcessing(false);
-    // Load existing decisions or start fresh
+    setBulkSelected(new Set());
+    setHistoryCollapsed(!isAlreadyReviewed);
     if (existingDecisions) {
       setObjectDecisions(existingDecisions);
     } else {
       setObjectDecisions({});
     }
-    // Load appeal decisions
     const rawAppeals = override.appealDecisions || override.appeal_decisions;
     if (rawAppeals) {
       setAppealDecisions(typeof rawAppeals === 'string' ? JSON.parse(rawAppeals) : rawAppeals);
@@ -201,6 +215,57 @@ export default function OverrideReviewModal({
   const approvedCount = Object.values(objectDecisions).filter(d => d === 'approved').length;
   const rejectedCount = Object.values(objectDecisions).filter(d => d === 'rejected').length;
   const allReviewed = isMultiObject && reviewedCount === totalObjects;
+
+  // Unreviewed objects (for bulk selection)
+  const unreviewed = useMemo(
+    () => allObjects.filter(o => objectDecisions[o.key] == null),
+    [allObjects, objectDecisions]
+  );
+  const unreviewedCount = unreviewed.length;
+
+  // Effective bulk selection — only unreviewed items
+  const effectiveBulkSelected = useMemo(() => {
+    const unreviewedKeys = new Set(unreviewed.map(o => o.key));
+    return new Set([...bulkSelected].filter(k => unreviewedKeys.has(k)));
+  }, [bulkSelected, unreviewed]);
+  const bulkSelectedCount = effectiveBulkSelected.size;
+
+  // Bulk selection handlers
+  const toggleBulkSelect = useCallback((key) => {
+    setBulkSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  }, []);
+
+  const toggleSelectAll = useCallback(() => {
+    if (effectiveBulkSelected.size === unreviewed.length) {
+      setBulkSelected(new Set());
+    } else {
+      setBulkSelected(new Set(unreviewed.map(o => o.key)));
+    }
+  }, [effectiveBulkSelected.size, unreviewed]);
+
+  const handleBulkApprove = useCallback(() => {
+    const newDecisions = { ...objectDecisions };
+    for (const obj of unreviewed) {
+      if (!effectiveBulkSelected.has(obj.key)) continue;
+      newDecisions[obj.key] = 'approved';
+    }
+    setObjectDecisions(newDecisions);
+    setBulkSelected(new Set());
+  }, [objectDecisions, unreviewed, effectiveBulkSelected]);
+
+  const handleBulkReject = useCallback(() => {
+    const newDecisions = { ...objectDecisions };
+    for (const obj of unreviewed) {
+      if (!effectiveBulkSelected.has(obj.key)) continue;
+      newDecisions[obj.key] = 'rejected';
+    }
+    setObjectDecisions(newDecisions);
+    setBulkSelected(new Set());
+  }, [objectDecisions, unreviewed, effectiveBulkSelected]);
 
   // Per-object decision handler
   const handleObjectDecision = useCallback((key, decision) => {
@@ -226,7 +291,6 @@ export default function OverrideReviewModal({
       const json = await res.json();
       if (!json.success) throw new Error(json.error || 'Failed to submit appeal');
 
-      // Update local appeal state
       setAppealDecisions(prev => ({
         ...prev,
         [appealingKey]: {
@@ -263,20 +327,14 @@ export default function OverrideReviewModal({
     }
   };
 
-  // Legacy single-decision handlers (for non-multi-frame overrides)
+  // Legacy single-decision handlers
   const handleApprove = async () => {
     setIsProcessing(true);
     setError(null);
     try {
       await onApprove(override.id, reviewerNotes);
-      logOverrideApproved(user?.id, {
-        overrideId: override.id,
-        boardId: override.boardId,
-        notes: reviewerNotes,
-      });
-      notifyOverrideApproved(override.operatorId || override.operator_id, {
-        boardId: override.boardId,
-      });
+      logOverrideApproved(user?.id, { overrideId: override.id, boardId: override.boardId, notes: reviewerNotes });
+      notifyOverrideApproved(override.operatorId || override.operator_id, { boardId: override.boardId });
       setReviewerNotes('');
       setIsProcessing(false);
     } catch (err) {
@@ -291,16 +349,8 @@ export default function OverrideReviewModal({
     setError(null);
     try {
       await onReject(override.id, reviewerNotes);
-      logOverrideRejected(user?.id, {
-        overrideId: override.id,
-        boardId: override.boardId,
-        notes: reviewerNotes,
-      });
-      notifyOverrideRejected(
-        override.operatorId || override.operator_id,
-        { boardId: override.boardId },
-        reviewerNotes
-      );
+      logOverrideRejected(user?.id, { overrideId: override.id, boardId: override.boardId, notes: reviewerNotes });
+      notifyOverrideRejected(override.operatorId || override.operator_id, { boardId: override.boardId }, reviewerNotes);
       setReviewerNotes('');
       setIsProcessing(false);
     } catch (err) {
@@ -318,18 +368,13 @@ export default function OverrideReviewModal({
     setObjectDecisions({});
     setActiveObjectKey(null);
     setShowSummary(false);
+    setBulkSelected(new Set());
     onClose();
   };
 
-  // Resolve model name from override (stored during creation) or from override data
-  const overrideModelName = override?.modelName || override?.model_name || null;
-
-  // Build image URL for a frame — prefer static PCB image when model is mapped
+  // Build image URL for a frame
   const getFrameImageUrl = (frame) => {
     if (!frame) return null;
-    // Try static image first (bboxes from objects overlay on the raw PCB image)
-    const staticImg = getModelImage(overrideModelName, frame.side);
-    if (staticImg) return staticImg;
     const imgPath = showRawImage ? frame.imageRawPath : frame.imageAnnotatedPath;
     if (!imgPath) {
       return frame.imageAnnotatedPath ? `/api/storage/false-calls/${frame.imageAnnotatedPath}` : null;
@@ -342,6 +387,53 @@ export default function OverrideReviewModal({
     if (!localPath) return null;
     return `/api/storage/false-calls/${localPath}`;
   };
+
+  // Build review history timeline entries
+  const historyEntries = useMemo(() => {
+    if (!override) return [];
+    const entries = [];
+    // 1. Created
+    entries.push({
+      type: 'created',
+      who: override.operatorName || override.operator_name || 'Operator',
+      when: override.createdAt || override.created_at,
+      text: `Submitted false call: ${override.reason || 'UNSPECIFIED'}`,
+    });
+    // 2. Reviewed
+    const reviewedAt = override.reviewedAt || override.reviewed_at;
+    if (reviewedAt) {
+      const reviewerName = override.reviewerName || override.reviewer_name || 'Manager';
+      const notes = override.reviewNotes || override.review_notes;
+      entries.push({
+        type: 'reviewed',
+        who: reviewerName,
+        when: reviewedAt,
+        text: `Reviewed: ${approvedCount} approved, ${rejectedCount} rejected${notes ? ` — "${notes}"` : ''}`,
+      });
+    }
+    // 3. Appeals
+    for (const [key, appeal] of Object.entries(appealDecisions)) {
+      if (appeal.appealedAt) {
+        entries.push({
+          type: 'appealed',
+          who: appeal.appealedByName || 'Manager',
+          when: appeal.appealedAt,
+          text: `Appealed ${key}: "${appeal.reason}"`,
+        });
+      }
+      if (appeal.decidedAt) {
+        entries.push({
+          type: appeal.status === 're_approved' ? 'appeal_approved' : 'appeal_rejected',
+          who: appeal.decidedByName || 'Manager',
+          when: appeal.decidedAt,
+          text: `${appeal.status === 're_approved' ? 'Re-approved' : 'Re-rejected'} ${key}${appeal.decisionReason ? `: "${appeal.decisionReason}"` : ''}`,
+        });
+      }
+    }
+    // Sort by time
+    entries.sort((a, b) => new Date(a.when || 0) - new Date(b.when || 0));
+    return entries;
+  }, [override, approvedCount, rejectedCount, appealDecisions]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -359,15 +451,11 @@ export default function OverrideReviewModal({
       } else if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
         e.preventDefault();
         const idx = allObjects.findIndex(o => o.key === activeObjectKey);
-        if (idx < allObjects.length - 1) {
-          setActiveObjectKey(allObjects[idx + 1].key);
-        }
+        if (idx < allObjects.length - 1) setActiveObjectKey(allObjects[idx + 1].key);
       } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
         e.preventDefault();
         const idx = allObjects.findIndex(o => o.key === activeObjectKey);
-        if (idx > 0) {
-          setActiveObjectKey(allObjects[idx - 1].key);
-        }
+        if (idx > 0) setActiveObjectKey(allObjects[idx - 1].key);
       } else if (e.key === 'Escape') {
         e.preventDefault();
         handleClose();
@@ -384,67 +472,56 @@ export default function OverrideReviewModal({
   // RENDER
   // ====================================================================
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
-      <div className={cn(
-        "bg-panel rounded-xl shadow-2xl mx-4 overflow-hidden border border-surface-border flex flex-col",
-        isMultiObject ? "w-full max-w-[1200px] max-h-[92vh]" : "w-full max-w-[600px]"
-      )}>
-        {/* ============ Header ============ */}
-        <div className="px-5 py-3 border-b border-surface-border flex items-start justify-between bg-terminal shrink-0">
-          <div className="flex items-start gap-3">
-            <div className="w-9 h-9 rounded-full bg-phosphor-teal/20 flex items-center justify-center flex-shrink-0">
-              <FileText className="w-4 h-4 text-phosphor-teal" />
-            </div>
-            <div>
-              <h2 className="text-lg font-display font-bold text-text-primary">
+    <div className="fixed inset-0 z-50 flex flex-col bg-panel">
+      {/* ============ Header ============ */}
+      <div className="px-4 py-2 border-b border-surface-border flex items-center justify-between bg-terminal shrink-0">
+        <div className="flex items-center gap-3 min-w-0">
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2 className="text-sm font-display font-bold text-text-primary">
                 {isAlreadyReviewed ? t('manager.viewOverride') : t('manager.reviewOverride')}
               </h2>
-              <p className="text-xs text-text-secondary mt-0.5 flex items-center gap-1.5 flex-wrap">
-                <span className="font-medium text-text-primary">{override.boardId}</span>
-                <span>{override.operator || override.operatorName}</span>
-                {isMultiObject && !showSummary && (
-                  <>
-                    <span className="px-1.5 py-0.5 rounded bg-phosphor-teal/20 text-phosphor-teal text-xs font-mono font-bold">
-                      {totalObjects} object{totalObjects !== 1 ? 's' : ''} &middot; {allFrames.length} frame{allFrames.length !== 1 ? 's' : ''}
-                    </span>
-                    {reviewedCount > 0 && (
-                      <span className="px-1.5 py-0.5 rounded bg-phosphor-cyan/20 text-phosphor-cyan text-xs font-mono">
-                        {reviewedCount}/{totalObjects} reviewed
-                      </span>
-                    )}
-                  </>
-                )}
-                {isAlreadyReviewed && override.status !== 'reviewed' && (
-                  <span className={cn(
-                    "px-1.5 py-0.5 rounded text-xs font-medium",
-                    override.status === 'approved' ? "bg-phosphor-green/20 text-phosphor-green" : "bg-phosphor-red/20 text-phosphor-red"
-                  )}>
-                    {override.status === 'approved' ? t('manager.approved').toUpperCase() : t('manager.rejected').toUpperCase()}
-                  </span>
-                )}
-              </p>
+              <span className="text-xs font-mono text-phosphor-teal">{override.boardId}</span>
+              <span className="text-xs text-text-secondary">{override.operator || override.operatorName}</span>
+              {isMultiObject && (
+                <span className="px-1.5 py-0.5 rounded bg-phosphor-teal/20 text-phosphor-teal text-xs font-mono font-bold">
+                  {totalObjects} objects &middot; {allFrames.length} frames
+                </span>
+              )}
+              {isAlreadyReviewed && (
+                <span className={cn(
+                  "px-1.5 py-0.5 rounded text-xs font-medium",
+                  override.status === 'approved' ? "bg-phosphor-green/20 text-phosphor-green"
+                    : override.status === 'rejected' ? "bg-phosphor-red/20 text-phosphor-red"
+                    : override.status === 'appealed' ? "bg-yellow-500/20 text-yellow-400"
+                    : "bg-phosphor-cyan/20 text-phosphor-cyan"
+                )}>
+                  {override.status.toUpperCase()}
+                </span>
+              )}
             </div>
           </div>
-          <button
-            onClick={handleClose}
-            disabled={isProcessing}
-            className="text-text-tertiary hover:text-text-primary transition-colors disabled:opacity-50 p-1"
-          >
-            <X className="w-5 h-5" />
-          </button>
         </div>
+        <button onClick={handleClose} disabled={isProcessing}
+          className="p-2 rounded bg-elevated border border-surface-border hover:border-phosphor-teal/50 transition-colors disabled:opacity-50">
+          <X className="w-5 h-5 text-text-tertiary" />
+        </button>
+      </div>
 
-        {/* ============ Body ============ */}
-        <div className="flex-1 overflow-hidden min-h-0">
-          {error && (
-            <div className="mx-5 mt-3 bg-phosphor-red/10 border border-phosphor-red/30 rounded-lg px-3 py-2">
-              <p className="text-xs text-phosphor-red">{error}</p>
-            </div>
-          )}
+      {/* ============ Error bar ============ */}
+      {error && (
+        <div className="mx-4 mt-2 bg-phosphor-red/10 border border-phosphor-red/30 rounded-lg px-3 py-2 shrink-0">
+          <p className="text-xs text-phosphor-red">{error}</p>
+        </div>
+      )}
 
-          {isMultiObject && showSummary ? (
-            /* ============ Summary View ============ */
-            <div className="px-5 py-4 space-y-4 overflow-y-auto max-h-[calc(92vh-160px)]">
+      {/* ============ Main content ============ */}
+      <div className="flex-1 flex min-h-0 overflow-hidden">
+
+        {isMultiObject && showSummary ? (
+          /* ============ Summary View ============ */
+          <div className="flex-1 flex flex-col items-center overflow-y-auto py-6 px-4">
+            <div className="w-full max-w-2xl space-y-4">
               <SummaryView
                 objectsBySn={objectsBySn}
                 snList={snList}
@@ -453,326 +530,543 @@ export default function OverrideReviewModal({
                 t={t}
               />
               {isPending && (
-                <div>
-                  <h3 className="text-xs font-semibold text-text-tertiary mb-1.5 uppercase tracking-wide">
-                    {t('manager.reviewerNotesOptional')}
-                  </h3>
-                  <textarea
-                    value={reviewerNotes}
-                    onChange={(e) => setReviewerNotes(e.target.value)}
-                    placeholder={t('manager.addNotes')}
-                    rows={2}
-                    disabled={isProcessing}
-                    className="w-full px-3 py-2 bg-elevated border border-surface-border rounded text-sm text-text-primary placeholder-text-tertiary focus:outline-none focus:ring-1 focus:ring-phosphor-teal resize-none disabled:opacity-50"
-                  />
+                <div className="space-y-3">
+                  <div>
+                    <h3 className="text-xs font-semibold text-text-tertiary mb-1.5 uppercase tracking-wide">
+                      {t('manager.reviewerNotesOptional')}
+                    </h3>
+                    <textarea
+                      value={reviewerNotes}
+                      onChange={(e) => setReviewerNotes(e.target.value)}
+                      placeholder={t('manager.addNotes')}
+                      rows={2}
+                      disabled={isProcessing}
+                      className="w-full px-3 py-2 bg-elevated border border-surface-border rounded text-sm text-text-primary placeholder-text-tertiary focus:outline-none focus:ring-1 focus:ring-phosphor-teal resize-none disabled:opacity-50"
+                    />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <button onClick={() => setShowSummary(false)}
+                      className="px-4 py-2 bg-elevated text-text-primary rounded-lg font-medium text-sm hover:bg-surface-border transition-colors">
+                      Back to Review
+                    </button>
+                    <button onClick={handleSubmitReview} disabled={isProcessing || !allReviewed}
+                      className="px-6 py-2 bg-phosphor-teal text-void rounded-lg font-display font-bold text-sm hover:bg-phosphor-teal-bright transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5">
+                      {isProcessing ? (
+                        <><div className="w-3.5 h-3.5 border-2 border-void/30 border-t-void rounded-full animate-spin" />{t('manager.processing')}</>
+                      ) : (
+                        <><CheckCircle className="w-4 h-4" />Submit Review</>
+                      )}
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
+          </div>
 
-          ) : isMultiObject ? (
-            /* ============ Per-Object Review — Split Layout ============ */
-            <div className="flex h-full" style={{ height: 'calc(92vh - 160px)' }}>
-              {/* Left Panel — Image Viewer */}
-              <div className="flex-1 flex flex-col min-w-0 border-r border-surface-border">
-                {/* AI/RAW toggle */}
-                <div className="flex items-center gap-1 px-3 py-2 bg-terminal border-b border-surface-border shrink-0">
-                  <button
-                    onClick={() => setShowRawImage(false)}
-                    className={cn(
-                      "px-2 py-1 text-xs font-mono flex items-center gap-1 rounded transition-colors",
-                      !showRawImage ? "bg-phosphor-teal/20 text-phosphor-teal" : "text-text-tertiary hover:text-text-secondary"
-                    )}
-                  >
-                    <Layers className="w-3 h-3" />
-                    AI
-                  </button>
-                  <button
-                    onClick={() => setShowRawImage(true)}
-                    disabled={!activeFrame?.imageRawPath}
-                    className={cn(
-                      "px-2 py-1 text-xs font-mono flex items-center gap-1 rounded transition-colors",
-                      showRawImage ? "bg-phosphor-cyan/20 text-phosphor-cyan" : "text-text-tertiary hover:text-text-secondary",
-                      !activeFrame?.imageRawPath && "opacity-30 cursor-not-allowed"
-                    )}
-                  >
-                    <Eye className="w-3 h-3" />
-                    RAW
-                  </button>
-                  {activeFrame && (
-                    <span className="ml-auto text-xxs font-mono text-text-tertiary">
-                      {activeFrame.side} F{activeFrame.frameIndex}
-                    </span>
-                  )}
-                </div>
-
-                {/* Image with bbox overlays */}
-                <div className="flex-1 min-h-0">
-                  {getFrameImageUrl(activeFrame) ? (
-                    <ImageViewer
-                      src={getFrameImageUrl(activeFrame)}
-                      alt={`${activeFrame?.side} frame ${activeFrame?.frameIndex}`}
-                      objects={activeFrameObjects}
-                      activeObjectIndex={activeObjectFrameIndex}
-                      onObjectClick={(idx) => {
-                        const obj = activeFrameObjects[idx];
-                        if (obj?._key) setActiveObjectKey(obj._key);
-                      }}
-                      className="w-full h-full"
-                      showControls={true}
-                    />
-                  ) : (
-                    <div className="w-full h-full flex flex-col items-center justify-center text-text-tertiary bg-void">
-                      <ImageIcon className="w-10 h-10 mb-2 opacity-50" />
-                      <p className="text-xs">{t('manager.noImageAvailable')}</p>
-                    </div>
-                  )}
-                </div>
+        ) : isMultiObject ? (
+          /* ============ Per-Object Review — Fullscreen Split Layout ============ */
+          <>
+            {/* Left — Image Viewer */}
+            <div className="flex-1 relative min-w-0 min-h-0 flex flex-col">
+              {/* AI/RAW toggle bar */}
+              <div className="flex items-center gap-1 px-3 py-1.5 bg-terminal border-b border-surface-border shrink-0">
+                <button onClick={() => setShowRawImage(false)}
+                  className={cn("px-2 py-1 text-xs font-mono flex items-center gap-1 rounded transition-colors",
+                    !showRawImage ? "bg-phosphor-teal/20 text-phosphor-teal" : "text-text-tertiary hover:text-text-secondary")}>
+                  <Layers className="w-3 h-3" />AI
+                </button>
+                <button onClick={() => setShowRawImage(true)} disabled={!activeFrame?.imageRawPath}
+                  className={cn("px-2 py-1 text-xs font-mono flex items-center gap-1 rounded transition-colors",
+                    showRawImage ? "bg-phosphor-cyan/20 text-phosphor-cyan" : "text-text-tertiary hover:text-text-secondary",
+                    !activeFrame?.imageRawPath && "opacity-30 cursor-not-allowed")}>
+                  <Eye className="w-3 h-3" />RAW
+                </button>
+                {activeFrame && (
+                  <span className="ml-auto text-xxs font-mono text-text-tertiary">
+                    {activeFrame.side} F{activeFrame.frameIndex}
+                  </span>
+                )}
               </div>
 
-              {/* Right Panel — Object List */}
-              <div className="w-80 flex flex-col shrink-0 bg-terminal overflow-hidden">
-                {/* Panel header */}
-                <div className="px-3 py-2 border-b border-surface-border shrink-0">
-                  <h3 className="text-xs font-mono text-text-tertiary uppercase tracking-wide">
-                    Detected Objects ({totalObjects})
-                  </h3>
-                  {isPending && (
-                    <p className="text-xxs text-text-tertiary mt-0.5">
-                      Press <kbd className="px-1 py-0.5 bg-elevated rounded text-phosphor-green font-mono">A</kbd> approve &middot; <kbd className="px-1 py-0.5 bg-elevated rounded text-phosphor-red font-mono">R</kbd> reject &middot; <kbd className="px-1 py-0.5 bg-elevated rounded font-mono">&darr;&uarr;</kbd> navigate
-                    </p>
-                  )}
-                </div>
-
-                {/* Scrollable object list grouped by SN */}
-                <div className="flex-1 overflow-y-auto min-h-0">
-                  {snList.map(sn => (
-                    <SnGroup
-                      key={sn}
-                      sn={sn}
-                      objects={objectsBySn[sn]}
-                      objectDecisions={objectDecisions}
-                      activeObjectKey={activeObjectKey}
-                      isPending={isPending}
-                      canAppeal={canAppeal}
-                      appealDecisions={appealDecisions}
-                      appealingKey={appealingKey}
-                      appealReason={appealReason}
-                      appealProcessing={appealProcessing}
-                      onSelectObject={setActiveObjectKey}
-                      onDecision={handleObjectDecision}
-                      onStartAppeal={(key) => { setAppealingKey(key); setAppealReason(''); }}
-                      onCancelAppeal={() => { setAppealingKey(null); setAppealReason(''); }}
-                      onAppealReasonChange={setAppealReason}
-                      onSubmitAppeal={handleAppealSubmit}
-                    />
-                  ))}
-                </div>
-
-                {/* Reason + operator notes */}
-                <div className="px-3 py-2 border-t border-surface-border shrink-0 space-y-1.5">
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <span className="text-xxs text-text-tertiary font-mono uppercase">Reason</span>
-                      <p className="text-xs text-text-primary truncate">{override.reason || '-'}</p>
-                    </div>
-                    <div>
-                      <span className="text-xxs text-text-tertiary font-mono uppercase">Notes</span>
-                      <p className="text-xs text-text-primary truncate">
-                        {override.operatorNotes || override.operator_notes || '-'}
-                      </p>
-                    </div>
+              {/* Image area */}
+              <div className="flex-1 relative min-h-0">
+                {getFrameImageUrl(activeFrame) ? (
+                  <ImageViewer
+                    src={getFrameImageUrl(activeFrame)}
+                    alt={`${activeFrame?.side} frame ${activeFrame?.frameIndex}`}
+                    objects={activeFrameObjects}
+                    activeObjectIndex={activeObjectFrameIndex}
+                    onObjectClick={(idx) => {
+                      const obj = activeFrameObjects[idx];
+                      if (obj?._key) setActiveObjectKey(obj._key);
+                    }}
+                    className="w-full h-full"
+                    showControls={true}
+                  />
+                ) : (
+                  <div className="w-full h-full flex flex-col items-center justify-center text-text-tertiary bg-void">
+                    <ImageIcon className="w-10 h-10 mb-2 opacity-50" />
+                    <p className="text-xs">{t('manager.noImageAvailable')}</p>
                   </div>
-                </div>
+                )}
+
+                {/* Thumbnail strip — overlaid at bottom */}
+                {allFrames.length > 1 && (
+                  <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-void/80 backdrop-blur-sm border border-surface-border/50">
+                    {allFrames.map((frame) => {
+                      const isActive = activeFrame?.side === frame.side && activeFrame?.frameIndex === frame.frameIndex;
+                      const frameImgUrl = frame.imageAnnotatedPath
+                        ? `/api/storage/false-calls/${frame.imageAnnotatedPath}`
+                        : null;
+                      return (
+                        <button key={`${frame.side}-${frame.frameIndex}`}
+                          onClick={() => {
+                            // Find first object in this frame
+                            const obj = allObjects.find(o => o.frameSide === frame.side && o.frameIndex === frame.frameIndex);
+                            if (obj) setActiveObjectKey(obj.key);
+                          }}
+                          className={cn(
+                            "relative flex-shrink-0 w-16 h-12 rounded overflow-hidden border-2 transition-all",
+                            isActive ? "border-phosphor-teal ring-1 ring-phosphor-teal/40" : "border-surface-border hover:border-phosphor-teal/50"
+                          )}>
+                          {frameImgUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={frameImgUrl} alt={`${frame.side} F${frame.frameIndex}`} className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="w-full h-full bg-void flex items-center justify-center">
+                              <ImageIcon className="w-3 h-3 text-text-tertiary" />
+                            </div>
+                          )}
+                          <span className="absolute top-0 left-0 px-1 text-[9px] font-mono font-bold bg-void/80 text-text-primary rounded-br leading-tight">
+                            {frame.side === 'TOP' ? 'TOP' : 'BTM'}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </div>
 
-          ) : (
-            /* ============ Legacy Single-Image View ============ */
-            <div className="px-5 py-4 space-y-4 overflow-y-auto max-h-[calc(92vh-160px)]">
-              <div>
-                <h3 className="text-xs font-semibold text-text-tertiary mb-2 uppercase tracking-wide">
-                  {t('manager.aiDetection')}
-                </h3>
-                <div className="bg-void rounded-lg border border-surface-border overflow-hidden">
-                  {getLegacyImageUrl() ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={getLegacyImageUrl()}
-                      alt="False call image"
-                      className="w-full h-40 object-contain bg-black"
-                    />
-                  ) : (
-                    <div className="h-32 flex flex-col items-center justify-center text-text-tertiary">
-                      <ImageIcon className="w-8 h-8 mb-1 opacity-50" />
-                      <p className="text-xs">{t('manager.noImageAvailable')}</p>
-                    </div>
-                  )}
-                </div>
-                <p className="text-xs text-text-tertiary mt-1.5 text-center">
-                  {t('manager.aiFlagged')}: <span className="text-phosphor-red font-medium">{override.defectType || override.defect_type || 'Unknown'}</span>
-                  {override.confidence && ` (${override.confidence}%)`}
-                </p>
-              </div>
-
-              {/* Reason + Notes */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <h3 className="text-xs font-semibold text-text-tertiary mb-1.5 uppercase tracking-wide">
-                    {t('hmi.reason')}
+            {/* Right — Object list panel */}
+            <div className="w-80 flex flex-col shrink-0 bg-terminal border-l border-surface-border overflow-hidden">
+              {/* Panel header */}
+              <div className="px-3 py-2 border-b border-surface-border shrink-0">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-mono text-text-tertiary uppercase tracking-wide">
+                    Objects ({totalObjects})
                   </h3>
-                  <div className="bg-elevated rounded border border-surface-border px-3 py-2">
-                    <p className="text-sm text-text-primary">{override.reason || '-'}</p>
+                  <div className="flex items-center gap-2">
+                    {approvedCount > 0 && <span className="text-xxs font-mono text-phosphor-green">{approvedCount} OK</span>}
+                    {rejectedCount > 0 && <span className="text-xxs font-mono text-phosphor-red">{rejectedCount} NG</span>}
+                    {reviewedCount > 0 && (
+                      <span className="text-xxs font-mono text-phosphor-teal">{reviewedCount}/{totalObjects}</span>
+                    )}
                   </div>
                 </div>
-                <div>
-                  <h3 className="text-xs font-semibold text-text-tertiary mb-1.5 uppercase tracking-wide">
-                    {t('manager.operatorNotes')}
-                  </h3>
-                  <div className="bg-elevated rounded border border-surface-border px-3 py-2 min-h-[36px]">
-                    <p className="text-sm text-text-primary">
+                {isPending && (
+                  <p className="text-xxs text-text-tertiary mt-0.5">
+                    <kbd className="px-1 py-0.5 bg-elevated rounded text-phosphor-green font-mono">A</kbd> approve &middot; <kbd className="px-1 py-0.5 bg-elevated rounded text-phosphor-red font-mono">R</kbd> reject &middot; <kbd className="px-1 py-0.5 bg-elevated rounded font-mono">&darr;&uarr;</kbd> nav
+                  </p>
+                )}
+              </div>
+
+              {/* Bulk selection bar — only when pending + has unreviewed items */}
+              {isPending && unreviewedCount > 0 && (
+                <div className="px-3 py-1.5 border-b border-surface-border shrink-0 flex items-center gap-1.5 bg-elevated/30">
+                  <input
+                    type="checkbox"
+                    checked={bulkSelectedCount === unreviewedCount && unreviewedCount > 0}
+                    ref={(el) => { if (el) el.indeterminate = bulkSelectedCount > 0 && bulkSelectedCount < unreviewedCount; }}
+                    onChange={toggleSelectAll}
+                    className="w-3.5 h-3.5 accent-phosphor-teal cursor-pointer"
+                  />
+                  <span className="text-xxs font-mono text-text-tertiary flex-1">{unreviewedCount} remaining</span>
+                  {bulkSelectedCount > 0 && (
+                    <>
+                      <button onClick={handleBulkApprove}
+                        className="px-2 py-0.5 text-xxs font-mono font-bold bg-phosphor-green/15 text-phosphor-green rounded hover:bg-phosphor-green/25 transition-colors">
+                        Approve ({bulkSelectedCount})
+                      </button>
+                      <button onClick={handleBulkReject}
+                        className="px-2 py-0.5 text-xxs font-mono font-bold bg-phosphor-red/15 text-phosphor-red rounded hover:bg-phosphor-red/25 transition-colors">
+                        Reject ({bulkSelectedCount})
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* Scrollable object list */}
+              <div className="flex-1 overflow-y-auto min-h-0">
+                {allObjects.map(obj => {
+                  const isActive = obj.key === activeObjectKey;
+                  const decision = objectDecisions[obj.key];
+                  const hasDecision = decision != null;
+                  const appeal = appealDecisions?.[obj.key];
+                  const isAppealed = appeal?.status === 'appealed';
+                  const isAppealResolved = appeal?.status === 're_approved' || appeal?.status === 're_rejected';
+                  const isAppealingThis = appealingKey === obj.key;
+                  const alreadyAppealed = !!appeal;
+                  const isUnreviewed = !hasDecision;
+
+                  return (
+                    <div key={obj.key}>
+                      <div
+                        onClick={() => setActiveObjectKey(obj.key)}
+                        className={cn(
+                          "flex items-center gap-2 px-3 py-1.5 cursor-pointer transition-all border-l-2",
+                          isActive
+                            ? "bg-phosphor-teal/10 border-l-phosphor-teal"
+                            : isAppealed
+                              ? "bg-yellow-500/5 border-l-yellow-500/50"
+                              : hasDecision
+                                ? decision === 'approved'
+                                  ? "bg-phosphor-green/5 border-l-phosphor-green/50 hover:bg-phosphor-green/10"
+                                  : "bg-phosphor-red/5 border-l-phosphor-red/50 hover:bg-phosphor-red/10"
+                                : "border-l-transparent hover:bg-elevated/50"
+                        )}
+                      >
+                        {/* Checkbox (only when pending + unreviewed) */}
+                        {isPending && isUnreviewed && (
+                          <input
+                            type="checkbox"
+                            checked={effectiveBulkSelected.has(obj.key)}
+                            onChange={() => toggleBulkSelect(obj.key)}
+                            onClick={(e) => e.stopPropagation()}
+                            className="w-3.5 h-3.5 shrink-0 accent-phosphor-teal cursor-pointer"
+                          />
+                        )}
+
+                        {/* Label color dot */}
+                        <span className={cn(
+                          "w-1.5 h-1.5 rounded-full shrink-0",
+                          (obj.label === 1 || obj.label === true) ? "bg-phosphor-red" : "bg-phosphor-green"
+                        )} />
+
+                        {/* Object info */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span className={cn(
+                              "text-xs font-medium truncate",
+                              isActive ? "text-phosphor-teal" : "text-text-primary"
+                            )}>
+                              {obj.name}
+                            </span>
+                            <span className="text-xxs text-text-tertiary font-mono shrink-0">
+                              {obj.score != null ? `${(obj.score * 100).toFixed(0)}%` : ''}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[9px] text-text-tertiary/60 font-mono">
+                              {obj.frameSide} F{obj.frameIndex}
+                            </span>
+                            {isAppealed && (
+                              <span className="text-xxs font-mono text-yellow-400 flex items-center gap-0.5">
+                                <AlertTriangle className="w-2.5 h-2.5" /> Appealed
+                              </span>
+                            )}
+                            {isAppealResolved && (
+                              <span className={cn(
+                                "text-xxs font-mono",
+                                appeal.status === 're_approved' ? "text-phosphor-green" : "text-phosphor-red"
+                              )}>
+                                {appeal.status === 're_approved' ? 'Re-approved' : 'Re-rejected'}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Approve/Reject buttons (pending) or status badge + appeal (reviewed) */}
+                        {isPending ? (
+                          <div className="flex items-center rounded overflow-hidden border border-surface-border shrink-0">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleObjectDecision(obj.key, 'approved'); }}
+                              className={cn("px-1.5 py-0.5 transition-all",
+                                decision === 'approved' ? "bg-phosphor-green/20 text-phosphor-green" : "text-text-tertiary hover:text-phosphor-green hover:bg-phosphor-green/5"
+                              )} title="Approve (A)">
+                              <CheckCircle className="w-3.5 h-3.5" />
+                            </button>
+                            <div className="w-px h-4 bg-surface-border" />
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleObjectDecision(obj.key, 'rejected'); }}
+                              className={cn("px-1.5 py-0.5 transition-all",
+                                decision === 'rejected' ? "bg-phosphor-red/20 text-phosphor-red" : "text-text-tertiary hover:text-phosphor-red hover:bg-phosphor-red/5"
+                              )} title="Reject (R)">
+                              <XCircle className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1 shrink-0">
+                            {hasDecision && (
+                              <span className={cn(
+                                "text-xxs font-mono font-medium px-1.5 py-0.5 rounded",
+                                decision === 'approved' ? "bg-phosphor-green/15 text-phosphor-green" : "bg-phosphor-red/15 text-phosphor-red"
+                              )}>
+                                {decision === 'approved' ? 'OK' : 'NG'}
+                              </span>
+                            )}
+                            {canAppeal && hasDecision && !alreadyAppealed && (
+                              <button onClick={(e) => { e.stopPropagation(); setAppealingKey(obj.key); setAppealReason(''); }}
+                                className="px-1.5 py-0.5 text-xxs font-mono text-yellow-400 hover:bg-yellow-500/10 rounded transition-colors"
+                                title="Appeal this decision">
+                                <MessageSquare className="w-3 h-3" />
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Inline appeal form */}
+                      {isAppealingThis && (
+                        <div className="px-3 py-2 bg-yellow-500/5 border-l-2 border-l-yellow-500/50 space-y-1.5">
+                          <p className="text-xxs text-yellow-400 font-mono">Appeal reason (required):</p>
+                          <textarea
+                            value={appealReason}
+                            onChange={(e) => setAppealReason(e.target.value)}
+                            placeholder="Explain why this decision should be re-reviewed..."
+                            rows={2}
+                            className="w-full px-2 py-1.5 bg-elevated border border-surface-border rounded text-xs text-text-primary placeholder-text-tertiary focus:outline-none focus:ring-1 focus:ring-yellow-500/50 resize-none"
+                            autoFocus
+                          />
+                          <div className="flex items-center gap-2 justify-end">
+                            <button onClick={() => { setAppealingKey(null); setAppealReason(''); }}
+                              className="px-2 py-1 text-xxs text-text-tertiary hover:text-text-primary transition-colors">
+                              Cancel
+                            </button>
+                            <button onClick={handleAppealSubmit}
+                              disabled={!appealReason.trim() || appealProcessing}
+                              className="px-2 py-1 text-xxs bg-yellow-500/20 text-yellow-400 rounded hover:bg-yellow-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1">
+                              {appealProcessing && <div className="w-2.5 h-2.5 border border-yellow-400/30 border-t-yellow-400 rounded-full animate-spin" />}
+                              Submit Appeal
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Show existing appeal info */}
+                      {appeal && !isAppealingThis && (
+                        <div className="px-3 py-1 bg-yellow-500/5 border-l-2 border-l-yellow-500/30">
+                          <p className="text-xxs text-yellow-400/70 font-mono truncate" title={appeal.reason}>
+                            Appeal: &quot;{appeal.reason}&quot;
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Operator reason + notes (pinned) */}
+              <div className="px-3 py-2 border-t border-surface-border shrink-0 space-y-1.5">
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <span className="text-xxs text-text-tertiary font-mono uppercase">Reason</span>
+                    <p className="text-xs text-text-primary truncate">{override.reason || '-'}</p>
+                  </div>
+                  <div>
+                    <span className="text-xxs text-text-tertiary font-mono uppercase">Notes</span>
+                    <p className="text-xs text-text-primary truncate">
                       {override.operatorNotes || override.operator_notes || '-'}
                     </p>
                   </div>
                 </div>
               </div>
 
-              {/* Reviewer Notes */}
-              {isAlreadyReviewed ? (
-                <div>
-                  <h3 className="text-xs font-semibold text-text-tertiary mb-1.5 uppercase tracking-wide">
-                    {t('manager.reviewerNotes')}
-                  </h3>
-                  <div className="bg-elevated rounded border border-surface-border px-3 py-2 min-h-[36px]">
-                    <p className="text-sm text-text-primary">
-                      {override.reviewNotes || override.review_notes || '-'}
-                    </p>
-                  </div>
+              {/* History timeline (collapsible) */}
+              {historyEntries.length > 0 && (
+                <div className="border-t border-surface-border shrink-0">
+                  <button onClick={() => setHistoryCollapsed(prev => !prev)}
+                    className="w-full px-3 py-1.5 flex items-center gap-1.5 hover:bg-elevated/50 transition-colors">
+                    <Clock className="w-3 h-3 text-text-tertiary" />
+                    <span className="text-xxs font-mono text-text-tertiary uppercase flex-1 text-left">History</span>
+                    <ChevronDown className={cn("w-3 h-3 text-text-tertiary transition-transform", historyCollapsed ? "-rotate-90" : "rotate-0")} />
+                  </button>
+                  {!historyCollapsed && (
+                    <div className="px-3 pb-2 space-y-1.5 max-h-40 overflow-y-auto">
+                      {historyEntries.map((entry, i) => (
+                        <div key={i} className="flex items-start gap-2">
+                          <div className={cn(
+                            "w-1.5 h-1.5 rounded-full mt-1.5 shrink-0",
+                            entry.type === 'created' ? "bg-phosphor-cyan"
+                              : entry.type === 'reviewed' ? "bg-phosphor-teal"
+                              : entry.type === 'appealed' ? "bg-yellow-400"
+                              : entry.type === 'appeal_approved' ? "bg-phosphor-green"
+                              : "bg-phosphor-red"
+                          )} />
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-xxs font-mono text-text-secondary font-medium">{entry.who}</span>
+                              <span className="text-xxs text-text-tertiary">{formatTime(entry.when)}</span>
+                            </div>
+                            <p className="text-xxs text-text-tertiary truncate" title={entry.text}>{entry.text}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              ) : (
-                <div>
-                  <h3 className="text-xs font-semibold text-text-tertiary mb-1.5 uppercase tracking-wide">
-                    {t('manager.reviewerNotesOptional')}
-                  </h3>
+              )}
+
+              {/* Submit / status area (pinned at bottom) */}
+              {isPending ? (
+                <div className="px-3 py-2 border-t border-surface-border shrink-0 space-y-2">
                   <textarea
                     value={reviewerNotes}
                     onChange={(e) => setReviewerNotes(e.target.value)}
                     placeholder={t('manager.addNotes')}
                     rows={2}
                     disabled={isProcessing}
-                    className="w-full px-3 py-2 bg-elevated border border-surface-border rounded text-sm text-text-primary placeholder-text-tertiary focus:outline-none focus:ring-1 focus:ring-phosphor-teal resize-none disabled:opacity-50"
+                    className="w-full px-2 py-1.5 bg-elevated border border-surface-border rounded text-xs text-text-primary placeholder-text-tertiary focus:outline-none focus:ring-1 focus:ring-phosphor-teal resize-none disabled:opacity-50"
                   />
+                  {allReviewed ? (
+                    <button onClick={() => setShowSummary(true)}
+                      className="w-full h-8 bg-phosphor-teal text-void font-display font-bold text-xs rounded hover:bg-phosphor-teal-bright transition-all flex items-center justify-center gap-1.5">
+                      <CheckCircle className="w-3.5 h-3.5" />
+                      Review Summary &amp; Submit
+                    </button>
+                  ) : (
+                    <div className="text-center">
+                      <span className="text-xxs text-text-tertiary font-mono">
+                        Review all objects to submit ({reviewedCount}/{totalObjects})
+                      </span>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="px-3 py-2 border-t border-surface-border shrink-0">
+                  {override.reviewNotes || override.review_notes ? (
+                    <div className="mb-2">
+                      <span className="text-xxs text-text-tertiary font-mono uppercase">Reviewer Notes</span>
+                      <p className="text-xs text-text-primary">{override.reviewNotes || override.review_notes}</p>
+                    </div>
+                  ) : null}
+                  <button onClick={handleClose}
+                    className="w-full h-8 bg-elevated border border-surface-border text-text-primary font-display font-bold text-xs rounded hover:border-phosphor-teal/50 transition-colors">
+                    Close
+                  </button>
                 </div>
               )}
             </div>
-          )}
-        </div>
+          </>
 
-        {/* ============ Footer ============ */}
-        <div className="px-5 py-3 border-t border-surface-border flex items-center justify-between gap-3 bg-terminal shrink-0">
-          {isMultiObject && showSummary && isPending ? (
-            /* Summary footer: Back + Submit */
-            <>
-              <button
-                onClick={() => setShowSummary(false)}
-                className="px-4 py-2 bg-elevated text-text-primary rounded-lg font-medium text-sm hover:bg-surface-border transition-colors"
-              >
-                Back to Review
-              </button>
-              <button
-                onClick={handleSubmitReview}
-                disabled={isProcessing || !allReviewed}
-                className="px-6 py-2 bg-phosphor-teal text-void rounded-lg font-display font-bold text-sm hover:bg-phosphor-teal-bright transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
-              >
-                {isProcessing ? (
-                  <>
-                    <div className="w-3.5 h-3.5 border-2 border-void/30 border-t-void rounded-full animate-spin" />
-                    {t('manager.processing')}
-                  </>
+        ) : (
+          /* ============ Legacy Single-Image View ============ */
+          <>
+            {/* Left — Image */}
+            <div className="flex-1 relative min-w-0 min-h-0 flex items-center justify-center bg-void">
+              {getLegacyImageUrl() ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={getLegacyImageUrl()}
+                  alt="False call image"
+                  className="max-w-full max-h-full object-contain"
+                />
+              ) : (
+                <div className="flex flex-col items-center justify-center text-text-tertiary">
+                  <ImageIcon className="w-12 h-12 mb-2 opacity-50" />
+                  <p className="text-sm">{t('manager.noImageAvailable')}</p>
+                </div>
+              )}
+            </div>
+
+            {/* Right — Info + Actions */}
+            <div className="w-80 flex flex-col shrink-0 bg-terminal border-l border-surface-border overflow-hidden">
+              <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+                <div>
+                  <span className="text-xs text-text-tertiary font-mono uppercase">AI Flagged</span>
+                  <p className="text-sm text-phosphor-red font-medium">{override.defectType || override.defect_type || 'Unknown'}</p>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <span className="text-xs text-text-tertiary font-mono uppercase">{t('hmi.reason')}</span>
+                    <p className="text-sm text-text-primary">{override.reason || '-'}</p>
+                  </div>
+                  <div>
+                    <span className="text-xs text-text-tertiary font-mono uppercase">{t('manager.operatorNotes')}</span>
+                    <p className="text-sm text-text-primary">{override.operatorNotes || override.operator_notes || '-'}</p>
+                  </div>
+                </div>
+
+                {isAlreadyReviewed ? (
+                  <div>
+                    <span className="text-xs text-text-tertiary font-mono uppercase">{t('manager.reviewerNotes')}</span>
+                    <p className="text-sm text-text-primary">{override.reviewNotes || override.review_notes || '-'}</p>
+                  </div>
                 ) : (
-                  <>
-                    <CheckCircle className="w-4 h-4" />
-                    Submit Review
-                  </>
+                  <div>
+                    <span className="text-xs text-text-tertiary font-mono uppercase">{t('manager.reviewerNotesOptional')}</span>
+                    <textarea
+                      value={reviewerNotes}
+                      onChange={(e) => setReviewerNotes(e.target.value)}
+                      placeholder={t('manager.addNotes')}
+                      rows={2}
+                      disabled={isProcessing}
+                      className="w-full mt-1 px-3 py-2 bg-elevated border border-surface-border rounded text-sm text-text-primary placeholder-text-tertiary focus:outline-none focus:ring-1 focus:ring-phosphor-teal resize-none disabled:opacity-50"
+                    />
+                  </div>
                 )}
-              </button>
-            </>
 
-          ) : isMultiObject && isPending ? (
-            /* Per-object footer: progress + submit */
-            <>
-              <div className="flex items-center gap-3">
-                <span className="text-xs text-text-tertiary font-mono">
-                  {reviewedCount}/{totalObjects} reviewed
-                </span>
-                {approvedCount > 0 && (
-                  <span className="text-xs font-mono text-phosphor-green">{approvedCount} approved</span>
-                )}
-                {rejectedCount > 0 && (
-                  <span className="text-xs font-mono text-phosphor-red">{rejectedCount} rejected</span>
+                {/* History timeline */}
+                {historyEntries.length > 0 && (
+                  <div className="border-t border-surface-border pt-3">
+                    <button onClick={() => setHistoryCollapsed(prev => !prev)}
+                      className="flex items-center gap-1.5 mb-2">
+                      <Clock className="w-3 h-3 text-text-tertiary" />
+                      <span className="text-xxs font-mono text-text-tertiary uppercase">History</span>
+                      <ChevronDown className={cn("w-3 h-3 text-text-tertiary transition-transform", historyCollapsed ? "-rotate-90" : "rotate-0")} />
+                    </button>
+                    {!historyCollapsed && (
+                      <div className="space-y-1.5">
+                        {historyEntries.map((entry, i) => (
+                          <div key={i} className="flex items-start gap-2">
+                            <div className={cn(
+                              "w-1.5 h-1.5 rounded-full mt-1.5 shrink-0",
+                              entry.type === 'created' ? "bg-phosphor-cyan"
+                                : entry.type === 'reviewed' ? "bg-phosphor-teal"
+                                : entry.type === 'appealed' ? "bg-yellow-400"
+                                : entry.type === 'appeal_approved' ? "bg-phosphor-green"
+                                : "bg-phosphor-red"
+                            )} />
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-xxs font-mono text-text-secondary font-medium">{entry.who}</span>
+                                <span className="text-xxs text-text-tertiary">{formatTime(entry.when)}</span>
+                              </div>
+                              <p className="text-xxs text-text-tertiary truncate" title={entry.text}>{entry.text}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
-              {allReviewed ? (
-                <button
-                  onClick={() => setShowSummary(true)}
-                  className="px-5 py-2 bg-phosphor-teal text-void rounded-lg font-display font-bold text-sm hover:bg-phosphor-teal-bright transition-all flex items-center gap-1.5"
-                >
-                  <CheckCircle className="w-4 h-4" />
-                  Review Summary
-                </button>
+
+              {/* Actions */}
+              {isAlreadyReviewed ? (
+                <div className="px-4 py-3 border-t border-surface-border shrink-0">
+                  <button onClick={handleClose}
+                    className="w-full h-9 bg-elevated border border-surface-border text-text-primary font-display font-bold text-sm rounded-lg hover:border-phosphor-teal/50 transition-colors">
+                    {t('buttons.close')}
+                  </button>
+                </div>
               ) : (
-                <span className="text-xs text-text-tertiary font-mono">
-                  Review all objects to submit
-                </span>
+                <div className="px-4 py-3 border-t border-surface-border shrink-0 flex gap-2">
+                  <button onClick={handleReject} disabled={isProcessing}
+                    className="flex-1 h-9 border border-phosphor-red text-phosphor-red rounded-lg font-medium text-sm hover:bg-phosphor-red/10 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5">
+                    {isProcessing ? <div className="w-3.5 h-3.5 border-2 border-phosphor-red/30 border-t-phosphor-red rounded-full animate-spin" /> : <XCircle className="w-4 h-4" />}
+                    {t('manager.reject')}
+                  </button>
+                  <button onClick={handleApprove} disabled={isProcessing}
+                    className="flex-1 h-9 bg-phosphor-green text-void rounded-lg font-display font-bold text-sm hover:bg-phosphor-green-bright transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5">
+                    {isProcessing ? <><div className="w-3.5 h-3.5 border-2 border-void/30 border-t-void rounded-full animate-spin" />{t('manager.processing')}</> : <><CheckCircle className="w-4 h-4" />{t('manager.approve')}</>}
+                  </button>
+                </div>
               )}
-            </>
-
-          ) : isAlreadyReviewed ? (
-            /* Read-only footer */
-            <div className="flex items-center justify-end w-full">
-              <button
-                onClick={handleClose}
-                className="px-4 py-2 bg-elevated text-text-primary rounded-lg font-medium text-sm hover:bg-surface-border transition-colors"
-              >
-                {t('buttons.close')}
-              </button>
             </div>
-
-          ) : (
-            /* Legacy single-decision footer */
-            <div className="flex items-center justify-end gap-3 w-full">
-              <button
-                onClick={handleReject}
-                disabled={isProcessing}
-                className="px-4 py-2 border border-phosphor-red text-phosphor-red rounded-lg font-medium text-sm hover:bg-phosphor-red/10 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
-              >
-                {isProcessing ? (
-                  <div className="w-3.5 h-3.5 border-2 border-phosphor-red/30 border-t-phosphor-red rounded-full animate-spin" />
-                ) : (
-                  <XCircle className="w-4 h-4" />
-                )}
-                {t('manager.reject')}
-              </button>
-
-              <button
-                onClick={handleApprove}
-                disabled={isProcessing}
-                className="px-5 py-2 bg-phosphor-green text-void rounded-lg font-display font-bold text-sm hover:bg-phosphor-green-bright transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
-              >
-                {isProcessing ? (
-                  <>
-                    <div className="w-3.5 h-3.5 border-2 border-void/30 border-t-void rounded-full animate-spin" />
-                    {t('manager.processing')}
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle className="w-4 h-4" />
-                    {t('manager.approve')}
-                  </>
-                )}
-              </button>
-            </div>
-          )}
-        </div>
+          </>
+        )}
       </div>
     </div>
   );
@@ -782,218 +1076,8 @@ export default function OverrideReviewModal({
 // Sub-components
 // ====================================================================
 
-/** SN Group — collapsible group of objects sharing the same serial number */
-function SnGroup({
-  sn, objects, objectDecisions, activeObjectKey, isPending,
-  canAppeal, appealDecisions, appealingKey, appealReason, appealProcessing,
-  onSelectObject, onDecision,
-  onStartAppeal, onCancelAppeal, onAppealReasonChange, onSubmitAppeal,
-}) {
-  const [collapsed, setCollapsed] = useState(false);
-
-  const decidedCount = objects.filter(o => objectDecisions[o.key] != null).length;
-  const allDecided = decidedCount === objects.length;
-  const hasRejection = objects.some(o => objectDecisions[o.key] === 'rejected');
-
-  return (
-    <div className="border-b border-surface-border">
-      {/* SN header */}
-      <button
-        onClick={() => setCollapsed(prev => !prev)}
-        className={cn(
-          "w-full flex items-center gap-2 px-3 py-1.5 text-left hover:bg-elevated/50 transition-colors",
-          allDecided
-            ? hasRejection ? "bg-phosphor-red/5" : "bg-phosphor-green/5"
-            : ""
-        )}
-      >
-        <Hash className="w-3 h-3 text-text-tertiary shrink-0" />
-        <span className="font-mono text-xs font-medium text-text-primary truncate flex-1">{sn}</span>
-        <span className="text-xxs text-text-tertiary font-mono shrink-0">{decidedCount}/{objects.length}</span>
-        {allDecided && (
-          <span className={cn(
-            "w-4 h-4 shrink-0",
-            hasRejection ? "text-phosphor-red" : "text-phosphor-green"
-          )}>
-            {hasRejection ? <XCircle className="w-4 h-4" /> : <CheckCircle className="w-4 h-4" />}
-          </span>
-        )}
-        {collapsed ? <ChevronDown className="w-3 h-3 text-text-tertiary shrink-0" /> : <ChevronUp className="w-3 h-3 text-text-tertiary shrink-0" />}
-      </button>
-
-      {/* Object rows */}
-      {!collapsed && objects.map(obj => {
-        const isActive = obj.key === activeObjectKey;
-        const decision = objectDecisions[obj.key];
-        const hasDecision = decision != null;
-        const appeal = appealDecisions?.[obj.key];
-        const isAppealed = appeal?.status === 'appealed';
-        const isAppealResolved = appeal?.status === 're_approved' || appeal?.status === 're_rejected';
-        const isAppealingThis = appealingKey === obj.key;
-        const alreadyAppealed = !!appeal;
-
-        return (
-          <div key={obj.key}>
-            <div
-              onClick={() => onSelectObject(obj.key)}
-              className={cn(
-                "flex items-center gap-2 px-3 py-1.5 cursor-pointer transition-all border-l-2",
-                isActive
-                  ? "bg-phosphor-teal/10 border-l-phosphor-teal"
-                  : isAppealed
-                    ? "bg-yellow-500/5 border-l-yellow-500/50"
-                    : hasDecision
-                      ? decision === 'approved'
-                        ? "bg-phosphor-green/5 border-l-phosphor-green/50 hover:bg-phosphor-green/10"
-                        : "bg-phosphor-red/5 border-l-phosphor-red/50 hover:bg-phosphor-red/10"
-                      : "border-l-transparent hover:bg-elevated/50"
-              )}
-            >
-              {/* Object info */}
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1.5">
-                  {/* Label color dot */}
-                  <span className={cn(
-                    "w-1.5 h-1.5 rounded-full shrink-0",
-                    (obj.label === 1 || obj.label === true) ? "bg-phosphor-red" : "bg-phosphor-green"
-                  )} />
-                  <span className={cn(
-                    "text-xs font-medium truncate",
-                    isActive ? "text-phosphor-teal" : "text-text-primary"
-                  )}>
-                    {obj.name}
-                  </span>
-                  <span className="text-xxs text-text-tertiary font-mono shrink-0">
-                    {obj.score != null ? `${(obj.score * 100).toFixed(0)}%` : ''}
-                  </span>
-                </div>
-                {obj.box && obj.box.length >= 4 && (
-                  <span className="text-[9px] text-text-tertiary/60 font-mono block ml-3">
-                    [{Math.round(obj.box[0])}, {Math.round(obj.box[1])}, {Math.round(obj.box[2])}, {Math.round(obj.box[3])}]
-                  </span>
-                )}
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xxs text-text-tertiary font-mono">
-                    {obj.frameSide} F{obj.frameIndex}
-                  </span>
-                  {isAppealed && (
-                    <span className="text-xxs font-mono text-yellow-400 flex items-center gap-0.5">
-                      <AlertTriangle className="w-2.5 h-2.5" /> Appealed
-                    </span>
-                  )}
-                  {isAppealResolved && (
-                    <span className={cn(
-                      "text-xxs font-mono flex items-center gap-0.5",
-                      appeal.status === 're_approved' ? "text-phosphor-green" : "text-phosphor-red"
-                    )}>
-                      {appeal.status === 're_approved' ? 'Re-approved' : 'Re-rejected'}
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              {/* Approve/Reject buttons (pending) or status badge + appeal button (reviewed) */}
-              {isPending ? (
-                <div className="flex items-center rounded overflow-hidden border border-surface-border shrink-0">
-                  <button
-                    onClick={(e) => { e.stopPropagation(); onDecision(obj.key, 'approved'); }}
-                    className={cn(
-                      "px-1.5 py-0.5 transition-all",
-                      decision === 'approved'
-                        ? "bg-phosphor-green/20 text-phosphor-green"
-                        : "text-text-tertiary hover:text-phosphor-green hover:bg-phosphor-green/5"
-                    )}
-                    title="Approve (A)"
-                  >
-                    <CheckCircle className="w-3.5 h-3.5" />
-                  </button>
-                  <div className="w-px h-4 bg-surface-border" />
-                  <button
-                    onClick={(e) => { e.stopPropagation(); onDecision(obj.key, 'rejected'); }}
-                    className={cn(
-                      "px-1.5 py-0.5 transition-all",
-                      decision === 'rejected'
-                        ? "bg-phosphor-red/20 text-phosphor-red"
-                        : "text-text-tertiary hover:text-phosphor-red hover:bg-phosphor-red/5"
-                    )}
-                    title="Reject (R)"
-                  >
-                    <XCircle className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              ) : (
-                <div className="flex items-center gap-1 shrink-0">
-                  {hasDecision && (
-                    <span className={cn(
-                      "text-xxs font-mono font-medium px-1.5 py-0.5 rounded",
-                      decision === 'approved' ? "bg-phosphor-green/15 text-phosphor-green" : "bg-phosphor-red/15 text-phosphor-red"
-                    )}>
-                      {decision === 'approved' ? 'OK' : 'NG'}
-                    </span>
-                  )}
-                  {/* Appeal button — only for reviewed overrides, 1x per object */}
-                  {canAppeal && hasDecision && !alreadyAppealed && (
-                    <button
-                      onClick={(e) => { e.stopPropagation(); onStartAppeal(obj.key); }}
-                      className="px-1.5 py-0.5 text-xxs font-mono text-yellow-400 hover:bg-yellow-500/10 rounded transition-colors"
-                      title="Appeal this decision"
-                    >
-                      <MessageSquare className="w-3 h-3" />
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Inline appeal form */}
-            {isAppealingThis && (
-              <div className="px-3 py-2 bg-yellow-500/5 border-l-2 border-l-yellow-500/50 space-y-1.5">
-                <p className="text-xxs text-yellow-400 font-mono">Appeal reason (required):</p>
-                <textarea
-                  value={appealReason}
-                  onChange={(e) => onAppealReasonChange(e.target.value)}
-                  placeholder="Explain why this decision should be re-reviewed..."
-                  rows={2}
-                  className="w-full px-2 py-1.5 bg-elevated border border-surface-border rounded text-xs text-text-primary placeholder-text-tertiary focus:outline-none focus:ring-1 focus:ring-yellow-500/50 resize-none"
-                  autoFocus
-                />
-                <div className="flex items-center gap-2 justify-end">
-                  <button
-                    onClick={(e) => { e.stopPropagation(); onCancelAppeal(); }}
-                    className="px-2 py-1 text-xxs text-text-tertiary hover:text-text-primary transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); onSubmitAppeal(); }}
-                    disabled={!appealReason.trim() || appealProcessing}
-                    className="px-2 py-1 text-xxs bg-yellow-500/20 text-yellow-400 rounded hover:bg-yellow-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
-                  >
-                    {appealProcessing && <div className="w-2.5 h-2.5 border border-yellow-400/30 border-t-yellow-400 rounded-full animate-spin" />}
-                    Submit Appeal
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Show existing appeal info */}
-            {appeal && !isAppealingThis && (
-              <div className="px-3 py-1 bg-yellow-500/5 border-l-2 border-l-yellow-500/30">
-                <p className="text-xxs text-yellow-400/70 font-mono truncate" title={appeal.reason}>
-                  Appeal: &quot;{appeal.reason}&quot;
-                </p>
-              </div>
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
 /** Summary View — shows review decisions grouped by SN */
 function SummaryView({ objectsBySn, snList, objectDecisions, onClickObject, t }) {
-  // Count PCB-level verdicts
   const pcbNgCount = snList.filter(sn => {
     const objs = objectsBySn[sn];
     return objs.some(o => objectDecisions[o.key] === 'rejected');
@@ -1031,7 +1115,6 @@ function SummaryView({ objectsBySn, snList, objectDecisions, onClickObject, t })
                 hasRejection ? "bg-phosphor-red/5" : "bg-phosphor-green/5"
               )}>
                 <div className="flex items-center gap-2">
-                  <Hash className="w-3 h-3 text-text-tertiary" />
                   <span className="font-mono text-xs font-medium text-text-primary">{sn}</span>
                   <span className="text-xxs text-text-tertiary font-mono">
                     {objs.length} object{objs.length !== 1 ? 's' : ''}

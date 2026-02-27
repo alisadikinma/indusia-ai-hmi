@@ -1,8 +1,9 @@
 'use client'
 
-import { useState, useRef, useCallback, useEffect } from 'react'
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import { ZoomIn, ZoomOut, RotateCcw, Maximize2, Minimize2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { normalizeBox, computeBboxScale } from '@/lib/utils/inspectionReview'
 
 const MIN_ZOOM = 0.5  // relative to fit scale
 const MAX_ZOOM = 12
@@ -76,10 +77,14 @@ export default function ImageViewer({
   }, [])
 
   // Recalculate fit scale when natural size or container changes
+  // Use requestAnimationFrame to ensure DOM has updated after fullscreen toggle
   useEffect(() => {
     if (!naturalSize || !imgLoaded) return
-    const fs = calcFitScale()
-    setFitScale(fs)
+    const raf = requestAnimationFrame(() => {
+      const fs = calcFitScale()
+      setFitScale(fs)
+    })
+    return () => cancelAnimationFrame(raf)
   }, [naturalSize, imgLoaded, calcFitScale, isFullscreen])
 
   // ResizeObserver: recalculate fitScale + centering when container resizes
@@ -94,55 +99,37 @@ export default function ImageViewer({
   }, [naturalSize, imgLoaded, calcFitScale])
 
   // Center image when fit-to-container at zoom=1
+  // Centers regardless of activeObjectIndex since auto-zoom to bbox is disabled
   useEffect(() => {
     if (!imgLoaded || !containerRef.current || !naturalSize) return
-    if (zoom === 1 && activeObjectIndex < 0) {
-      // Center the fitted image
-      const rect = containerRef.current.getBoundingClientRect()
-      const fs = calcFitScale()
-      const imgW = naturalSize.width * fs
-      const imgH = naturalSize.height * fs
-      setTranslate({
-        x: (rect.width - imgW) / 2,
-        y: (rect.height - imgH) / 2,
+    if (zoom === 1) {
+      // Use rAF to ensure DOM layout is settled (especially after fullscreen toggle)
+      const raf = requestAnimationFrame(() => {
+        if (!containerRef.current) return
+        const rect = containerRef.current.getBoundingClientRect()
+        const fs = calcFitScale()
+        const imgW = naturalSize.width * fs
+        const imgH = naturalSize.height * fs
+        setTranslate({
+          x: (rect.width - imgW) / 2,
+          y: (rect.height - imgH) / 2,
+        })
       })
+      return () => cancelAnimationFrame(raf)
     }
-  }, [imgLoaded, fitScale, zoom, activeObjectIndex, naturalSize, calcFitScale])
+  }, [imgLoaded, fitScale, zoom, naturalSize, calcFitScale, isFullscreen])
 
   // The actual CSS scale applied to the image wrapper
   const actualScale = fitScale * zoom
 
-  // Zoom to object bbox
-  useEffect(() => {
-    if (activeObjectIndex < 0 || !objects[activeObjectIndex] || !containerRef.current || !naturalSize) return
+  // Detect if bbox coords are in a different resolution than the image
+  const bboxScale = useMemo(
+    () => computeBboxScale(naturalSize, objects),
+    [naturalSize, objects]
+  )
 
-    const obj = objects[activeObjectIndex]
-    const [x1, y1, x2, y2] = obj.box
-    const centerX = (x1 + x2) / 2
-    const centerY = (y1 + y2) / 2
-    const bboxW = x2 - x1
-    const bboxH = y2 - y1
-
-    const container = containerRef.current
-    const containerRect = container.getBoundingClientRect()
-
-    // Determine zoom level to fit bbox nicely
-    const padding = 100 // pixels of padding around bbox in container
-    const fitZoomX = containerRect.width / ((bboxW * fitScale) + padding)
-    const fitZoomY = containerRect.height / ((bboxH * fitScale) + padding)
-    const targetZoom = Math.min(Math.max(Math.min(fitZoomX, fitZoomY), ZOOM_TO_BBOX_MIN), MAX_ZOOM)
-
-    const targetScale = fitScale * targetZoom
-
-    // Translate so bbox center aligns with container center
-    const displayCenterX = centerX * targetScale
-    const displayCenterY = centerY * targetScale
-    const newX = containerRect.width / 2 - displayCenterX
-    const newY = containerRect.height / 2 - displayCenterY
-
-    setZoom(targetZoom)
-    setTranslate({ x: newX, y: newY })
-  }, [activeObjectIndex, objects, naturalSize, imgLoaded, fitScale])
+  // Auto-zoom to bbox removed — operator prefers full PCB view at all times.
+  // Clicking an object in the list highlights its bbox but does NOT zoom/pan.
 
   // Zoom controls (relative zoom)
   const zoomIn = useCallback(() => {
@@ -160,6 +147,9 @@ export default function ImageViewer({
 
   const toggleFullscreen = useCallback(() => {
     setIsFullscreen(prev => !prev)
+    // Reset view so fitScale recalculates for new container size
+    setZoom(1)
+    setTranslate({ x: 0, y: 0 })
   }, [])
 
   // Mouse wheel zoom
@@ -195,7 +185,9 @@ export default function ImageViewer({
 
     return objects.map((obj, i) => {
       if (!obj.box || obj.box.length < 4) return null
-      const [x1, y1, x2, y2] = obj.box
+      const [rx1, ry1, rx2, ry2] = normalizeBox(obj.box)
+      const x1 = rx1 * bboxScale.x, y1 = ry1 * bboxScale.y
+      const x2 = rx2 * bboxScale.x, y2 = ry2 * bboxScale.y
       const isActive = i === activeObjectIndex
       // Color by label: label=0/false → GOOD (green), label=1/true → NG (red)
       const isGoodLabel = obj.label === 0 || obj.label === false
@@ -242,7 +234,7 @@ export default function ImageViewer({
   }
 
   const wrapperClass = isFullscreen
-    ? 'fixed inset-0 z-50 bg-black flex items-center justify-center'
+    ? 'fixed inset-0 z-50 bg-black overflow-hidden'
     : cn('relative overflow-hidden rounded-lg bg-black/90', className)
 
   // Percentage for display (100% = fit to container)

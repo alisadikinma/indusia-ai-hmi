@@ -9,6 +9,7 @@
 import { useRef, useEffect, useState } from 'react'
 import { useI18n } from '@/context/I18nContext'
 import { useTheme } from '@/context/ThemeContext'
+import { normalizeBox, computeBboxScale } from '@/lib/utils/inspectionReview'
 
 /** Read a CSS variable (RGB triplet) and return a canvas-usable color string */
 function getCSSColor(varName, alpha = 1) {
@@ -134,14 +135,20 @@ export function DetectionOverlay({
 
       ctx.drawImage(imageRef.current, drawX, drawY, drawW, drawH)
 
-      // Draw detections (scale coordinates)
-      const scaleX = drawW / imageRef.current.width
-      const scaleY = drawH / imageRef.current.height
+      // Detect if bbox coords are in a different resolution than the image
+      const imgW = imageRef.current.width
+      const imgH = imageRef.current.height
+      const bboxObjs = detections.filter(d => d.bbox?.length === 4).map(d => ({ box: d.bbox }))
+      const bs = computeBboxScale({ width: imgW, height: imgH }, bboxObjs)
+
+      // Scale: bbox coords → image pixels → canvas display pixels
+      const scaleX = (drawW / imgW) * bs.x
+      const scaleY = (drawH / imgH) * bs.y
 
       detections.forEach(det => {
         if (!det.bbox || det.bbox.length !== 4) return
 
-        const [x1, y1, x2, y2] = det.bbox
+        const [x1, y1, x2, y2] = normalizeBox(det.bbox)
         const confidence = det.confidence || 0
 
         // Scale coordinates

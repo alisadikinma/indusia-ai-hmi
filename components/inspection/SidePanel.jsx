@@ -16,7 +16,6 @@ import { cn } from '@/lib/utils'
 import { ZoomIn, ZoomOut, Maximize2, AlertCircle, CheckCircle2 } from 'lucide-react'
 import { useI18n } from '@/context/I18nContext'
 import { classifySerialNumber, isRealPcb, SN_TYPE } from '@/lib/utils/serialNumber'
-import { getModelImage } from '@/lib/utils/modelImages'
 
 // Defect type color mapping
 const DEFECT_COLORS = {
@@ -62,8 +61,7 @@ export function SidePanel({ side, frames = [], className, onFrameClick, reviewin
   // Current active frame — prefer static model image, then raw_url, then url
   const activeFrame = frames[activeFrameIndex] || null
   const activeIsEmpty = hasSerialData && !isRealPcb(activeFrame?.serial_number)
-  const staticImage = getModelImage(modelName, side)
-  const imageUrl = staticImage || activeFrame?.image_raw_url || activeFrame?.image_url
+  const imageUrl = activeFrame?.image_raw_url || activeFrame?.image_url
   const objects = activeFrame?.objects || []
 
   // Use frame-level label (true=NG, false=GOOD) as the authoritative AI verdict.

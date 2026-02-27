@@ -17,14 +17,13 @@
  * 8. Auto-NG countdown resets per object
  */
 
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { cn } from '@/lib/utils'
-import { findNextUnreviewedFrame, computePcbCounts } from '@/lib/utils/inspectionReview'
+import { findNextUnreviewedFrame, computePcbCounts, normalizeBox } from '@/lib/utils/inspectionReview'
 import { classifySerialNumber, isRealPcb, SN_TYPE } from '@/lib/utils/serialNumber'
-import { X, CheckCircle2, AlertCircle, Timer, Hash, ChevronLeft, ChevronRight } from 'lucide-react'
+import { X, Timer, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react'
 import { useI18n } from '@/context/I18nContext'
 import ImageViewer from '@/components/common/ImageViewer'
-import { getModelImage } from '@/lib/utils/modelImages'
 
 const AUTO_NG_DELAY_MS = 10000 // 10 seconds per object
 
@@ -71,9 +70,96 @@ function deriveFrameDecisions(allObjects, objectDecisions) {
   return result
 }
 
+/** Single object row — extracted for accordion reuse */
+function ObjectRow({ obj, idx, isActive, isObjNG, isReviewed, decisionIsNG, onSelect, onGood, onNG, showCheckbox, isChecked, onToggleCheck }) {
+  return (
+    <div
+      onClick={() => onSelect(idx)}
+      className={cn(
+        "px-3 py-1.5 cursor-pointer transition-all border-l-2",
+        isActive
+          ? "bg-phosphor-teal/10 border-l-phosphor-teal"
+          : isReviewed
+            ? decisionIsNG
+              ? "bg-phosphor-red/5 border-l-phosphor-red/50"
+              : "bg-phosphor-green/5 border-l-phosphor-green/50"
+            : isObjNG
+              ? "border-l-phosphor-red/30 hover:bg-elevated/50"
+              : "bg-phosphor-green/5 border-l-phosphor-green/30"
+      )}
+    >
+      <div className="flex items-center gap-2">
+        {showCheckbox && (
+          <input
+            type="checkbox"
+            checked={isChecked || false}
+            onChange={() => onToggleCheck?.(obj.key)}
+            onClick={(e) => e.stopPropagation()}
+            className="w-3.5 h-3.5 shrink-0 accent-phosphor-teal cursor-pointer"
+          />
+        )}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5">
+            <span className={cn(
+              "w-1.5 h-1.5 rounded-full shrink-0",
+              isObjNG ? "bg-phosphor-red" : "bg-phosphor-green"
+            )} />
+            <span className={cn(
+              "text-xs font-medium truncate",
+              isActive ? "text-phosphor-teal"
+                : isObjNG ? "text-text-primary" : "text-phosphor-green/80"
+            )}>
+              {obj.name}
+            </span>
+            <span className="text-xxs text-text-tertiary font-mono shrink-0">
+              {obj.score != null ? `${(obj.score * 100).toFixed(0)}%` : ''}
+            </span>
+          </div>
+          {obj.box && obj.box.length >= 4 && (() => {
+            const [nx1, ny1, nx2, ny2] = normalizeBox(obj.box)
+            return (
+              <span className="text-[9px] text-text-tertiary/60 font-mono block ml-3">
+                [{Math.round(nx1)}, {Math.round(ny1)}, {Math.round(nx2)}, {Math.round(ny2)}]
+              </span>
+            )
+          })()}
+        </div>
+        {!isObjNG ? (
+          <span className="text-xxs font-mono font-medium px-1.5 py-0.5 rounded shrink-0 bg-phosphor-green/15 text-phosphor-green">
+            GOOD
+          </span>
+        ) : isReviewed ? (
+          <span className={cn(
+            "text-xxs font-mono font-medium px-1.5 py-0.5 rounded shrink-0",
+            decisionIsNG ? "bg-phosphor-red/15 text-phosphor-red" : "bg-phosphor-green/15 text-phosphor-green"
+          )}>
+            {decisionIsNG ? 'NG' : 'OK'}
+          </span>
+        ) : (
+          <div className="flex gap-1 shrink-0">
+            <button
+              onClick={(e) => { e.stopPropagation(); onSelect(idx); onGood?.(idx) }}
+              className="px-2 py-1 text-xxs font-mono font-bold rounded bg-phosphor-green/10 border border-phosphor-green/40 text-phosphor-green hover:bg-phosphor-green/25 transition-colors"
+              title="GOOD (G)"
+            >
+              OK
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); onSelect(idx); onNG?.(idx) }}
+              className="px-2 py-1 text-xxs font-mono font-bold rounded bg-phosphor-red/10 border border-phosphor-red/40 text-phosphor-red hover:bg-phosphor-red/25 transition-colors"
+              title="NG (N)"
+            >
+              NG
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export function CavityReviewOverlay({
   inspection,
-  modelName: modelNameProp,
   queuePosition,
   queueTotal,
   autoNgEnabled,
@@ -83,7 +169,9 @@ export function CavityReviewOverlay({
   falseCallReasons = [],
   initialFrameIndex = 0,
   initialDecisions = {},
+  initialObjectDecisions = {},
   onDecisionChange,
+  onObjectDecisionsChange,
   cavityCount = 0,
   topFrameCount = 0,
   bottomFrameCount = 0,
@@ -107,7 +195,7 @@ export function CavityReviewOverlay({
     return frames
   }, [inspection])
 
-  // Flatten all objects across all NG frames
+  // Flatten all objects across all NG frames, sorted: NG first (by Y,X coords), then GOOD
   const allObjects = useMemo(() => {
     const result = []
     ngFrames.forEach(frame => {
@@ -123,6 +211,17 @@ export function CavityReviewOverlay({
         })
       })
     })
+    // Sort: NG objects first (sorted by Y then X coordinate), GOOD objects after
+    const isNG = o => o.label === 1 || o.label === true
+    result.sort((a, b) => {
+      const aNg = isNG(a) ? 0 : 1
+      const bNg = isNG(b) ? 0 : 1
+      if (aNg !== bNg) return aNg - bNg
+      // Within same group, sort by Y coordinate then X
+      const [ax1, ay1] = normalizeBox(a.box || [0,0,0,0])
+      const [bx1, by1] = normalizeBox(b.box || [0,0,0,0])
+      return ay1 - by1 || ax1 - bx1
+    })
     return result
   }, [ngFrames])
 
@@ -137,10 +236,16 @@ export function CavityReviewOverlay({
   const [activeObjectIdx, setActiveObjectIdx] = useState(null)
   // Active frame index for multi-frame navigation (thumbnail strip)
   const [activeFrameIdx, setActiveFrameIdx] = useState(0)
-  const [objectDecisions, setObjectDecisions] = useState({})
+  const [objectDecisions, setObjectDecisions] = useState(initialObjectDecisions)
   const [showReasonInput, setShowReasonInput] = useState(false)
   const [selectedReason, setSelectedReason] = useState('')
   const [otherText, setOtherText] = useState('')
+  // Accordion: 'ng' or 'good' — only one expanded at a time
+  const [expandedSection, setExpandedSection] = useState('ng')
+  // Bulk action: when true, footer shows reason picker for bulk OK
+  const [bulkReasonMode, setBulkReasonMode] = useState(false)
+  // Bulk selection: set of object keys selected for bulk action
+  const [bulkSelected, setBulkSelected] = useState(() => new Set())
 
   // Legacy per-frame state (when no objects)
   const [reviewIndex, setReviewIndex] = useState(0)
@@ -177,15 +282,23 @@ export function CavityReviewOverlay({
     return activeObject.objectIndex
   }, [activeObjectIdx, activeObject, currentFrame])
 
+  // Bubble up objectDecisions to parent for persistence
+  useEffect(() => {
+    onObjectDecisionsChange?.(objectDecisions)
+  }, [objectDecisions]) // eslint-disable-line react-hooks/exhaustive-deps
+
   // Reset when inspection changes
   useEffect(() => {
     setActiveObjectIdx(null)
     setActiveFrameIdx(0)
-    setObjectDecisions({})
+    setObjectDecisions(initialObjectDecisions)
     setFrameDecisions(initialDecisions)
     setShowReasonInput(false)
     setSelectedReason('')
     setOtherText('')
+    setExpandedSection('ng')
+    setBulkReasonMode(false)
+    setBulkSelected(new Set())
     setReviewIndex(initialFrameIndex)
   }, [inspection]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -376,6 +489,75 @@ export function CavityReviewOverlay({
     setShowReasonInput(true)
   }, [allObjects, objectDecisions])
 
+  // ── Bulk actions ──
+  const unreviewed = useMemo(() =>
+    ngOnlyObjects.filter(o => objectDecisions[o.key] == null),
+    [ngOnlyObjects, objectDecisions]
+  )
+  const unreviewedCount = unreviewed.length
+
+  // Effective selection: only unreviewed objects that are still selected
+  const effectiveBulkSelected = useMemo(() => {
+    const unreviewedKeys = new Set(unreviewed.map(o => o.key))
+    return new Set([...bulkSelected].filter(k => unreviewedKeys.has(k)))
+  }, [bulkSelected, unreviewed])
+  const bulkSelectedCount = effectiveBulkSelected.size
+
+  const toggleBulkSelect = useCallback((key) => {
+    setBulkSelected(prev => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }, [])
+
+  const toggleSelectAll = useCallback(() => {
+    if (effectiveBulkSelected.size === unreviewed.length) {
+      setBulkSelected(new Set())
+    } else {
+      setBulkSelected(new Set(unreviewed.map(o => o.key)))
+    }
+  }, [effectiveBulkSelected.size, unreviewed])
+
+  const handleBulkNG = useCallback(() => {
+    if (countdownRef.current) clearInterval(countdownRef.current)
+    const newDecisions = { ...objectDecisions }
+    for (const obj of unreviewed) {
+      if (!effectiveBulkSelected.has(obj.key)) continue
+      newDecisions[obj.key] = 'REAL_NG'
+      const frameKey = `${obj.frameSide}-${obj.frameIndex}`
+      onDecisionChange?.(frameKey, 'REAL_NG')
+    }
+    setObjectDecisions(newDecisions)
+    setBulkSelected(new Set())
+    setShowReasonInput(false)
+    setBulkReasonMode(false)
+  }, [objectDecisions, unreviewed, effectiveBulkSelected, onDecisionChange])
+
+  const handleBulkOK = useCallback(() => {
+    setBulkReasonMode(true)
+    setShowReasonInput(true)
+  }, [])
+
+  const handleSubmitBulkFalseCall = useCallback(() => {
+    const effectiveReason = selectedReason === 'other' ? otherText.trim() : selectedReason.trim()
+    if (!effectiveReason) return
+    const newDecisions = { ...objectDecisions }
+    for (const obj of unreviewed) {
+      if (!effectiveBulkSelected.has(obj.key)) continue
+      newDecisions[obj.key] = effectiveReason
+      const frameKey = `${obj.frameSide}-${obj.frameIndex}`
+      onDecisionChange?.(frameKey, effectiveReason)
+    }
+    setObjectDecisions(newDecisions)
+    setBulkSelected(new Set())
+    setShowReasonInput(false)
+    setBulkReasonMode(false)
+    setSelectedReason('')
+    setOtherText('')
+  }, [objectDecisions, unreviewed, effectiveBulkSelected, selectedReason, otherText, onDecisionChange])
+
   // Auto-NG countdown
   useEffect(() => {
     const isCurrentReviewed = hasObjects
@@ -418,12 +600,21 @@ export function CavityReviewOverlay({
       } else if (e.key === 'g' || e.key === 'G') {
         e.preventDefault()
         handleObjectGood()
-      } else if (hasObjects && (e.key === 'ArrowDown' || e.key === 'ArrowRight')) {
+      } else if (hasObjects && (e.key === 'ArrowDown' || e.key === 'ArrowRight') && !e.ctrlKey) {
         e.preventDefault()
         setActiveObjectIdx(prev => prev == null ? 0 : Math.min(allObjects.length - 1, prev + 1))
-      } else if (hasObjects && (e.key === 'ArrowUp' || e.key === 'ArrowLeft')) {
+      } else if (hasObjects && (e.key === 'ArrowUp' || e.key === 'ArrowLeft') && !e.ctrlKey) {
         e.preventDefault()
         setActiveObjectIdx(prev => prev == null ? 0 : Math.max(0, prev - 1))
+      } else if (ngFrames.length > 1 && (e.key === 'ArrowRight' || e.key === 'ArrowDown') && e.ctrlKey) {
+        // Ctrl+Arrow: switch frames
+        e.preventDefault()
+        setActiveFrameIdx(prev => Math.min(ngFrames.length - 1, prev + 1))
+        setActiveObjectIdx(null)
+      } else if (ngFrames.length > 1 && (e.key === 'ArrowLeft' || e.key === 'ArrowUp') && e.ctrlKey) {
+        e.preventDefault()
+        setActiveFrameIdx(prev => Math.max(0, prev - 1))
+        setActiveObjectIdx(null)
       } else if (!hasObjects && e.key === 'ArrowRight') {
         e.preventDefault()
         setReviewIndex(prev => Math.min(ngFrames.length - 1, prev + 1))
@@ -504,109 +695,124 @@ export function CavityReviewOverlay({
       {/* ============ Main content ============ */}
       <div className="flex-1 flex min-h-0 overflow-hidden">
         {/* Left — Image Viewer */}
-        <div className="flex-1 relative min-w-0">
-          {/* SN badge */}
-          {(() => {
-            const sn = currentFrame?.serial_number
-            if (sn == null) return null
-            const snType = classifySerialNumber(sn)
-            if (snType === SN_TYPE.EMPTY) return null
-            const isTimestamp = snType === SN_TYPE.TIMESTAMP
-            return (
-              <div className={cn(
-                "absolute top-3 left-1/2 -translate-x-1/2 z-20 px-3 py-1 rounded bg-void/85 backdrop-blur-sm",
-                isTimestamp ? "border border-yellow-500/60" : "border border-phosphor-teal/50"
-              )}>
-                <span className={cn(
-                  "font-mono text-sm font-bold",
-                  isTimestamp ? "text-yellow-400" : "text-phosphor-teal"
+        <div className="flex-1 relative min-w-0 min-h-0">
+            {/* SN badge */}
+            {(() => {
+              const sn = currentFrame?.serial_number
+              if (sn == null) return null
+              const snType = classifySerialNumber(sn)
+              if (snType === SN_TYPE.EMPTY) return null
+              const isTimestamp = snType === SN_TYPE.TIMESTAMP
+              return (
+                <div className={cn(
+                  "absolute top-3 left-1/2 -translate-x-1/2 z-20 px-3 py-1 rounded bg-void/85 backdrop-blur-sm",
+                  isTimestamp ? "border border-yellow-500/60" : "border border-phosphor-teal/50"
                 )}>
-                  SN: {String(sn)}
-                </span>
-              </div>
-            )
-          })()}
-
-          {currentFrame && (currentFrame.image_raw_url || currentFrame.image_url) ? (
-            <ImageViewer
-              src={getModelImage(modelNameProp || inspection?.modelName || inspection?.modelId, currentFrame.side) || currentFrame.image_raw_url || currentFrame.image_url}
-              alt={`${currentFrame.side} frame ${currentFrame.frameIndex + 1}`}
-              objects={currentFrameObjects}
-              activeObjectIndex={hasObjects ? activeObjectFrameIdx : -1}
-              onObjectClick={hasObjects ? (idx) => {
-                // Find the global index for this frame object
-                const clickedKey = currentFrameObjects[idx]?._key
-                if (clickedKey) {
-                  const globalIdx = allObjects.findIndex(o => o.key === clickedKey)
-                  if (globalIdx !== -1) setActiveObjectIdx(globalIdx)
-                }
-              } : undefined}
-              className="w-full h-full"
-              showControls={true}
-            />
-          ) : (
-            <div className="flex items-center justify-center h-full text-text-tertiary bg-void">
-              <p className="font-mono text-sm">{t('inspection.noImageAvailable')}</p>
-            </div>
-          )}
-        </div>
-
-        {/* Right — Object list panel + frame thumbnails (only when objects exist) */}
-        {hasObjects && (
-          <div className="w-80 flex flex-col shrink-0 bg-terminal border-l border-surface-border overflow-hidden">
-            {/* Frame Thumbnail Strip — click to switch between NG frames */}
-            {ngFrames.length > 1 && (
-              <div className="px-2 py-2 border-b border-surface-border shrink-0">
-                <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
-                  {ngFrames.map((frame, fIdx) => {
-                    const isActiveFrame = currentFrame === frame
-                    const sn = frame.serial_number
-                    const snType = classifySerialNumber(sn)
-                    const frameImgUrl = frame.image_url || frame.image_raw_url
-                    return (
-                      <button
-                        key={`${frame.side}-${frame.frameIndex}`}
-                        onClick={() => { setActiveFrameIdx(fIdx); setActiveObjectIdx(null) }}
-                        className={cn(
-                          "relative flex-shrink-0 w-14 h-10 rounded overflow-hidden border-2 transition-all",
-                          isActiveFrame
-                            ? "border-phosphor-teal ring-1 ring-phosphor-teal/40"
-                            : "border-surface-border hover:border-phosphor-teal/50"
-                        )}
-                      >
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={frameImgUrl}
-                          alt={`${frame.side} F${frame.frameIndex}`}
-                          className="w-full h-full object-cover"
-                        />
-                        {/* Side label */}
-                        <span className="absolute top-0 left-0 px-0.5 text-[7px] font-mono font-bold bg-void/70 text-text-primary rounded-br">
-                          {frame.side[0]}
-                        </span>
-                        {/* NG badge */}
-                        <div className="absolute top-0 right-0 w-3 h-3 rounded-bl bg-phosphor-red flex items-center justify-center">
-                          <AlertCircle className="w-2 h-2 text-white" />
-                        </div>
-                        {/* SN color bar */}
-                        {snType === SN_TYPE.TIMESTAMP ? (
-                          <div
-                            className="absolute bottom-0 left-0 right-0 h-1 bg-yellow-500/60"
-                            style={{ backgroundImage: 'repeating-linear-gradient(90deg, transparent, transparent 2px, rgba(0,0,0,0.4) 2px, rgba(0,0,0,0.4) 4px)' }}
-                          />
-                        ) : snType === SN_TYPE.REAL && sn ? (
-                          <div
-                            className="absolute bottom-0 left-0 right-0 h-1"
-                            style={{ backgroundColor: snToColor(sn) }}
-                          />
-                        ) : null}
-                      </button>
-                    )
-                  })}
+                  <span className={cn(
+                    "font-mono text-sm font-bold",
+                    isTimestamp ? "text-yellow-400" : "text-phosphor-teal"
+                  )}>
+                    SN: {String(sn)}
+                  </span>
                 </div>
+              )
+            })()}
+
+            {currentFrame && (currentFrame.image_raw_url || currentFrame.image_url) ? (
+              <ImageViewer
+                src={currentFrame.image_raw_url || currentFrame.image_url}
+                alt={`${currentFrame.side} frame ${currentFrame.frameIndex + 1}`}
+                objects={currentFrameObjects}
+                activeObjectIndex={hasObjects ? activeObjectFrameIdx : -1}
+                onObjectClick={hasObjects ? (idx) => {
+                  // Find the global index for this frame object
+                  const clickedKey = currentFrameObjects[idx]?._key
+                  if (clickedKey) {
+                    const globalIdx = allObjects.findIndex(o => o.key === clickedKey)
+                    if (globalIdx !== -1) setActiveObjectIdx(globalIdx)
+                  }
+                } : undefined}
+                className="w-full h-full"
+                showControls={true}
+              />
+            ) : (
+              <div className="flex items-center justify-center h-full text-text-tertiary bg-void">
+                <p className="font-mono text-sm">{t('inspection.noImageAvailable')}</p>
               </div>
             )}
 
+            {/* Frame navigation arrows */}
+            {ngFrames.length > 1 && (
+              <>
+                {activeFrameIdx > 0 && (
+                  <button
+                    onClick={() => { setActiveFrameIdx(prev => prev - 1); setActiveObjectIdx(null) }}
+                    className="absolute left-2 top-1/2 -translate-y-1/2 z-20 p-2 rounded-full bg-void/70 backdrop-blur-sm border border-surface-border hover:border-phosphor-teal/50 hover:bg-void/90 transition-colors"
+                  >
+                    <ChevronLeft className="w-5 h-5 text-text-primary" />
+                  </button>
+                )}
+                {activeFrameIdx < ngFrames.length - 1 && (
+                  <button
+                    onClick={() => { setActiveFrameIdx(prev => prev + 1); setActiveObjectIdx(null) }}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 z-20 p-2 rounded-full bg-void/70 backdrop-blur-sm border border-surface-border hover:border-phosphor-teal/50 hover:bg-void/90 transition-colors"
+                  >
+                    <ChevronRight className="w-5 h-5 text-text-primary" />
+                  </button>
+                )}
+              </>
+            )}
+            {/* Frame Thumbnail Strip — overlaid at bottom of image area */}
+            {ngFrames.length > 1 && (
+              <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-void/80 backdrop-blur-sm border border-surface-border/50">
+                {ngFrames.map((frame, fIdx) => {
+                  const isActiveFrame = currentFrame === frame
+                  const sn = frame.serial_number
+                  const snType = classifySerialNumber(sn)
+                  const frameImgUrl = frame.image_url || frame.image_raw_url
+                  return (
+                    <button
+                      key={`${frame.side}-${frame.frameIndex}`}
+                      onClick={() => { setActiveFrameIdx(fIdx); setActiveObjectIdx(null) }}
+                      className={cn(
+                        "relative flex-shrink-0 w-16 h-12 rounded overflow-hidden border-2 transition-all",
+                        isActiveFrame
+                          ? "border-phosphor-teal ring-1 ring-phosphor-teal/40"
+                          : "border-surface-border hover:border-phosphor-teal/50"
+                      )}
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={frameImgUrl}
+                        alt={`${frame.side} F${frame.frameIndex}`}
+                        className="w-full h-full object-cover"
+                      />
+                      {/* Side label */}
+                      <span className="absolute top-0 left-0 px-1 text-[9px] font-mono font-bold bg-void/80 text-text-primary rounded-br leading-tight">
+                        {frame.side === 'TOP' ? 'TOP' : 'BTM'}
+                      </span>
+                      {/* SN color bar — matches SidePanel styling */}
+                      {snType === SN_TYPE.TIMESTAMP ? (
+                        <div
+                          className="absolute bottom-0 left-0 right-0 h-2.5 bg-yellow-500/60"
+                          style={{ backgroundImage: 'repeating-linear-gradient(90deg, transparent, transparent 3px, rgba(0,0,0,0.4) 3px, rgba(0,0,0,0.4) 6px)' }}
+                        />
+                      ) : snType === SN_TYPE.REAL && sn ? (
+                        <div
+                          className="absolute bottom-0 left-0 right-0 h-2.5"
+                          style={{ backgroundColor: snToColor(sn) }}
+                        />
+                      ) : null}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+
+        {/* Right — Object list panel (only when objects exist) */}
+        {hasObjects && (
+          <div className="w-72 flex flex-col shrink-0 bg-terminal border-l border-surface-border overflow-hidden">
             {/* Panel header */}
             <div className="px-3 py-2 border-b border-surface-border shrink-0">
               <div className="flex items-center justify-between">
@@ -629,189 +835,161 @@ export function CavityReviewOverlay({
               </p>
             </div>
 
-            {/* Scrollable object list */}
-            <div className="flex-1 overflow-y-auto min-h-0">
-              {allObjects.map((obj, idx) => {
-                const isActive = idx === activeObjectIdx
-                const isObjNG = obj.label === 1 || obj.label === true
-                const decision = objectDecisions[obj.key]
-                const decisionIsNG = decision === 'REAL_NG'
-                const isFalseCall = decision && decision !== 'REAL_NG'
-                const isReviewed = decision != null
-
-                return (
-                  <div
-                    key={obj.key}
-                    onClick={() => setActiveObjectIdx(idx)}
-                    className={cn(
-                      "px-3 py-1.5 cursor-pointer transition-all border-l-2",
-                      isActive
-                        ? "bg-phosphor-teal/10 border-l-phosphor-teal"
-                        : isReviewed
-                          ? decisionIsNG
-                            ? "bg-phosphor-red/5 border-l-phosphor-red/50"
-                            : "bg-phosphor-green/5 border-l-phosphor-green/50"
-                          : isObjNG
-                            ? "border-l-phosphor-red/30 hover:bg-elevated/50"
-                            : "bg-phosphor-green/5 border-l-phosphor-green/30"
-                    )}
+            {/* Object list — split layout: headers always visible, items scroll */}
+            <div className="flex-1 flex flex-col min-h-0">
+              {/* ── NG Header (always visible at top) ── */}
+              {ngOnlyCount > 0 && (
+                <div className="bg-phosphor-red/10 border-b border-surface-border shrink-0">
+                  <button
+                    onClick={() => setExpandedSection(prev => prev === 'ng' ? null : 'ng')}
+                    className="w-full px-3 py-1.5 flex items-center justify-between hover:bg-phosphor-red/15 transition-colors"
                   >
-                    <div className="flex items-center gap-2">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          {/* Color indicator dot */}
-                          <span className={cn(
-                            "w-1.5 h-1.5 rounded-full shrink-0",
-                            isObjNG ? "bg-phosphor-red" : "bg-phosphor-green"
-                          )} />
-                          <span className={cn(
-                            "text-xs font-medium truncate",
-                            isActive ? "text-phosphor-teal"
-                              : isObjNG ? "text-text-primary" : "text-phosphor-green/80"
-                          )}>
-                            {obj.name}
-                          </span>
-                          <span className="text-xxs text-text-tertiary font-mono shrink-0">
-                            {obj.score != null ? `${(obj.score * 100).toFixed(0)}%` : ''}
-                          </span>
-                        </div>
-                        {obj.box && obj.box.length >= 4 && (
-                          <span className="text-[9px] text-text-tertiary/60 font-mono block ml-3">
-                            [{Math.round(obj.box[0])}, {Math.round(obj.box[1])}, {Math.round(obj.box[2])}, {Math.round(obj.box[3])}]
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Right side: GOOD objects show green badge, NG objects show buttons or decision badge */}
-                      {!isObjNG ? (
-                        /* AI says GOOD — auto-OK, no buttons needed */
-                        <span className="text-xxs font-mono font-medium px-1.5 py-0.5 rounded shrink-0 bg-phosphor-green/15 text-phosphor-green">
-                          GOOD
+                    <span className="text-xxs font-mono text-phosphor-red font-bold">NG ({ngOnlyCount})</span>
+                    <ChevronDown className={cn("w-3.5 h-3.5 text-phosphor-red transition-transform", expandedSection === 'ng' ? "rotate-0" : "-rotate-90")} />
+                  </button>
+                  {/* Bulk selection bar — only when NG expanded and has unreviewed items */}
+                  {expandedSection === 'ng' && unreviewedCount > 0 && (
+                    <div className="px-3 pb-1.5 flex items-center gap-1.5">
+                      <label className="flex items-center gap-1.5 cursor-pointer mr-auto" onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={bulkSelectedCount === unreviewedCount && unreviewedCount > 0}
+                          ref={(el) => { if (el) el.indeterminate = bulkSelectedCount > 0 && bulkSelectedCount < unreviewedCount }}
+                          onChange={toggleSelectAll}
+                          className="w-3.5 h-3.5 accent-phosphor-teal cursor-pointer"
+                        />
+                        <span className="text-[10px] font-mono text-text-tertiary">
+                          {bulkSelectedCount > 0 ? `${bulkSelectedCount} selected` : `${unreviewedCount} remaining`}
                         </span>
-                      ) : isReviewed ? (
-                        /* NG object already reviewed */
-                        <span className={cn(
-                          "text-xxs font-mono font-medium px-1.5 py-0.5 rounded shrink-0",
-                          decisionIsNG ? "bg-phosphor-red/15 text-phosphor-red" : "bg-phosphor-green/15 text-phosphor-green"
-                        )}>
-                          {decisionIsNG ? 'NG' : 'OK'}
-                        </span>
-                      ) : (
-                        /* NG object needs review — show inline buttons */
-                        <div className="flex gap-1 shrink-0">
+                      </label>
+                      {bulkSelectedCount > 0 && (
+                        <>
                           <button
-                            onClick={(e) => { e.stopPropagation(); setActiveObjectIdx(idx); handleInlineGood(idx) }}
-                            className="px-2 py-1 text-xxs font-mono font-bold rounded bg-phosphor-green/10 border border-phosphor-green/40 text-phosphor-green hover:bg-phosphor-green/25 transition-colors"
-                            title="GOOD (G)"
+                            onClick={handleBulkOK}
+                            className="px-2 py-0.5 text-[10px] font-mono font-bold rounded bg-phosphor-green/10 border border-phosphor-green/40 text-phosphor-green hover:bg-phosphor-green/25 transition-colors"
                           >
-                            OK
+                            OK ({bulkSelectedCount})
                           </button>
                           <button
-                            onClick={(e) => { e.stopPropagation(); setActiveObjectIdx(idx); handleInlineNG(idx) }}
-                            className="px-2 py-1 text-xxs font-mono font-bold rounded bg-phosphor-red/10 border border-phosphor-red/40 text-phosphor-red hover:bg-phosphor-red/25 transition-colors"
-                            title="NG (N)"
+                            onClick={handleBulkNG}
+                            className="px-2 py-0.5 text-[10px] font-mono font-bold rounded bg-phosphor-red/10 border border-phosphor-red/40 text-phosphor-red hover:bg-phosphor-red/25 transition-colors"
                           >
-                            NG
+                            NG ({bulkSelectedCount})
                           </button>
-                        </div>
+                        </>
                       )}
                     </div>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* ============ Footer: Reason input / Status ============ */}
-      <div className="h-16 px-6 flex items-center justify-center gap-8 bg-terminal border-t border-surface-border shrink-0">
-        {showReasonInput ? (
-          <div className="flex items-center gap-4 w-full max-w-2xl">
-            {selectedReason === 'other' ? (
-              <div className="flex items-center gap-2 flex-1">
-                <button
-                  onClick={() => { setSelectedReason(''); setOtherText('') }}
-                  className="h-10 px-3 bg-elevated border border-surface-border rounded-lg text-text-secondary font-mono hover:border-phosphor-teal/50 transition-colors flex-shrink-0"
-                >
-                  &larr;
-                </button>
-                <input
-                  type="text"
-                  value={otherText}
-                  onChange={(e) => setOtherText(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') handleSubmitFalseCall() }}
-                  placeholder={t('cavityReview.typeOtherReason')}
-                  autoFocus
-                  className="flex-1 h-10 px-4 bg-elevated border border-surface-border rounded-lg text-text-primary font-mono placeholder:text-text-tertiary focus:outline-none focus:ring-2 focus:ring-phosphor-green"
-                />
-              </div>
-            ) : (
-              <select
-                value={selectedReason}
-                onChange={(e) => { setSelectedReason(e.target.value); setOtherText('') }}
-                autoFocus
-                className="flex-1 h-10 px-4 bg-elevated border border-surface-border rounded-lg text-text-primary font-mono focus:outline-none focus:ring-2 focus:ring-phosphor-green"
-              >
-                <option value="">{t('cavityReview.selectReason')}</option>
-                {falseCallReasons
-                  .filter(r => !(r.name || r).toLowerCase().includes('other'))
-                  .map(r => (
-                    <option key={r.id || r} value={r.name || r}>{r.name || r}</option>
-                  ))}
-                <option value="other">{t('cavityReview.other')}</option>
-              </select>
-            )}
-            <button onClick={handleSubmitFalseCall}
-              disabled={selectedReason === 'other' ? !otherText.trim() : !selectedReason.trim()}
-              className="h-10 px-6 bg-phosphor-green text-void font-display font-bold rounded-lg hover:bg-phosphor-green-bright disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
-              {t('falseCall.submit')}
-            </button>
-            <button onClick={handleCancelReason}
-              className="h-10 px-4 bg-elevated border border-surface-border text-text-secondary font-display font-bold rounded-lg hover:border-phosphor-teal/50 transition-colors">
-              {t('falseCall.cancel')}
-            </button>
-          </div>
-        ) : reviewedCount === totalReviewable && reviewedCount > 0 ? (
-          <span className="font-mono text-sm text-phosphor-cyan animate-pulse">
-            {t('cavityReview.allReviewed')}
-          </span>
-        ) : !hasObjects ? (
-          /* Legacy per-frame flow — keep large buttons */
-          <>
-            <button onClick={handleObjectGood}
-              className="h-12 px-10 bg-phosphor-green/10 border-2 border-phosphor-green text-phosphor-green font-display font-bold text-lg rounded-lg hover:bg-phosphor-green/20 shadow-glow-green transition-all active:scale-95 flex items-center gap-3">
-              <CheckCircle2 className="w-6 h-6" />
-              {t('cavityReview.good')}
-              <span className="text-sm font-mono opacity-60">(G)</span>
-            </button>
-            <button onClick={() => handleObjectNGRef.current?.()}
-              className="h-12 px-10 bg-phosphor-red/10 border-2 border-phosphor-red text-phosphor-red font-display font-bold text-lg rounded-lg hover:bg-phosphor-red/20 shadow-glow-red transition-all active:scale-95 flex items-center gap-3">
-              <AlertCircle className="w-6 h-6" />
-              {t('cavityReview.ng')}
-              <span className="text-sm font-mono opacity-60">(N)</span>
-            </button>
-          </>
-        ) : (
-          /* Per-object mode — show status summary, buttons are in sidebar */
-          <div className="flex items-center gap-4 font-mono text-sm">
-            <span className="text-text-tertiary">
-              {activeObject ? (
-                <>Reviewing: <span className="text-phosphor-teal font-bold">{activeObject.name}</span></>
-              ) : (
-                <span className="text-text-tertiary">Click an object to review</span>
+                  )}
+                </div>
               )}
-            </span>
-            {isCurrentReviewed && activeObject && (
-              <span className={cn(
-                "px-2 py-0.5 rounded",
-                currentDecision === 'REAL_NG' ? "bg-phosphor-red/20 text-phosphor-red" : "bg-phosphor-green/20 text-phosphor-green"
-              )}>
-                {currentDecision === 'REAL_NG'
-                  ? t('cavityReview.confirmedNG')
-                  : `${t('cavityReview.falseCallPrefix')}: ${currentDecision}`}
-              </span>
-            )}
+              {/* ── NG Items (scrollable, fills space when expanded) ── */}
+              {expandedSection === 'ng' && ngOnlyCount > 0 && (
+                <div className="flex-1 overflow-y-auto min-h-0">
+                  {allObjects.map((obj, idx) => {
+                    const isObjNG = obj.label === 1 || obj.label === true
+                    if (!isObjNG) return null
+                    const isActive = idx === activeObjectIdx
+                    const decision = objectDecisions[obj.key]
+                    const decisionIsNG = decision === 'REAL_NG'
+                    const isReviewed = decision != null
+                    return (
+                      <ObjectRow key={obj.key} obj={obj} idx={idx} isActive={isActive} isObjNG
+                        isReviewed={isReviewed} decisionIsNG={decisionIsNG}
+                        onSelect={setActiveObjectIdx} onGood={handleInlineGood} onNG={handleInlineNG}
+                        showCheckbox={!isReviewed} isChecked={effectiveBulkSelected.has(obj.key)}
+                        onToggleCheck={toggleBulkSelect} />
+                    )
+                  })}
+                </div>
+              )}
+              {/* ── GOOD Header (always visible — floats at bottom when NG expanded) ── */}
+              {totalObjects - ngOnlyCount > 0 && (
+                <button
+                  onClick={() => setExpandedSection(prev => prev === 'good' ? null : 'good')}
+                  className="w-full px-3 py-1.5 bg-phosphor-green/10 border-b border-surface-border flex items-center justify-between hover:bg-phosphor-green/15 transition-colors shrink-0"
+                >
+                  <span className="text-xxs font-mono text-phosphor-green font-bold">GOOD ({totalObjects - ngOnlyCount})</span>
+                  <ChevronDown className={cn("w-3.5 h-3.5 text-phosphor-green transition-transform", expandedSection === 'good' ? "rotate-0" : "-rotate-90")} />
+                </button>
+              )}
+              {/* ── GOOD Items (scrollable, fills space when expanded) ── */}
+              {expandedSection === 'good' && totalObjects - ngOnlyCount > 0 && (
+                <div className="flex-1 overflow-y-auto min-h-0">
+                  {allObjects.map((obj, idx) => {
+                    const isObjNG = obj.label === 1 || obj.label === true
+                    if (isObjNG) return null
+                    const isActive = idx === activeObjectIdx
+                    return (
+                      <ObjectRow key={obj.key} obj={obj} idx={idx} isActive={isActive} isObjNG={false}
+                        isReviewed={false} decisionIsNG={false}
+                        onSelect={setActiveObjectIdx} />
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Reason input / Status — pinned at bottom of side panel */}
+            {showReasonInput ? (
+              <div className="px-3 py-2 border-t border-surface-border shrink-0 space-y-2">
+                {bulkReasonMode && (
+                  <span className="text-xxs font-mono text-phosphor-cyan">
+                    {bulkSelectedCount} objects
+                  </span>
+                )}
+                {selectedReason === 'other' ? (
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => { setSelectedReason(''); setOtherText('') }}
+                      className="h-8 px-2 bg-elevated border border-surface-border rounded text-text-secondary font-mono text-xs hover:border-phosphor-teal/50 transition-colors flex-shrink-0"
+                    >
+                      &larr;
+                    </button>
+                    <input
+                      type="text"
+                      value={otherText}
+                      onChange={(e) => setOtherText(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') (bulkReasonMode ? handleSubmitBulkFalseCall : handleSubmitFalseCall)() }}
+                      placeholder={t('cavityReview.typeOtherReason')}
+                      autoFocus
+                      className="flex-1 h-8 px-2 bg-elevated border border-surface-border rounded text-text-primary text-xs font-mono placeholder:text-text-tertiary focus:outline-none focus:ring-1 focus:ring-phosphor-green"
+                    />
+                  </div>
+                ) : (
+                  <select
+                    value={selectedReason}
+                    onChange={(e) => { setSelectedReason(e.target.value); setOtherText('') }}
+                    autoFocus
+                    className="w-full h-8 px-2 bg-elevated border border-surface-border rounded text-text-primary text-xs font-mono focus:outline-none focus:ring-1 focus:ring-phosphor-green"
+                  >
+                    <option value="">{t('cavityReview.selectReason')}</option>
+                    {falseCallReasons
+                      .filter(r => !(r.name || r).toLowerCase().includes('other'))
+                      .map(r => (
+                        <option key={r.id || r} value={r.name || r}>{r.name || r}</option>
+                      ))}
+                    <option value="other">{t('cavityReview.other')}</option>
+                  </select>
+                )}
+                <div className="flex gap-1.5">
+                  <button onClick={bulkReasonMode ? handleSubmitBulkFalseCall : handleSubmitFalseCall}
+                    disabled={selectedReason === 'other' ? !otherText.trim() : !selectedReason.trim()}
+                    className="flex-1 h-8 bg-phosphor-green text-void font-display font-bold text-xs rounded hover:bg-phosphor-green-bright disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
+                    {t('falseCall.submit')}
+                  </button>
+                  <button onClick={() => { handleCancelReason(); setBulkReasonMode(false) }}
+                    className="h-8 px-3 bg-elevated border border-surface-border text-text-secondary font-display font-bold text-xs rounded hover:border-phosphor-teal/50 transition-colors">
+                    {t('falseCall.cancel')}
+                  </button>
+                </div>
+              </div>
+            ) : reviewedCount === totalReviewable && reviewedCount > 0 ? (
+              <div className="px-3 py-2 border-t border-surface-border shrink-0 text-center">
+                <span className="font-mono text-xs text-phosphor-cyan animate-pulse">
+                  {t('cavityReview.allReviewed')}
+                </span>
+              </div>
+            ) : null}
           </div>
         )}
       </div>
