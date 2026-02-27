@@ -629,6 +629,8 @@ export function CavityReviewOverlay({
       setBulkSelected(new Set())
     } else {
       setBulkSelected(new Set(unreviewed.map(o => o.key)))
+      // Expand all PCB groups so selected items are visible
+      setExpandedPcb('all')
     }
   }, [effectiveBulkSelected.size, unreviewed])
 
@@ -1002,7 +1004,7 @@ export function CavityReviewOverlay({
                 <div className="flex-1 overflow-y-auto min-h-0">
                   {ngRenderList.map(item => {
                     if (item.type === 'header') {
-                      const isExpanded = expandedPcb === item.cavityIndex
+                      const isExpanded = expandedPcb === 'all' || expandedPcb === item.cavityIndex
                       return (
                         <button
                           key={item.key}
@@ -1018,7 +1020,7 @@ export function CavityReviewOverlay({
                       )
                     }
                     // Hide objects when their PCB group is collapsed
-                    if (cavityCount > 1 && expandedPcb !== item.obj.cavityIndex) return null
+                    if (cavityCount > 1 && expandedPcb !== 'all' && expandedPcb !== item.obj.cavityIndex) return null
                     const { obj, idx } = item
                     const isActive = idx === activeObjectIdx
                     const decision = objectDecisions[obj.key]
