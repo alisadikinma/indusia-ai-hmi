@@ -914,7 +914,7 @@ export function CavityReviewOverlay({
                           className="absolute bottom-0 left-0 right-0 h-2.5 bg-yellow-500/60"
                           style={{ backgroundImage: 'repeating-linear-gradient(90deg, transparent, transparent 3px, rgba(0,0,0,0.4) 3px, rgba(0,0,0,0.4) 6px)' }}
                         />
-                      ) : snType === SN_TYPE.REAL && sn ? (
+                      ) : snType === SN_TYPE.BARCODE && sn ? (
                         <div
                           className="absolute bottom-0 left-0 right-0 h-2.5"
                           style={{ backgroundColor: snToColor(sn) }}
