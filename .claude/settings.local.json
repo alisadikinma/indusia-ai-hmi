@@ -61,7 +61,8 @@
       "Read(//d/Projects/indusia-ai-backend/assets/dist/temp/auto_inspect_edge/**)",
       "Bash(npx next lint:*)",
       "Bash(git push origin SIT)",
-      "Bash(git pull origin main)"
+      "Bash(git pull origin main)",
+      "Bash(git push origin main)"
     ],
     "deny": [],
     "ask": [],
