@@ -406,6 +406,10 @@ export function useLiveInspection(lineId, workOrder, options = {}) {
     if (Array.isArray(rawResults)) {
       // Flat list from Auto Inspect Edge - split by side
       const frames = rawResults.map(transformFrame)
+      // Debug: log objects with attrs.boxes (sub-component data)
+      const allObjs = frames.flatMap(f => f.objects || [])
+      const withAttrs = allObjs.filter(o => o.attrs?.boxes)
+      console.log(`[LiveInspection] 🔍 Objects: ${allObjs.length} total, ${withAttrs.length} with attrs.boxes`, withAttrs.length > 0 ? withAttrs : '(none)')
       topFrames = frames.filter(f => f.side === 'TOP')
       bottomFrames = frames.filter(f => f.side === 'BOTTOM')
     } else if (rawResults && typeof rawResults === 'object') {

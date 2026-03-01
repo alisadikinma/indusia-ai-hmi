@@ -6,43 +6,38 @@ import { cn } from '@/lib/utils'
 import { normalizeBox, computeBboxScale } from '@/lib/utils/inspectionReview'
 
 const MIN_ZOOM = 0.5  // relative to fit scale
-const MAX_ZOOM = 12
+const MAX_ZOOM = 5
 const ZOOM_STEP = 0.3
-const ZOOM_TO_BBOX_MIN = 3 // minimum zoom when jumping to bbox
+const ZOOM_TO_BBOX_MIN = 1.5 // minimum zoom when jumping to bbox
 
 /**
- * ImageViewer — Zoomable, pannable image with bounding box overlays.
+ * ImageViewer — Zoomable, pannable image with auto-zoom-to-coordinate navigation.
  *
  * The image always fits the container initially (scale = fitScale).
  * Zoom level is relative: 1x = fit-to-container, 2x = 2× that size, etc.
- * Bbox coordinates are in original image pixels (natural size).
+ *
+ * Bbox overlays are NOT rendered — AI backend draws bboxes on raw images.
+ * The objects prop is still used for auto-zoom coordinate math.
  *
  * Props:
  * - src: image URL
  * - alt: alt text
- * - objects: [{ name, box: [x1,y1,x2,y2], score, label }]
- * - activeObjectIndex: highlight and auto-zoom to this object (-1 = none)
- * - onObjectClick: (index) => void
+ * - objects: [{ box: [x1,y1,x2,y2] }] — used for auto-zoom math only, not rendered
+ * - activeObjectIndex: auto-zoom to this object's coordinates (-1 = none)
  * - focusTrigger: increment to re-trigger zoom (for re-clicking same object)
  * - imageNaturalSize: { width, height } if known
  * - className: wrapper class
  * - showControls: show zoom controls (default true)
- * - overlayColor: bbox stroke color
- * - activeColor: active bbox color
  */
 export default function ImageViewer({
   src,
   alt = 'Image',
   objects = [],
   activeObjectIndex = -1,
-  onObjectClick,
   focusTrigger = 0,
   imageNaturalSize,
   className,
   showControls = true,
-  overlayColor = 'rgba(255,68,68,0.8)',
-  activeColor = 'rgba(9,168,164,1)',
-  goodColor = 'rgba(0,255,102,0.7)',
 }) {
   const containerRef = useRef(null)
   const imgRef = useRef(null)
@@ -59,6 +54,8 @@ export default function ImageViewer({
   const fitScaleRef = useRef(1)
   const bboxScaleRef = useRef({ x: 1, y: 1 })
   const prevFocusRef = useRef(activeObjectIndex)
+  // Deferred zoom: when auto-zoom fires before image is loaded, store target here
+  const pendingZoomRef = useRef(null)
 
   // Calculate fit scale: how much to shrink the natural image to fit container
   const calcFitScale = useCallback(() => {
@@ -79,8 +76,11 @@ export default function ImageViewer({
 
   const handleImageLoad = useCallback((e) => {
     const { naturalWidth, naturalHeight } = e.target
+    // Batch these — React will re-run effects with both values set
     setNaturalSize({ width: naturalWidth, height: naturalHeight })
     setImgLoaded(true)
+    // Note: if pendingZoomRef has a stored zoom target, the auto-zoom effect
+    // will re-run because imgLoaded + naturalSize changed, picking up the pending target
   }, [])
 
   // Recalculate fit scale when natural size or container changes
@@ -106,20 +106,25 @@ export default function ImageViewer({
   }, [naturalSize, imgLoaded, calcFitScale])
 
   // Center image when fit-to-container at zoom=1
-  // Centers regardless of activeObjectIndex since auto-zoom to bbox is disabled
+  // Centers regardless of activeObjectIndex since auto-zoom to bbox is disabled.
+  // Double-rAF ensures DOM layout is fully settled after frame/image switch.
   useEffect(() => {
     if (!imgLoaded || !containerRef.current || !naturalSize) return
     if (zoom === 1) {
-      // Use rAF to ensure DOM layout is settled (especially after fullscreen toggle)
+      // Use double rAF to ensure DOM layout is fully settled
+      // (especially after fullscreen toggle or image src change)
       const raf = requestAnimationFrame(() => {
-        if (!containerRef.current) return
-        const rect = containerRef.current.getBoundingClientRect()
-        const fs = calcFitScale()
-        const imgW = naturalSize.width * fs
-        const imgH = naturalSize.height * fs
-        setTranslate({
-          x: (rect.width - imgW) / 2,
-          y: (rect.height - imgH) / 2,
+        requestAnimationFrame(() => {
+          if (!containerRef.current) return
+          const rect = containerRef.current.getBoundingClientRect()
+          if (rect.width === 0 || rect.height === 0) return
+          const fs = calcFitScale()
+          const imgW = naturalSize.width * fs
+          const imgH = naturalSize.height * fs
+          setTranslate({
+            x: (rect.width - imgW) / 2,
+            y: (rect.height - imgH) / 2,
+          })
         })
       })
       return () => cancelAnimationFrame(raf)
@@ -141,9 +146,12 @@ export default function ImageViewer({
 
   // Auto-zoom to bbox: center the active object in the viewport with precise transform math.
   // Uses refs for fitScale/bboxScale to avoid re-triggering on every render.
+  // Handles deferred zoom: if image isn't loaded when zoom is requested, stores
+  // target in pendingZoomRef and re-executes when imgLoaded/naturalSize become available.
   useEffect(() => {
     // Deselect → reset to fit view
     if (activeObjectIndex == null || activeObjectIndex < 0) {
+      pendingZoomRef.current = null
       if (prevFocusRef.current != null && prevFocusRef.current >= 0) {
         setZoom(1)
         // translate will be reset by the centering effect (zoom === 1)
@@ -154,7 +162,15 @@ export default function ImageViewer({
     prevFocusRef.current = activeObjectIndex
 
     // Guard: need loaded image, natural size, container, and valid object
-    if (!imgLoaded || !naturalSize || !containerRef.current) return
+    if (!imgLoaded || !naturalSize || !containerRef.current) {
+      // Store pending zoom to execute after image loads
+      pendingZoomRef.current = { activeObjectIndex, focusTrigger }
+      return
+    }
+
+    // Clear pending zoom — we're executing now
+    pendingZoomRef.current = null
+
     const obj = objects[activeObjectIndex]
     if (!obj || !obj.box || obj.box.length < 4) return
 
@@ -171,15 +187,25 @@ export default function ImageViewer({
     const x1 = rx1 * bs.x, y1 = ry1 * bs.y
     const x2 = rx2 * bs.x, y2 = ry2 * bs.y
 
-    // Bbox center and size in natural image pixels
-    const cx = (x1 + x2) / 2
-    const cy = (y1 + y2) / 2
-    const bboxW = Math.max(x2 - x1, 1) // prevent division by zero
-    const bboxH = Math.max(y2 - y1, 1)
+    // Bounds check: ensure bbox is within image dimensions
+    const imgW = naturalSize.width
+    const imgH = naturalSize.height
+    const clampedX1 = Math.max(0, Math.min(x1, imgW))
+    const clampedY1 = Math.max(0, Math.min(y1, imgH))
+    const clampedX2 = Math.max(0, Math.min(x2, imgW))
+    const clampedY2 = Math.max(0, Math.min(y2, imgH))
 
-    // Compute zoom so bbox fills ~40% of container (fit the larger dimension)
-    const zoomForWidth = (containerW * 0.4) / (bboxW * fs)
-    const zoomForHeight = (containerH * 0.4) / (bboxH * fs)
+    // If bbox is effectively zero-size after clamping, skip zoom
+    const bboxW = Math.max(clampedX2 - clampedX1, 1)
+    const bboxH = Math.max(clampedY2 - clampedY1, 1)
+
+    // Bbox center in natural image pixels
+    const cx = (clampedX1 + clampedX2) / 2
+    const cy = (clampedY1 + clampedY2) / 2
+
+    // Compute zoom so bbox fills ~25% of container (fit the larger dimension)
+    const zoomForWidth = (containerW * 0.25) / (bboxW * fs)
+    const zoomForHeight = (containerH * 0.25) / (bboxH * fs)
     const targetZoom = Math.max(
       ZOOM_TO_BBOX_MIN,
       Math.min(Math.min(zoomForWidth, zoomForHeight), MAX_ZOOM)
@@ -190,8 +216,16 @@ export default function ImageViewer({
     // appears at screen position (tx + cx * actualScale, ty + cy * actualScale).
     // Setting that equal to (containerW/2, containerH/2):
     const newActualScale = fs * targetZoom
-    const tx = containerW / 2 - cx * newActualScale
-    const ty = containerH / 2 - cy * newActualScale
+    let tx = containerW / 2 - cx * newActualScale
+    let ty = containerH / 2 - cy * newActualScale
+
+    // Clamp translate: ensure at least some image content is visible in viewport
+    // Prevent panning so far that the entire viewport shows only black/empty area
+    const scaledImgW = imgW * newActualScale
+    const scaledImgH = imgH * newActualScale
+    const minVisiblePx = 50 // at least 50px of image visible
+    tx = Math.max(-(scaledImgW - minVisiblePx), Math.min(containerW - minVisiblePx, tx))
+    ty = Math.max(-(scaledImgH - minVisiblePx), Math.min(containerH - minVisiblePx, ty))
 
     setZoom(targetZoom)
     setTranslate({ x: tx, y: ty })
@@ -247,59 +281,8 @@ export default function ImageViewer({
     setIsDragging(false)
   }, [])
 
-  // Compute bbox overlay positions (relative to natural image, scaled by actualScale)
-  const renderBboxes = () => {
-    if (!naturalSize || objects.length === 0) return null
-
-    return objects.map((obj, i) => {
-      if (!obj.box || obj.box.length < 4) return null
-      const [rx1, ry1, rx2, ry2] = normalizeBox(obj.box)
-      const x1 = rx1 * bboxScale.x, y1 = ry1 * bboxScale.y
-      const x2 = rx2 * bboxScale.x, y2 = ry2 * bboxScale.y
-      const isActive = i === activeObjectIndex
-      // Color by label: label=0/false → GOOD (green), label=1/true → NG (red)
-      const isGoodLabel = obj.label === 0 || obj.label === false
-      const defaultColor = isGoodLabel ? goodColor : overlayColor
-      const color = isActive ? activeColor : defaultColor
-
-      return (
-        <div
-          key={i}
-          onClick={(e) => {
-            e.stopPropagation()
-            onObjectClick?.(i)
-          }}
-          className={cn(
-            'absolute border-2 cursor-pointer transition-all duration-200',
-            isActive ? 'z-10 shadow-lg' : 'z-0 hover:z-10',
-            onObjectClick && 'hover:border-phosphor-teal'
-          )}
-          style={{
-            left: x1,
-            top: y1,
-            width: x2 - x1,
-            height: y2 - y1,
-            borderColor: color,
-            backgroundColor: isActive ? `${activeColor.replace('1)', '0.12)')}` : 'transparent',
-          }}
-          title={`${obj.name}${obj.score != null ? ` (${(obj.score * 100).toFixed(1)}%)` : ''}`}
-        >
-          {/* Label */}
-          <div
-            className="absolute left-0 px-1 py-0 font-mono leading-tight whitespace-nowrap rounded-t"
-            style={{
-              bottom: '100%',
-              fontSize: Math.max(10, 14 / zoom),
-              backgroundColor: color,
-              color: '#fff',
-            }}
-          >
-            {obj.name}{obj.score != null ? ` ${(obj.score * 100).toFixed(0)}%` : ''}
-          </div>
-        </div>
-      )
-    })
-  }
+  // Bbox rendering removed — AI backend draws bboxes on raw images.
+  // objects prop + bboxScale + auto-zoom math are kept for invisible navigation.
 
   const wrapperClass = isFullscreen
     ? 'fixed inset-0 z-50 bg-black overflow-hidden'
@@ -342,17 +325,7 @@ export default function ImageViewer({
             height: naturalSize ? naturalSize.height : 'auto',
           }}
         />
-        {/* Bounding box overlays — positioned in natural image coordinates */}
-        {imgLoaded && (
-          <div
-            className="absolute inset-0 pointer-events-none"
-            style={{ width: naturalSize?.width, height: naturalSize?.height }}
-          >
-            <div className="relative w-full h-full pointer-events-auto">
-              {renderBboxes()}
-            </div>
-          </div>
-        )}
+        {/* Bbox overlays removed — AI backend draws bboxes on raw images */}
       </div>
 
       {/* Zoom controls */}

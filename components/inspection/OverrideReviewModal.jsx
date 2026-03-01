@@ -609,10 +609,6 @@ export default function OverrideReviewModal({
                     objects={activeFrameObjects}
                     activeObjectIndex={activeObjectFrameIndex}
                     focusTrigger={focusTrigger}
-                    onObjectClick={(idx) => {
-                      const obj = activeFrameObjects[idx];
-                      if (obj?._key) handleSelectObject(obj._key);
-                    }}
                     className="w-full h-full"
                     showControls={true}
                   />

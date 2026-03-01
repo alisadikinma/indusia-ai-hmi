@@ -54,6 +54,7 @@ function objKey(side, frameIndex, objectIndex) {
 function deriveFrameDecisions(allObjects, objectDecisions) {
   const frameMap = {} // "TOP-0" → { hasRealNG, firstReason }
   allObjects.forEach(obj => {
+    if (obj.isSubBox) return // Sub-boxes follow parent decision
     const frameKey = `${obj.frameSide}-${obj.frameIndex}`
     if (!frameMap[frameKey]) frameMap[frameKey] = { hasRealNG: false, firstReason: null }
     const decision = objectDecisions[obj.key]
@@ -70,91 +71,157 @@ function deriveFrameDecisions(allObjects, objectDecisions) {
   return result
 }
 
-/** Single object row — extracted for accordion reuse */
-function ObjectRow({ obj, idx, isActive, isObjNG, isReviewed, decisionIsNG, onSelect, onGood, onNG, showCheckbox, isChecked, onToggleCheck }) {
+/** Sub-box child row — clickable to zoom to sub-region */
+function SubBoxRow({ subBox, globalIdx, isActive, onSelect }) {
   return (
     <div
-      onClick={() => onSelect(idx)}
+      onClick={() => onSelect(globalIdx)}
       className={cn(
-        "px-3 py-1.5 cursor-pointer transition-all border-l-2",
+        "pl-8 pr-3 py-1 cursor-pointer transition-all border-l-2",
         isActive
           ? "bg-phosphor-teal/10 border-l-phosphor-teal"
-          : isReviewed
-            ? decisionIsNG
-              ? "bg-phosphor-red/5 border-l-phosphor-red/50"
-              : "bg-phosphor-green/5 border-l-phosphor-green/50"
-            : isObjNG
-              ? "border-l-phosphor-red/30 hover:bg-elevated/50"
-              : "border-l-surface-border hover:bg-elevated/50"
+          : "border-l-surface-border/30 hover:bg-elevated/30"
       )}
     >
-      <div className="flex items-center gap-2">
-        {showCheckbox && (
-          <input
-            type="checkbox"
-            checked={isChecked || false}
-            onChange={() => onToggleCheck?.(obj.key)}
-            onClick={(e) => e.stopPropagation()}
-            className="w-3.5 h-3.5 shrink-0 accent-phosphor-teal cursor-pointer"
-          />
-        )}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5">
-            <span className={cn(
-              "w-1.5 h-1.5 rounded-full shrink-0",
-              isObjNG ? "bg-phosphor-red" : "bg-phosphor-green"
-            )} />
-            <span className={cn(
-              "text-xs font-medium truncate",
-              isActive ? "text-phosphor-teal"
-                : isObjNG ? "text-text-primary" : "text-phosphor-green/80"
-            )}>
-              {obj.name}
-            </span>
-            <span className="text-xxs text-text-tertiary font-mono shrink-0">
-              {obj.score != null ? `${(obj.score * 100).toFixed(0)}%` : ''}
-            </span>
-          </div>
-          {obj.box && obj.box.length >= 4 && (() => {
-            const [nx1, ny1, nx2, ny2] = normalizeBox(obj.box)
-            return (
-              <span className="text-[9px] text-text-tertiary/60 font-mono block ml-3">
-                [{Math.round(nx1)}, {Math.round(ny1)}, {Math.round(nx2)}, {Math.round(ny2)}]
-              </span>
-            )
-          })()}
-        </div>
-        {!isObjNG ? (
-          <span className="text-xxs font-mono font-medium px-1.5 py-0.5 rounded shrink-0 bg-phosphor-green/15 text-phosphor-green">
-            GOOD
-          </span>
-        ) : isReviewed ? (
-          <span className={cn(
-            "text-xxs font-mono font-medium px-1.5 py-0.5 rounded shrink-0",
-            decisionIsNG ? "bg-phosphor-red/15 text-phosphor-red" : "bg-phosphor-green/15 text-phosphor-green"
-          )}>
-            {decisionIsNG ? 'NG' : 'OK'}
-          </span>
-        ) : (
-          <div className="flex gap-1 shrink-0">
-            <button
-              onClick={(e) => { e.stopPropagation(); onSelect(idx); onGood?.(idx) }}
-              className="px-2 py-1 text-xxs font-mono font-bold rounded bg-phosphor-green/10 border border-phosphor-green/40 text-phosphor-green hover:bg-phosphor-green/25 transition-colors"
-              title="GOOD (G)"
-            >
-              OK
-            </button>
-            <button
-              onClick={(e) => { e.stopPropagation(); onSelect(idx); onNG?.(idx) }}
-              className="px-2 py-1 text-xxs font-mono font-bold rounded bg-phosphor-red/10 border border-phosphor-red/40 text-phosphor-red hover:bg-phosphor-red/25 transition-colors"
-              title="NG (N)"
-            >
-              NG
-            </button>
-          </div>
-        )}
+      <div className="flex items-center gap-1.5">
+        <span className="w-1 h-1 rounded-full shrink-0 bg-phosphor-cyan/50" />
+        <span className={cn(
+          "text-[10px] font-mono truncate",
+          isActive ? "text-phosphor-teal" : "text-text-secondary"
+        )}>
+          {subBox.name}
+        </span>
       </div>
+      {subBox.box && subBox.box.length >= 4 && (() => {
+        const [nx1, ny1, nx2, ny2] = normalizeBox(subBox.box)
+        return (
+          <span className="text-[9px] text-text-tertiary/60 font-mono block ml-4">
+            [{Math.round(nx1)}, {Math.round(ny1)}, {Math.round(nx2)}, {Math.round(ny2)}]
+          </span>
+        )
+      })()}
     </div>
+  )
+}
+
+/** Single object row — extracted for accordion reuse */
+function ObjectRow({ obj, idx, isActive, isObjNG, isReviewed, decisionIsNG, onSelect, onGood, onNG, showCheckbox, isChecked, onToggleCheck, subBoxes, allObjects, activeObjectIdx }) {
+  const [expanded, setExpanded] = useState(false)
+  const hasSubBoxes = subBoxes && subBoxes.length > 0
+
+  return (
+    <>
+      <div
+        onClick={() => onSelect(idx)}
+        className={cn(
+          "px-3 py-1.5 cursor-pointer transition-all border-l-2",
+          isActive
+            ? "bg-phosphor-teal/10 border-l-phosphor-teal"
+            : isReviewed
+              ? decisionIsNG
+                ? "bg-phosphor-red/5 border-l-phosphor-red/50"
+                : "bg-phosphor-green/5 border-l-phosphor-green/50"
+              : isObjNG
+                ? "border-l-phosphor-red/30 hover:bg-elevated/50"
+                : "border-l-surface-border hover:bg-elevated/50"
+        )}
+      >
+        <div className="flex items-center gap-2">
+          {hasSubBoxes && (
+            <button
+              onClick={(e) => { e.stopPropagation(); setExpanded(prev => !prev) }}
+              className="p-0 shrink-0"
+            >
+              <ChevronDown className={cn("w-3.5 h-3.5 text-text-tertiary transition-transform", expanded ? "rotate-0" : "-rotate-90")} />
+            </button>
+          )}
+          {showCheckbox && (
+            <input
+              type="checkbox"
+              checked={isChecked || false}
+              onChange={() => onToggleCheck?.(obj.key)}
+              onClick={(e) => e.stopPropagation()}
+              className="w-3.5 h-3.5 shrink-0 accent-phosphor-teal cursor-pointer"
+            />
+          )}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-1.5">
+              <span className={cn(
+                "w-1.5 h-1.5 rounded-full shrink-0",
+                isObjNG ? "bg-phosphor-red" : "bg-phosphor-green"
+              )} />
+              <span className={cn(
+                "text-xs font-medium truncate",
+                isActive ? "text-phosphor-teal"
+                  : isObjNG ? "text-text-primary" : "text-phosphor-green/80"
+              )}>
+                {obj.name}
+              </span>
+              <span className="text-xxs text-text-tertiary font-mono shrink-0">
+                {obj.score != null ? `${(obj.score * 100).toFixed(0)}%` : ''}
+              </span>
+              {hasSubBoxes && (
+                <span className="text-[9px] font-mono text-phosphor-cyan/60 shrink-0">
+                  {subBoxes.length}
+                </span>
+              )}
+            </div>
+            {obj.box && obj.box.length >= 4 && (() => {
+              const [nx1, ny1, nx2, ny2] = normalizeBox(obj.box)
+              return (
+                <span className={cn("text-[9px] text-text-tertiary/60 font-mono block ml-3")}>
+                  [{Math.round(nx1)}, {Math.round(ny1)}, {Math.round(nx2)}, {Math.round(ny2)}]
+                </span>
+              )
+            })()}
+          </div>
+          {!isObjNG ? (
+            <span className="text-xxs font-mono font-medium px-1.5 py-0.5 rounded shrink-0 bg-phosphor-green/15 text-phosphor-green">
+              GOOD
+            </span>
+          ) : isReviewed ? (
+            <span className={cn(
+              "text-xxs font-mono font-medium px-1.5 py-0.5 rounded shrink-0",
+              decisionIsNG ? "bg-phosphor-red/15 text-phosphor-red" : "bg-phosphor-green/15 text-phosphor-green"
+            )}>
+              {decisionIsNG ? 'NG' : 'OK'}
+            </span>
+          ) : (
+            <div className="flex gap-1 shrink-0">
+              <button
+                onClick={(e) => { e.stopPropagation(); onSelect(idx); onGood?.(idx) }}
+                className="px-2 py-1 text-xxs font-mono font-bold rounded bg-phosphor-green/10 border border-phosphor-green/40 text-phosphor-green hover:bg-phosphor-green/25 transition-colors"
+                title="GOOD (G)"
+              >
+                OK
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); onSelect(idx); onNG?.(idx) }}
+                className="px-2 py-1 text-xxs font-mono font-bold rounded bg-phosphor-red/10 border border-phosphor-red/40 text-phosphor-red hover:bg-phosphor-red/25 transition-colors"
+                title="NG (N)"
+              >
+                NG
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+      {/* Sub-box children — expandable */}
+      {hasSubBoxes && expanded && subBoxes.map(subBoxKey => {
+        const subGlobalIdx = allObjects.findIndex(o => o.key === subBoxKey)
+        if (subGlobalIdx === -1) return null
+        const sub = allObjects[subGlobalIdx]
+        return (
+          <SubBoxRow
+            key={subBoxKey}
+            subBox={sub}
+            globalIdx={subGlobalIdx}
+            isActive={subGlobalIdx === activeObjectIdx}
+            onSelect={onSelect}
+          />
+        )
+      })}
+    </>
   )
 }
 
@@ -195,11 +262,16 @@ export function CavityReviewOverlay({
     return frames
   }, [inspection])
 
-  // Flatten all objects across all NG frames, sorted: NG first (by Y,X coords), then GOOD
+  // Flatten all objects across all NG frames, sorted: NG first (by Y,X coords), then GOOD.
+  // Sub-box children from attrs.boxes are included as separate entries with isSubBox flag.
   const allObjects = useMemo(() => {
     const result = []
     ngFrames.forEach(frame => {
       (frame.objects || []).forEach((obj, objIdx) => {
+        const parentKey = objKey(frame.side, frame.frameIndex, objIdx)
+        const subBoxes = obj.attrs?.boxes || []
+        const subBoxKeys = subBoxes.map((_, subIdx) => `${parentKey}-SUB-${subIdx}`)
+
         result.push({
           ...obj,
           frameSide: frame.side,
@@ -207,8 +279,31 @@ export function CavityReviewOverlay({
           objectIndex: objIdx,
           serialNumber: frame.serial_number,
           imageUrl: frame.image_raw_url || frame.image_url,
-          key: objKey(frame.side, frame.frameIndex, objIdx),
+          key: parentKey,
           cavityIndex: 0,
+          subBoxKeys: subBoxKeys.length > 0 ? subBoxKeys : undefined,
+        })
+
+        // Add sub-box children
+        subBoxes.forEach((subBox, subIdx) => {
+          if (!subBox || subBox.length < 4) return
+          result.push({
+            name: `${obj.name}.${subIdx + 1}`,
+            box: subBox,
+            label: obj.label,
+            score: null,
+            attrs: null,
+            frameSide: frame.side,
+            frameIndex: frame.frameIndex,
+            objectIndex: objIdx,
+            serialNumber: frame.serial_number,
+            imageUrl: frame.image_raw_url || frame.image_url,
+            key: `${parentKey}-SUB-${subIdx}`,
+            cavityIndex: 0,
+            isSubBox: true,
+            parentKey,
+            subBoxIndex: subIdx,
+          })
         })
       })
     })
@@ -240,39 +335,82 @@ export function CavityReviewOverlay({
     }
 
     // Sort: NG first → cavity → Y → X, then GOOD → cavity → Y → X
+    // Sub-boxes must stay immediately after their parent, so sort parents only,
+    // then interleave sub-boxes after each parent.
     const isNG = o => o.label === 1 || o.label === true
-    result.sort((a, b) => {
+    const parents = result.filter(o => !o.isSubBox)
+    const subsByParent = new Map()
+    result.forEach(o => {
+      if (!o.isSubBox) return
+      if (!subsByParent.has(o.parentKey)) subsByParent.set(o.parentKey, [])
+      subsByParent.get(o.parentKey).push(o)
+    })
+
+    parents.sort((a, b) => {
       const aNg = isNG(a) ? 0 : 1
       const bNg = isNG(b) ? 0 : 1
       if (aNg !== bNg) return aNg - bNg
-      // Within same group, sort by cavity then Y then X
       if (a.cavityIndex !== b.cavityIndex) return a.cavityIndex - b.cavityIndex
       const [ax1, ay1] = normalizeBox(a.box || [0,0,0,0])
       const [bx1, by1] = normalizeBox(b.box || [0,0,0,0])
       return ay1 - by1 || ax1 - bx1
     })
-    return result
+
+    // Rebuild with sub-boxes interleaved after their parent
+    const sorted = []
+    parents.forEach(parent => {
+      sorted.push(parent)
+      const subs = subsByParent.get(parent.key)
+      if (subs) sorted.push(...subs)
+    })
+    return sorted
   }, [ngFrames, cavityCount])
 
-  const totalObjects = allObjects.length
+  // Parent objects only (exclude sub-boxes from counting)
+  const parentObjects = useMemo(() => allObjects.filter(o => !o.isSubBox), [allObjects])
+  const totalObjects = parentObjects.length
   // Fall back to per-frame review if no objects detected (legacy data)
   const hasObjects = totalObjects > 0
-  // Only NG objects (label=1/true) need operator review, GOOD objects (label=0/false) are auto-OK
-  const ngOnlyObjects = useMemo(() => allObjects.filter(o => o.label === 1 || o.label === true), [allObjects])
+  // Only NG parent objects (label=1/true) need operator review, GOOD objects are auto-OK
+  // Sub-boxes are excluded — they follow parent's decision
+  const ngOnlyObjects = useMemo(() => allObjects.filter(o => !o.isSubBox && (o.label === 1 || o.label === true)), [allObjects])
   const ngOnlyCount = ngOnlyObjects.length
 
+  // Active frame index for multi-frame navigation (thumbnail strip)
+  // Declared early because render lists below depend on it
+  const [activeFrameIdx, setActiveFrameIdx] = useState(0)
+
   // Pre-compute render lists with cavity headers (avoids tracking state in .map())
+  // Sub-boxes excluded from render lists — they're rendered as children inside ObjectRow
+  // Filter by active frame so list changes when switching thumbnails
+  const activeFrameSide = ngFrames[activeFrameIdx]?.side
+  const activeFrameIndex = ngFrames[activeFrameIdx]?.frameIndex
+
+  // Per-frame counts for display in section headers
+  const frameParentObjects = useMemo(() => parentObjects.filter(
+    o => o.frameSide === activeFrameSide && o.frameIndex === activeFrameIndex
+  ), [parentObjects, activeFrameSide, activeFrameIndex])
+  const frameObjectCount = frameParentObjects.length
+  const frameNgCount = useMemo(() => frameParentObjects.filter(
+    o => o.label === 1 || o.label === true
+  ).length, [frameParentObjects])
+  const frameGoodCount = frameObjectCount - frameNgCount
+
   const ngRenderList = useMemo(() => {
-    // Count NG objects per cavity for header badges
+    // Count NG parent objects per cavity for header badges
     const cavityCounts = {}
     allObjects.forEach(obj => {
+      if (obj.isSubBox) return
       if (!(obj.label === 1 || obj.label === true)) return
+      if (obj.frameSide !== activeFrameSide || obj.frameIndex !== activeFrameIndex) return
       cavityCounts[obj.cavityIndex] = (cavityCounts[obj.cavityIndex] || 0) + 1
     })
     const items = []
     let lastCav = -1
     allObjects.forEach((obj, idx) => {
+      if (obj.isSubBox) return
       if (!(obj.label === 1 || obj.label === true)) return
+      if (obj.frameSide !== activeFrameSide || obj.frameIndex !== activeFrameIndex) return
       if (cavityCount > 1 && obj.cavityIndex !== lastCav) {
         items.push({ type: 'header', cavityIndex: obj.cavityIndex, count: cavityCounts[obj.cavityIndex] || 0, key: `ng-cav-${obj.cavityIndex}` })
         lastCav = obj.cavityIndex
@@ -280,18 +418,22 @@ export function CavityReviewOverlay({
       items.push({ type: 'obj', obj, idx, key: obj.key })
     })
     return items
-  }, [allObjects, cavityCount])
+  }, [allObjects, cavityCount, activeFrameSide, activeFrameIndex])
 
   const goodRenderList = useMemo(() => {
     const cavityCounts = {}
     allObjects.forEach(obj => {
+      if (obj.isSubBox) return
       if (obj.label === 1 || obj.label === true) return
+      if (obj.frameSide !== activeFrameSide || obj.frameIndex !== activeFrameIndex) return
       cavityCounts[obj.cavityIndex] = (cavityCounts[obj.cavityIndex] || 0) + 1
     })
     const items = []
     let lastCav = -1
     allObjects.forEach((obj, idx) => {
+      if (obj.isSubBox) return
       if (obj.label === 1 || obj.label === true) return
+      if (obj.frameSide !== activeFrameSide || obj.frameIndex !== activeFrameIndex) return
       if (cavityCount > 1 && obj.cavityIndex !== lastCav) {
         items.push({ type: 'header', cavityIndex: obj.cavityIndex, count: cavityCounts[obj.cavityIndex] || 0, key: `good-cav-${obj.cavityIndex}` })
         lastCav = obj.cavityIndex
@@ -299,14 +441,12 @@ export function CavityReviewOverlay({
       items.push({ type: 'obj', obj, idx, key: obj.key })
     })
     return items
-  }, [allObjects, cavityCount])
+  }, [allObjects, cavityCount, activeFrameSide, activeFrameIndex])
 
   // Per-object review state — start with no object selected (full PCB view)
   const [activeObjectIdx, setActiveObjectIdx] = useState(null)
   // focusTrigger: increment to re-trigger ImageViewer zoom (handles re-click on same object)
   const [focusTrigger, setFocusTrigger] = useState(0)
-  // Active frame index for multi-frame navigation (thumbnail strip)
-  const [activeFrameIdx, setActiveFrameIdx] = useState(0)
   const [objectDecisions, setObjectDecisions] = useState(initialObjectDecisions)
   const [showReasonInput, setShowReasonInput] = useState(false)
   const [selectedReason, setSelectedReason] = useState('')
@@ -343,24 +483,43 @@ export function CavityReviewOverlay({
         : ngFrames[activeFrameIdx] || ngFrames[0])  // Show selected frame when no object selected
     : ngFrames[reviewIndex]
 
-  // Objects in the current frame for ImageViewer bbox overlay
+  // Objects in the current frame for ImageViewer coordinate-based zoom.
+  // Includes both parent objects and sub-boxes (sub-boxes appended at end).
+  // ImageViewer no longer renders bboxes, but needs coordinates for auto-zoom.
   const currentFrameObjects = useMemo(() => {
     if (!currentFrame) return []
-    return (currentFrame.objects || []).map((obj, idx) => ({
+    const frameObjs = (currentFrame.objects || []).map((obj, idx) => ({
       name: obj.name,
       box: obj.box,
       score: obj.score,
       label: obj.label,
       _key: objKey(currentFrame.side, currentFrame.frameIndex, idx),
     }))
-  }, [currentFrame])
+    // Append sub-box entries for this frame (so ImageViewer can zoom to them)
+    allObjects.forEach(obj => {
+      if (!obj.isSubBox) return
+      if (obj.frameSide !== currentFrame.side || obj.frameIndex !== currentFrame.frameIndex) return
+      frameObjs.push({
+        name: obj.name,
+        box: obj.box,
+        score: null,
+        label: obj.label,
+        _key: obj.key,
+      })
+    })
+    return frameObjs
+  }, [currentFrame, allObjects])
 
-  // Active object index within its frame (for ImageViewer highlight)
-  // Returns -1 when no object selected → ImageViewer shows full PCB without zoom
+  // Active object index within the frame objects array (for ImageViewer auto-zoom).
+  // Returns -1 when no object selected → ImageViewer shows full PCB without zoom.
+  // For sub-boxes, finds their position in currentFrameObjects by key lookup.
   const activeObjectFrameIdx = useMemo(() => {
     if (activeObjectIdx == null || !activeObject || !currentFrame) return -1
-    return activeObject.objectIndex
-  }, [activeObjectIdx, activeObject, currentFrame])
+    // Find the object in currentFrameObjects by its key
+    const targetKey = activeObject.key
+    const frameIdx = currentFrameObjects.findIndex(o => o._key === targetKey)
+    return frameIdx !== -1 ? frameIdx : activeObject.objectIndex
+  }, [activeObjectIdx, activeObject, currentFrame, currentFrameObjects])
 
   // Bubble up objectDecisions to parent for persistence
   useEffect(() => {
@@ -368,7 +527,9 @@ export function CavityReviewOverlay({
   }, [objectDecisions]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Select object + trigger ImageViewer zoom (toggle: click same → deselect + reset)
-  // Also toggles bulk checkbox so click = select + tick, click again = deselect + untick
+  // Also toggles bulk checkbox so click = select + tick, click again = deselect + untick.
+  // If the selected object belongs to a different frame, switch activeFrameIdx first
+  // so ImageViewer loads the correct image before auto-zoom fires.
   const handleSelectObject = useCallback((idx) => {
     const obj = allObjects[idx]
     if (idx === activeObjectIdx) {
@@ -377,11 +538,20 @@ export function CavityReviewOverlay({
       if (obj) setBulkSelected(prev => { const next = new Set(prev); next.delete(obj.key); return next })
       return
     }
+    // Sync frame if object is on a different frame than currently displayed
+    if (obj) {
+      const targetFrameIdx = ngFrames.findIndex(
+        f => f.side === obj.frameSide && f.frameIndex === obj.frameIndex
+      )
+      if (targetFrameIdx !== -1 && targetFrameIdx !== activeFrameIdx) {
+        setActiveFrameIdx(targetFrameIdx)
+      }
+    }
     setActiveObjectIdx(idx)
     setFocusTrigger(prev => prev + 1)
     // Auto-tick checkbox on select
     if (obj) setBulkSelected(prev => { const next = new Set(prev); next.add(obj.key); return next })
-  }, [activeObjectIdx, allObjects])
+  }, [activeObjectIdx, allObjects, ngFrames, activeFrameIdx])
 
   // Reset when inspection changes
   useEffect(() => {
@@ -482,9 +652,10 @@ export function CavityReviewOverlay({
     }
   }, [hasObjects, objectDecisions, frameDecisions, totalObjects, ngFrames.length])
 
-  // Find next unreviewed NG object (skip GOOD objects)
+  // Find next unreviewed NG parent object (skip GOOD objects and sub-boxes)
   const advanceToNextObject = useCallback((allObjDecisions, fromIdx) => {
     for (let i = fromIdx; i < allObjects.length; i++) {
+      if (allObjects[i].isSubBox) continue
       const isNG = allObjects[i].label === 1 || allObjects[i].label === true
       if (isNG && !allObjDecisions[allObjects[i].key]) {
         setActiveObjectIdx(i)
@@ -494,6 +665,7 @@ export function CavityReviewOverlay({
     }
     // Wrap around
     for (let i = 0; i < fromIdx; i++) {
+      if (allObjects[i].isSubBox) continue
       const isNG = allObjects[i].label === 1 || allObjects[i].label === true
       if (isNG && !allObjDecisions[allObjects[i].key]) {
         setActiveObjectIdx(i)
@@ -672,6 +844,25 @@ export function CavityReviewOverlay({
     setOtherText('')
   }, [objectDecisions, unreviewed, effectiveBulkSelected, selectedReason, otherText, onDecisionChange])
 
+  // Auto-hide reason dropdown when target is gone:
+  // - Bulk mode: all checkboxes unticked
+  // - Single mode: active object deselected
+  useEffect(() => {
+    if (!showReasonInput) return
+    if (bulkReasonMode) {
+      if (effectiveBulkSelected.size === 0) {
+        setBulkReasonMode(false)
+        setShowReasonInput(false)
+        setSelectedReason('')
+        setOtherText('')
+      }
+    } else if (activeObjectIdx == null) {
+      setShowReasonInput(false)
+      setSelectedReason('')
+      setOtherText('')
+    }
+  }, [showReasonInput, bulkReasonMode, effectiveBulkSelected.size, activeObjectIdx])
+
   // Auto-NG countdown
   useEffect(() => {
     const isCurrentReviewed = hasObjects
@@ -716,11 +907,20 @@ export function CavityReviewOverlay({
         handleObjectGood()
       } else if (hasObjects && (e.key === 'ArrowDown' || e.key === 'ArrowRight') && !e.ctrlKey) {
         e.preventDefault()
-        setActiveObjectIdx(prev => prev == null ? 0 : Math.min(allObjects.length - 1, prev + 1))
+        // Skip sub-boxes in keyboard navigation — only navigate parent objects
+        setActiveObjectIdx(prev => {
+          let next = prev == null ? 0 : prev + 1
+          while (next < allObjects.length && allObjects[next]?.isSubBox) next++
+          return Math.min(allObjects.length - 1, next)
+        })
         setFocusTrigger(prev => prev + 1)
       } else if (hasObjects && (e.key === 'ArrowUp' || e.key === 'ArrowLeft') && !e.ctrlKey) {
         e.preventDefault()
-        setActiveObjectIdx(prev => prev == null ? 0 : Math.max(0, prev - 1))
+        setActiveObjectIdx(prev => {
+          let next = prev == null ? 0 : prev - 1
+          while (next >= 0 && allObjects[next]?.isSubBox) next--
+          return Math.max(0, next)
+        })
         setFocusTrigger(prev => prev + 1)
       } else if (ngFrames.length > 1 && (e.key === 'ArrowRight' || e.key === 'ArrowDown') && e.ctrlKey) {
         // Ctrl+Arrow: switch frames
@@ -841,14 +1041,6 @@ export function CavityReviewOverlay({
                 objects={currentFrameObjects}
                 activeObjectIndex={hasObjects ? activeObjectFrameIdx : -1}
                 focusTrigger={focusTrigger}
-                onObjectClick={hasObjects ? (idx) => {
-                  // Find the global index for this frame object
-                  const clickedKey = currentFrameObjects[idx]?._key
-                  if (clickedKey) {
-                    const globalIdx = allObjects.findIndex(o => o.key === clickedKey)
-                    if (globalIdx !== -1) handleSelectObject(globalIdx)
-                  }
-                } : undefined}
                 className="w-full h-full"
                 showControls={true}
               />
@@ -934,11 +1126,11 @@ export function CavityReviewOverlay({
             <div className="px-3 py-2 border-b border-surface-border shrink-0">
               <div className="flex items-center justify-between">
                 <h3 className="text-xs font-mono text-text-tertiary uppercase tracking-wide">
-                  Objects ({totalObjects})
+                  Objects ({frameObjectCount})
                 </h3>
                 <div className="flex items-center gap-2">
-                  {ngOnlyCount > 0 && (
-                    <span className="text-xxs font-mono text-phosphor-red">{ngOnlyCount} NG</span>
+                  {frameNgCount > 0 && (
+                    <span className="text-xxs font-mono text-phosphor-red">{frameNgCount} NG</span>
                   )}
                   {reviewedCount > 0 && (
                     <span className="text-xxs font-mono text-phosphor-teal">
@@ -955,13 +1147,13 @@ export function CavityReviewOverlay({
             {/* Object list — split layout: headers always visible, items scroll */}
             <div className="flex-1 flex flex-col min-h-0">
               {/* ── NG Header (always visible at top) ── */}
-              {ngOnlyCount > 0 && (
+              {frameNgCount > 0 && (
                 <div className="bg-phosphor-red/10 border-b border-surface-border shrink-0">
                   <button
                     onClick={() => setExpandedSection(prev => prev === 'ng' ? null : 'ng')}
                     className="w-full px-3 py-1.5 flex items-center justify-between hover:bg-phosphor-red/15 transition-colors"
                   >
-                    <span className="text-xxs font-mono text-phosphor-red font-bold">NG ({ngOnlyCount})</span>
+                    <span className="text-xxs font-mono text-phosphor-red font-bold">NG ({frameNgCount})</span>
                     <ChevronDown className={cn("w-3.5 h-3.5 text-phosphor-red transition-transform", expandedSection === 'ng' ? "rotate-0" : "-rotate-90")} />
                   </button>
                   {/* Bulk selection bar — only when NG expanded and has unreviewed items */}
@@ -1000,7 +1192,7 @@ export function CavityReviewOverlay({
                 </div>
               )}
               {/* ── NG Items (scrollable, fills space when expanded) ── */}
-              {expandedSection === 'ng' && ngOnlyCount > 0 && (
+              {expandedSection === 'ng' && frameNgCount > 0 && (
                 <div className="flex-1 overflow-y-auto min-h-0">
                   {ngRenderList.map(item => {
                     if (item.type === 'header') {
@@ -1031,23 +1223,24 @@ export function CavityReviewOverlay({
                         isReviewed={isReviewed} decisionIsNG={decisionIsNG}
                         onSelect={handleSelectObject} onGood={handleInlineGood} onNG={handleInlineNG}
                         showCheckbox={!isReviewed} isChecked={effectiveBulkSelected.has(obj.key)}
-                        onToggleCheck={toggleBulkSelect} />
+                        onToggleCheck={toggleBulkSelect}
+                        subBoxes={obj.subBoxKeys} allObjects={allObjects} activeObjectIdx={activeObjectIdx} />
                     )
                   })}
                 </div>
               )}
               {/* ── GOOD Header (always visible — floats at bottom when NG expanded) ── */}
-              {totalObjects - ngOnlyCount > 0 && (
+              {frameGoodCount > 0 && (
                 <button
                   onClick={() => setExpandedSection(prev => prev === 'good' ? null : 'good')}
                   className="w-full px-3 py-1.5 bg-phosphor-green/10 border-b border-surface-border flex items-center justify-between hover:bg-phosphor-green/15 transition-colors shrink-0"
                 >
-                  <span className="text-xxs font-mono text-phosphor-green font-bold">GOOD ({totalObjects - ngOnlyCount})</span>
+                  <span className="text-xxs font-mono text-phosphor-green font-bold">GOOD ({frameGoodCount})</span>
                   <ChevronDown className={cn("w-3.5 h-3.5 text-phosphor-green transition-transform", expandedSection === 'good' ? "rotate-0" : "-rotate-90")} />
                 </button>
               )}
               {/* ── GOOD Items (scrollable, fills space when expanded) ── */}
-              {expandedSection === 'good' && totalObjects - ngOnlyCount > 0 && (
+              {expandedSection === 'good' && frameGoodCount > 0 && (
                 <div className="flex-1 overflow-y-auto min-h-0">
                   {goodRenderList.map(item => {
                     if (item.type === 'header') {
@@ -1072,7 +1265,8 @@ export function CavityReviewOverlay({
                     return (
                       <ObjectRow key={obj.key} obj={obj} idx={idx} isActive={isActive} isObjNG={false}
                         isReviewed={false} decisionIsNG={false}
-                        onSelect={handleSelectObject} />
+                        onSelect={handleSelectObject}
+                        subBoxes={obj.subBoxKeys} allObjects={allObjects} activeObjectIdx={activeObjectIdx} />
                     )
                   })}
                 </div>
