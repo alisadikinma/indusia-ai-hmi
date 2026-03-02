@@ -8,7 +8,7 @@ import { normalizeBox, computeBboxScale } from '@/lib/utils/inspectionReview'
 const MIN_ZOOM = 0.5  // relative to fit scale
 const MAX_ZOOM = 5
 const ZOOM_STEP = 0.3
-const ZOOM_TO_BBOX_MIN = 1.5 // minimum zoom when jumping to bbox
+const ZOOM_TO_BBOX_MIN = 1.0 // minimum zoom when jumping to bbox (1.0 = fit-to-container)
 
 /**
  * ImageViewer — Zoomable, pannable image with auto-zoom-to-coordinate navigation.

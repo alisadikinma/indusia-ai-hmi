@@ -1071,9 +1071,10 @@ export function CavityReviewOverlay({
                 )}
               </>
             )}
-            {/* Frame Thumbnail Strip — overlaid at bottom of image area */}
+            {/* Frame Thumbnail Strip — above zoom controls, horizontally scrollable */}
             {ngFrames.length > 1 && (
-              <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-void/80 backdrop-blur-sm border border-surface-border/50">
+              <div className="absolute bottom-12 left-3 right-3 z-20 flex justify-center">
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-void/80 backdrop-blur-sm border border-surface-border/50 overflow-x-auto max-w-full">
                 {ngFrames.map((frame, fIdx) => {
                   const isActiveFrame = currentFrame === frame
                   const sn = frame.serial_number
@@ -1115,6 +1116,7 @@ export function CavityReviewOverlay({
                     </button>
                   )
                 })}
+              </div>
               </div>
             )}
           </div>
