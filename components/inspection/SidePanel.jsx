@@ -58,10 +58,10 @@ export function SidePanel({ side, frames = [], className, onFrameClick, reviewin
   // Check if frames carry serial_number data (legacy/pre-patch data may not have it)
   const hasSerialData = frames.some(f => f.serial_number != null)
 
-  // Current active frame — prefer static model image, then raw_url, then url
+  // Current active frame — always use image_url (AI inference with bbox overlay)
   const activeFrame = frames[activeFrameIndex] || null
   const activeIsEmpty = hasSerialData && !isRealPcb(activeFrame?.serial_number)
-  const imageUrl = activeFrame?.image_raw_url || activeFrame?.image_url
+  const imageUrl = activeFrame?.image_url
   const objects = activeFrame?.objects || []
 
   // Use frame-level label (true=NG, false=GOOD) as the authoritative AI verdict.
@@ -286,7 +286,7 @@ export function SidePanel({ side, frames = [], className, onFrameClick, reviewin
                   {/* Thumbnail Image */}
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src={frame.image_url || frame.image_raw_url}
+                    src={frame.image_url}
                     alt={`Frame ${index + 1}`}
                     className={cn("w-full h-full object-cover", isEmpty && "grayscale")}
                   />

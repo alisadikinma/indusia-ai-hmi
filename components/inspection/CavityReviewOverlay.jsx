@@ -278,7 +278,7 @@ export function CavityReviewOverlay({
           frameIndex: frame.frameIndex,
           objectIndex: objIdx,
           serialNumber: frame.serial_number,
-          imageUrl: frame.image_raw_url || frame.image_url,
+          imageUrl: frame.image_url,
           key: parentKey,
           cavityIndex: 0,
           subBoxKeys: subBoxKeys.length > 0 ? subBoxKeys : undefined,
@@ -297,7 +297,7 @@ export function CavityReviewOverlay({
             frameIndex: frame.frameIndex,
             objectIndex: objIdx,
             serialNumber: frame.serial_number,
-            imageUrl: frame.image_raw_url || frame.image_url,
+            imageUrl: frame.image_url,
             key: `${parentKey}-SUB-${subIdx}`,
             cavityIndex: 0,
             isSubBox: true,
@@ -1034,9 +1034,9 @@ export function CavityReviewOverlay({
               )
             })()}
 
-            {currentFrame && (currentFrame.image_raw_url || currentFrame.image_url) ? (
+            {currentFrame && currentFrame.image_url ? (
               <ImageViewer
-                src={currentFrame.image_raw_url || currentFrame.image_url}
+                src={currentFrame.image_url}
                 alt={`${currentFrame.side} frame ${currentFrame.frameIndex + 1}`}
                 objects={currentFrameObjects}
                 activeObjectIndex={hasObjects ? activeObjectFrameIdx : -1}
@@ -1078,7 +1078,7 @@ export function CavityReviewOverlay({
                   const isActiveFrame = currentFrame === frame
                   const sn = frame.serial_number
                   const snType = classifySerialNumber(sn)
-                  const frameImgUrl = frame.image_url || frame.image_raw_url
+                  const frameImgUrl = frame.image_url
                   return (
                     <button
                       key={`${frame.side}-${frame.frameIndex}`}
