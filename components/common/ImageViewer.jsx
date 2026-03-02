@@ -8,7 +8,10 @@ import { normalizeBox, computeBboxScale } from '@/lib/utils/inspectionReview'
 const MIN_ZOOM = 0.5  // relative to fit scale
 const MAX_ZOOM = 5
 const ZOOM_STEP = 0.3
-const ZOOM_TO_BBOX_MIN = 1.0 // minimum zoom when jumping to bbox (1.0 = fit-to-container)
+const ZOOM_TO_BBOX_MIN = 1.0 // minimum auto-zoom (1.0 = fit-to-container)
+// Context padding: viewport shows bbox * this factor.
+// 2.5 = bbox fills ~40% of viewport in the limiting dimension, rest is context.
+const BBOX_CONTEXT_PADDING = 2.5
 
 /**
  * ImageViewer — Zoomable, pannable image with auto-zoom-to-coordinate navigation.
@@ -203,9 +206,11 @@ export default function ImageViewer({
     const cx = (clampedX1 + clampedX2) / 2
     const cy = (clampedY1 + clampedY2) / 2
 
-    // Compute zoom so bbox fills ~25% of container (fit the larger dimension)
-    const zoomForWidth = (containerW * 0.25) / (bboxW * fs)
-    const zoomForHeight = (containerH * 0.25) / (bboxH * fs)
+    // Compute zoom so bbox + surrounding context fits the viewport.
+    // With BBOX_CONTEXT_PADDING=2.5, bbox fills ~40% of viewport (rest is context).
+    // This adapts naturally: large bbox → low zoom, small bbox → high zoom.
+    const zoomForWidth = containerW / (bboxW * BBOX_CONTEXT_PADDING * fs)
+    const zoomForHeight = containerH / (bboxH * BBOX_CONTEXT_PADDING * fs)
     const targetZoom = Math.max(
       ZOOM_TO_BBOX_MIN,
       Math.min(Math.min(zoomForWidth, zoomForHeight), MAX_ZOOM)
