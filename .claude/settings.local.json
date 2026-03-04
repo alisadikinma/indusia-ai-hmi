@@ -62,7 +62,9 @@
       "Bash(npx next lint:*)",
       "Bash(git push origin SIT)",
       "Bash(git pull origin main)",
-      "Bash(git push origin main)"
+      "Bash(git push origin main)",
+      "Bash(python3 -c \":*)",
+      "Bash(node -e \":*)"
     ],
     "deny": [],
     "ask": [],
