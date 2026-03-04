@@ -19,7 +19,7 @@
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { cn } from '@/lib/utils'
-import { findNextUnreviewedFrame, computePcbCounts, normalizeBox } from '@/lib/utils/inspectionReview'
+import { findNextUnreviewedFrame, computePcbCounts, normalizeBox, deduplicateContainedObjects } from '@/lib/utils/inspectionReview'
 import { classifySerialNumber, isRealPcb, SN_TYPE } from '@/lib/utils/serialNumber'
 import { X, Timer, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react'
 import { useI18n } from '@/context/I18nContext'
@@ -307,6 +307,35 @@ export function CavityReviewOverlay({
         })
       })
     })
+
+    // Containment deduplication: remove individual pin detections that are
+    // contained within a larger same-name component (e.g. connector pins vs connector).
+    // Applied per-frame so pins from one frame don't suppress objects in another.
+    {
+      const parentByFrame = new Map()
+      result.forEach(obj => {
+        if (obj.isSubBox) return
+        const fk = `${obj.frameSide}-${obj.frameIndex}`
+        if (!parentByFrame.has(fk)) parentByFrame.set(fk, [])
+        parentByFrame.get(fk).push(obj)
+      })
+
+      const removedKeys = new Set()
+      parentByFrame.forEach(frameObjs => {
+        const kept = deduplicateContainedObjects(frameObjs)
+        const keptKeys = new Set(kept.map(o => o.key))
+        frameObjs.forEach(o => { if (!keptKeys.has(o.key)) removedKeys.add(o.key) })
+      })
+
+      if (removedKeys.size > 0) {
+        // Remove filtered parents and their orphaned sub-boxes
+        const filtered = result.filter(o =>
+          o.isSubBox ? !removedKeys.has(o.parentKey) : !removedKeys.has(o.key)
+        )
+        result.length = 0
+        filtered.forEach(o => result.push(o))
+      }
+    }
 
     // Assign cavity index from spatial X position within each frame
     if (cavityCount > 1) {
