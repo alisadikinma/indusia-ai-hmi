@@ -21,7 +21,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { cn } from '@/lib/utils'
 import { findNextUnreviewedFrame, computePcbCounts, normalizeBox, deduplicateContainedObjects } from '@/lib/utils/inspectionReview'
 import { classifySerialNumber, isRealPcb, SN_TYPE } from '@/lib/utils/serialNumber'
-import { X, Timer, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react'
+import { X, Timer, ChevronLeft, ChevronRight, ChevronDown, AlertCircle, CheckCircle2 } from 'lucide-react'
 import { useI18n } from '@/context/I18nContext'
 import ImageViewer from '@/components/common/ImageViewer'
 
@@ -681,29 +681,55 @@ export function CavityReviewOverlay({
     }
   }, [hasObjects, objectDecisions, frameDecisions, totalObjects, ngFrames.length])
 
-  // Find next unreviewed NG parent object (skip GOOD objects and sub-boxes)
+  // Find next unreviewed NG parent object (skip GOOD objects and sub-boxes).
+  // Priority 1: Stay within the current frame (search forward, then wrap within frame).
+  // Priority 2: Only cross to another frame when all NG objects in current frame are done.
+  // When crossing frames, also updates activeFrameIdx so the objects list stays in sync.
   const advanceToNextObject = useCallback((allObjDecisions, fromIdx) => {
+    const justConfirmedObj = allObjects[fromIdx - 1]
+    const currSide = justConfirmedObj?.frameSide
+    const currFrameIdx = justConfirmedObj?.frameIndex
+
+    const isUnreviewedNG = (obj) =>
+      !obj.isSubBox &&
+      (obj.label === 1 || obj.label === true) &&
+      !allObjDecisions[obj.key]
+
+    // Priority 1: Search forward within the same frame
     for (let i = fromIdx; i < allObjects.length; i++) {
-      if (allObjects[i].isSubBox) continue
-      const isNG = allObjects[i].label === 1 || allObjects[i].label === true
-      if (isNG && !allObjDecisions[allObjects[i].key]) {
+      const obj = allObjects[i]
+      if (obj.frameSide === currSide && obj.frameIndex === currFrameIdx && isUnreviewedNG(obj)) {
         setActiveObjectIdx(i)
         setFocusTrigger(prev => prev + 1)
         return
       }
     }
-    // Wrap around
+    // Priority 1b: Wrap-around within the same frame (before fromIdx)
     for (let i = 0; i < fromIdx; i++) {
-      if (allObjects[i].isSubBox) continue
-      const isNG = allObjects[i].label === 1 || allObjects[i].label === true
-      if (isNG && !allObjDecisions[allObjects[i].key]) {
+      const obj = allObjects[i]
+      if (obj.frameSide === currSide && obj.frameIndex === currFrameIdx && isUnreviewedNG(obj)) {
         setActiveObjectIdx(i)
         setFocusTrigger(prev => prev + 1)
         return
+      }
+    }
+
+    // Priority 2: Current frame fully reviewed — find next frame with unreviewed NGs
+    for (let fi = 0; fi < ngFrames.length; fi++) {
+      const frame = ngFrames[fi]
+      if (frame.side === currSide && frame.frameIndex === currFrameIdx) continue
+      for (let i = 0; i < allObjects.length; i++) {
+        const obj = allObjects[i]
+        if (obj.frameSide === frame.side && obj.frameIndex === frame.frameIndex && isUnreviewedNG(obj)) {
+          setActiveFrameIdx(fi)
+          setActiveObjectIdx(i)
+          setFocusTrigger(prev => prev + 1)
+          return
+        }
       }
     }
     // All NG objects reviewed — useEffect handles completion
-  }, [allObjects])
+  }, [allObjects, ngFrames])
 
   // Confirm current object as REAL NG
   const handleObjectNG = useCallback(() => {
@@ -1109,6 +1135,18 @@ export function CavityReviewOverlay({
                   const sn = frame.serial_number
                   const snType = classifySerialNumber(sn)
                   const frameImgUrl = frame.image_url
+
+                  // Per-frame confirmation status
+                  const frameNgObjs = parentObjects.filter(
+                    o => (o.label === 1 || o.label === true) &&
+                         o.frameSide === frame.side &&
+                         o.frameIndex === frame.frameIndex
+                  )
+                  const frameNgCount = frameNgObjs.length
+                  const frameConfirmedCount = frameNgObjs.filter(o => objectDecisions[o.key] != null).length
+                  const frameFullyConfirmed = frameNgCount > 0 && frameConfirmedCount === frameNgCount
+                  const frameHasUnreviewed = frameNgCount > 0 && frameConfirmedCount < frameNgCount
+
                   return (
                     <button
                       key={`${frame.side}-${frame.frameIndex}`}
@@ -1117,7 +1155,11 @@ export function CavityReviewOverlay({
                         "relative flex-shrink-0 w-16 h-12 rounded overflow-hidden border-2 transition-all",
                         isActiveFrame
                           ? "border-phosphor-teal ring-1 ring-phosphor-teal/40"
-                          : "border-surface-border hover:border-phosphor-teal/50"
+                          : frameHasUnreviewed
+                            ? "border-phosphor-red/70 hover:border-phosphor-red"
+                            : frameFullyConfirmed
+                              ? "border-phosphor-green/70 hover:border-phosphor-green"
+                              : "border-surface-border hover:border-phosphor-teal/50"
                       )}
                     >
                       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -1130,6 +1172,18 @@ export function CavityReviewOverlay({
                       <span className="absolute top-0 left-0 px-1 text-[9px] font-mono font-bold bg-void/80 text-text-primary rounded-br leading-tight">
                         {frame.side === 'TOP' ? 'TOP' : 'BTM'}
                       </span>
+                      {/* Confirmation status badge */}
+                      {frameNgCount > 0 && (
+                        <div className={cn(
+                          "absolute top-0.5 right-0.5 w-4 h-4 rounded-full flex items-center justify-center",
+                          frameFullyConfirmed ? "bg-phosphor-green" : "bg-phosphor-red"
+                        )}>
+                          {frameFullyConfirmed
+                            ? <CheckCircle2 className="w-3 h-3 text-white" />
+                            : <AlertCircle className="w-3 h-3 text-white" />
+                          }
+                        </div>
+                      )}
                       {/* SN color bar — matches SidePanel styling */}
                       {snType === SN_TYPE.TIMESTAMP ? (
                         <div
