@@ -330,7 +330,53 @@ export default function ImageViewer({
             height: naturalSize ? naturalSize.height : 'auto',
           }}
         />
-        {/* Bbox overlays removed — AI backend draws bboxes on raw images */}
+
+        {/* Component name label — shown only for the active (zoomed) object */}
+        {(() => {
+          if (!naturalSize || activeObjectIndex == null || activeObjectIndex < 0) return null
+          const obj = objects[activeObjectIndex]
+          if (!obj || !obj.box || obj.box.length < 4) return null
+
+          const [nx1, ny1, , ny2] = normalizeBox(obj.box)
+          const sx = nx1 * bboxScale.x
+          const sy = ny1 * bboxScale.y
+          const sh = (ny2 - ny1) * bboxScale.y
+          if (sx > naturalSize.width || sy > naturalSize.height) return null
+
+          const fs = Math.max(8, naturalSize.height * 0.009)
+          const charW = fs * 0.62
+          const tw = obj.name.length * charW + 4
+          const labelAbove = sy >= fs + 3
+          const ty = labelAbove ? sy - 2 : sy + sh + fs + 1
+
+          return (
+            <svg
+              className="absolute inset-0 pointer-events-none"
+              width={naturalSize.width}
+              height={naturalSize.height}
+              style={{ position: 'absolute', top: 0, left: 0, overflow: 'visible' }}
+            >
+              <rect
+                x={sx}
+                y={ty - fs - 1}
+                width={tw}
+                height={fs + 3}
+                fill="rgba(0,0,0,0.72)"
+                rx={1.5}
+              />
+              <text
+                x={sx + 2}
+                y={ty - 1}
+                fill="#FF6060"
+                fontSize={fs}
+                fontFamily="'JetBrains Mono', 'Courier New', monospace"
+                fontWeight="600"
+              >
+                {obj.name}
+              </text>
+            </svg>
+          )
+        })()}
       </div>
 
       {/* Zoom controls */}
