@@ -331,7 +331,8 @@ export default function ImageViewer({
           }}
         />
 
-        {/* Component name label — shown only for the active (zoomed) object */}
+        {/* Component name + confidence label above the active bbox.
+            Uses inverse scale so label stays a fixed screen-size regardless of zoom. */}
         {(() => {
           if (!naturalSize || activeObjectIndex == null || activeObjectIndex < 0) return null
           const obj = objects[activeObjectIndex]
@@ -343,11 +344,22 @@ export default function ImageViewer({
           const sh = (ny2 - ny1) * bboxScale.y
           if (sx > naturalSize.width || sy > naturalSize.height) return null
 
-          const fs = Math.max(8, naturalSize.height * 0.009)
+          // Inverse scale so label stays fixed screen-size at any zoom
+          const screenFs = 9
+          const invScale = 1 / actualScale
+          const fs = screenFs * invScale
+          const pad = 3 * invScale
+
+          // Label text: name + confidence %
+          const pct = obj.score != null ? ` ${Math.round(obj.score * 100)}%` : ''
+          const label = `${obj.name}${pct}`
           const charW = fs * 0.62
-          const tw = obj.name.length * charW + 4
-          const labelAbove = sy >= fs + 3
-          const ty = labelAbove ? sy - 2 : sy + sh + fs + 1
+          const tw = label.length * charW + pad * 2
+          const th = fs + pad * 2
+
+          // Position above bbox top edge; fall below if not enough space
+          const labelAbove = sy >= th + pad
+          const ly = labelAbove ? sy - th - pad : sy + sh + pad
 
           return (
             <svg
@@ -358,21 +370,21 @@ export default function ImageViewer({
             >
               <rect
                 x={sx}
-                y={ty - fs - 1}
+                y={ly}
                 width={tw}
-                height={fs + 3}
-                fill="rgba(0,0,0,0.72)"
-                rx={1.5}
+                height={th}
+                fill="rgba(0,0,0,0.75)"
+                rx={2 * invScale}
               />
               <text
-                x={sx + 2}
-                y={ty - 1}
+                x={sx + pad}
+                y={ly + fs + pad * 0.5}
                 fill="#FF6060"
                 fontSize={fs}
                 fontFamily="'JetBrains Mono', 'Courier New', monospace"
                 fontWeight="600"
               >
-                {obj.name}
+                {label}
               </text>
             </svg>
           )
