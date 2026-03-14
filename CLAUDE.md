@@ -66,8 +66,8 @@ The HMI requires three services. Start them in this order (dependencies first):
 
 ```bash
 # Terminal 1 - PostgREST (Database API) - MUST start first
-cd "D:/Projects/Tools/postgrest"
-postgrest.exe postgrest.conf
+cd "D:/Projects/indusia-ai-hmi/Tool/postgrest"
+./start-postgrest.bat
 # Runs on port 3001 - provides REST API over local PostgreSQL
 
 # Terminal 2 - Auto Inspect Edge (AI Backend)
@@ -787,6 +787,12 @@ When AI flags multiple NG frames, operator reviews each one via CavityReviewOver
 **Completion path:** Only the `useEffect` auto-complete in CavityReviewOverlay calls `completeReview` (with 800ms delay for badge visibility). The `advanceOrComplete` function must NOT call `completeReview` directly — it returns early when all frames are reviewed, letting the effect handle it. Calling from both paths causes duplicate `submitDecision` calls.
 
 **Wrap-around navigation:** `findNextUnreviewedFrame()` in `lib/utils/inspectionReview.js` — shared utility used by CavityReviewOverlay and LiveViewV3 inline handlers. Returns -1 when all frames reviewed.
+
+**Inspection Review Utilities** (`lib/utils/inspectionReview.js`):
+- `normalizeBox(box)` — Ensures [x1,y1,x2,y2] is top-left to bottom-right (AI backend may return inverted axes)
+- `computeBboxScale(imageSize, objects)` — Scales bbox coords from native camera resolution (5472×3648) to served image size
+- `deduplicateContainedObjects(objects)` — Removes sub-component detections (e.g. individual pins) contained >75% within larger same-name detections (≥3× area ratio)
+- `findNextUnreviewedFrame(frames, decisions, startIndex)` — Wrap-around search for next unreviewed frame
 
 ### Modal Patterns
 
