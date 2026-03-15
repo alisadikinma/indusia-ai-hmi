@@ -5,14 +5,14 @@ echo.
 
 :: Terminal 1 - PostgREST (must start first)
 echo [1/3] Starting PostgREST on port 3001...
-start "PostgREST" cmd /k "cd /d D:\Projects\Tools\postgrest && postgrest.exe postgrest.conf"
+start "PostgREST" cmd /k "set PATH=C:\Program Files\PostgreSQL\18\bin;%PATH% && cd /d D:\Projects\Tools\postgrest && postgrest.exe postgrest.conf"
 
 :: Wait for PostgREST to be ready
 timeout /t 2 /nobreak >nul
 
 :: Terminal 2 - Auto Inspect Edge
 echo [2/3] Starting Auto Inspect Edge on port 8002...
-start "Auto Inspect Edge" cmd /k "cd /d D:\Projects\indusia-ai-backend && python start_ai_edge.py"
+start "Auto Inspect Edge" cmd /k "cd /d D:\Projects\indusia-ai-backend && py -3.12 start_ai_edge.py"
 
 :: Wait for backend to initialize
 timeout /t 3 /nobreak >nul
