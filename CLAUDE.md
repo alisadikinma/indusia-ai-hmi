@@ -2,6 +2,15 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## 🧠 Vault Context Link
+
+Pre-read MANDATORY via `obsidian` MCP `read-note`:
+- `20-Projects/indusia-ai-hmi/README.md` — current state, decisions, blockers
+- `20-Projects/INDUSIA-AI/README.md` — parent agency positioning, 3-pillar thesis
+- `10-Identity/ali.md` — voice & style (auto-loaded)
+
+Persist decisions: append ke vault README "Decision Log" via `obsidian` MCP `edit-note`. INDUSIA brand voice harus konsisten antar product (HMI, backend, video, deck).
+
 ## Project Overview
 
 INDUSIA AI HMI is a visual inspection manufacturing system built with Next.js and Supabase. It provides an end-to-end platform for managing AI-powered PCB inspections across operator HMI, manager console, engineering tools, and admin panels.
