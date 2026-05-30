@@ -3,9 +3,9 @@ title INDUSIA - Launcher
 echo Starting INDUSIA AI HMI Stack...
 echo.
 
-:: Terminal 1 - PostgREST (must start first)
+:: Terminal 1 - PostgREST via Docker (native exe blocked by Device Guard)
 echo [1/3] Starting PostgREST on port 3001...
-start "PostgREST" cmd /k "set PATH=C:\Program Files\PostgreSQL\18\bin;%PATH% && cd /d D:\Projects\Tools\postgrest && postgrest.exe postgrest.conf"
+start "PostgREST" cmd /k "cd /d D:\Projects\indusia-ai-hmi && Tool\postgrest\start-postgrest.bat"
 
 :: Wait for PostgREST to be ready
 timeout /t 2 /nobreak >nul

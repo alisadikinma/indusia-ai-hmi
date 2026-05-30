@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "setup:swagger": "node scripts/copy-swagger-ui.js",
-    "dev:all": "concurrently -n postgrest,next -c blue,green \"D:/Projects/Tools/postgrest/postgrest.exe D:/Projects/Tools/postgrest/postgrest.conf\" \"next dev\"",
+    "dev:all": "concurrently -n postgrest,next -c blue,green -k \"Tool\\postgrest\\start-postgrest.bat\" \"next dev\"",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",

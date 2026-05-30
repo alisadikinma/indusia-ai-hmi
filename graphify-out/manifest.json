@@ -1,0 +1,2552 @@
+{
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/tailwind.config.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "af7cbf3a61ea279617b664b0e1fc5189",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/jest.setup.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "b37876b098a8a01edcdcbf8bbdd1a252",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/.mcp.json": {
+    "mtime": 1773529056.0,
+    "ast_hash": "8a7220d8e2303e50b05d5a8973344ea5",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/jest.config.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "74247cd79a0a9d5c95f13c38d8056600",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/next.config.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "6e58331f0def3f1d8b2d9ae7ae536d71",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/playwright.config.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "e7d068d57794626a7d0c03e228afdbdd",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/package.json": {
+    "mtime": 1776646428.0,
+    "ast_hash": "9da16185da8f45a87b47dcf51cd8dfbc",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/middleware.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "17e6a954c9ee79e50bd51cc0297db56f",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components.json": {
+    "mtime": 1773529058.0,
+    "ast_hash": "4b14b66782016175f4e094506dedda29",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/tsconfig.json": {
+    "mtime": 1773529058.0,
+    "ast_hash": "7dae10cb3f3386ac45aa80364982b30e",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/postcss.config.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "9a248c780e4c76f85b0f492f63a3d417",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/.eslintrc.json": {
+    "mtime": 1773529056.0,
+    "ast_hash": "934a81616adbd809dfc38314baaa3409",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/migrations/006_create_system_settings.sql": {
+    "mtime": 1773529058.0,
+    "ast_hash": "7b0872894f56e9c5583debb026e41a3f",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/migrations/001_create_schema_migrations.sql": {
+    "mtime": 1773529058.0,
+    "ast_hash": "9c85ee8fdca56e610d3941e3929fec61",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/migrations/008_override_object_decisions.sql": {
+    "mtime": 1773529058.0,
+    "ast_hash": "9f8a6de292c9bb2eeeb813eb151be0df",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/migrations/004_add_wo_completion_fields.sql": {
+    "mtime": 1773529058.0,
+    "ast_hash": "0bcbdd12651e01db72efe42243cff820",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/migrations/007_add_user_avatar.sql": {
+    "mtime": 1773529058.0,
+    "ast_hash": "ffca4fef16656eec283badb77b8a9ee7",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/migrations/003_add_frame_decisions.sql": {
+    "mtime": 1773529058.0,
+    "ast_hash": "cc47ac1905c2fd277acb25bd17de57aa",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/migrations/002_create_update_log.sql": {
+    "mtime": 1773529058.0,
+    "ast_hash": "c5eaf32592e40c24e9fbf5d9c7155bff",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/migrations/005_add_customer_logo.sql": {
+    "mtime": 1773529058.0,
+    "ast_hash": "fd60f2a1f094c7590632a19566a34666",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/context/SystemHealthContext.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "202f1b9695800ce5be76887cfe1c973c",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/context/AuthContext.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "ad8eb57d38b1420b6957411d6719d01d",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/context/ThemeContext.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "c5eff03fafb31ff500ef7a992ca67ea4",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/context/NotificationContext.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "61eee5cd290fff0b2ff95494b6722970",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/context/SidebarContext.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "173912fe9b91fe27504baeaf6beeef03",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/context/I18nContext.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "d018b8f711c0ff602bf4cd6ab691eb6d",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/context/HelpOverlayContext.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "1a50b36c0ccdf4040508af5845f7fb4a",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/layout.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "ae973dfc6d993ba24338bb29545a169d",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/page.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "142b8af066429a88340970a11860211a",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/layout-client.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "dae2d76a4291679363a6bc06050f8c12",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/settings/loading.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "30c300753141638672489d2dbffbcb4e",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/settings/sync/page.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "1c0d1bb9ef671bf45eba2fb285a7bea6",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/settings/false-call-reasons/page.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "b338610fafd1321c48df16a91be37273",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/event-log/page.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "3f5651af3e3263c4276751b0927d9795",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/event-log/loading.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "30c300753141638672489d2dbffbcb4e",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/inspection/loading.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "30c300753141638672489d2dbffbcb4e",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/inspection/overrides/page.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "cda24b1a3d2264f741b8983a868dc741",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/inspection/result/[id]/page.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "5162acb9524761a292f6838706370d88",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/inspection/live/[lineId]/page.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "58e87f0409ae5d0155bed51d7acc4388",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/inspection/select-line/page.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "0fceb454903ab77cfa7ec1592b99ea2d",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/dashboard/page.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "b3072049b169a2a1df34194e1a7613e2",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/dashboard/loading.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "30c300753141638672489d2dbffbcb4e",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/super-admin/loading.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "30c300753141638672489d2dbffbcb4e",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/super-admin/roles/page.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "53aa33ac972868f9e8df5e8295e6f933",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/super-admin/permissions/page.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "db1e6b6e30d0d4a3d70e180d0eace3d6",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/super-admin/users/page.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "8fcdc5888d127257ec7aaa2af27284e0",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/super-admin/system-update/page.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "04853093f4898253c2a4ebd23443f080",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/super-admin/system-update/loading.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "30c300753141638672489d2dbffbcb4e",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/overrides/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "62b058581047c667aa9995436825d406",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/overrides/[id]/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "8c2add566ddf9a960b5d46f2fde117bd",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/overrides/[id]/appeal/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "736d61464baa6a0fc1db70c816181ffa",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/overrides/stats/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "9c806846afdb06d37560c65e6ee4b255",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/plc/signal/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "e766fd6cec29f48657a33c60d8e648aa",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/work-orders/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "052ae4b159f3e7b9cdd424554124a721",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/work-orders/next-number/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "8126595143e3a25491a91d49b1846e7d",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/work-orders/active/[lineId]/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "11193a9317ea427aa8eb184d3ce7dbeb",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/work-orders/[id]/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "7daedf032438df36cda2d30a7fad5ca9",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/work-orders/[id]/complete/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "e756cf8b45120ea315c8d70413351fe3",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/work-orders/[id]/start/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "b4331fe23913116c7e84a33372ce864d",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/work-orders/[id]/next-side/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "8053a63e9c8653ddc742daa122c3a6e5",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/work-orders/[id]/counters/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "2519987d1fee49ca83f738913b62d18a",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/work-orders/check-number/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "739a82f2dea4e8d92500f7df308f9cd8",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/event-log/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "ee6e526a7b423d3ca04b8a217b98d66b",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/auth/logout/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "d52a2262d2670f5023bbb19bdbfcd653",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/auth/permissions/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "cb98f91f9f3e5c8d559cba3a1aa9207f",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/auth/csrf/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "abea670709d4cbbd07ab7177dd68c588",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/auth/me/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "02be5c546bfaf6261b973ddece2bb17b",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/auth/change-password/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "a17801a5a027e81585ea368d9f748fec",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/auth/login/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "5d05903bd376a71486762e2062fde22d",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/images/[overrideId]/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "d34225f38c22f15707e8555803d47703",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/images/upload/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "5870777fefb0f6a7f6ba4597e22196bc",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/menu-items/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "7e68f3c735b55f4e68b2b28ec17d0335",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/dataset-queue/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "63695b7b937c343f72ee9435270727ba",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/roles/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "64f5f8cd3164bfd139b1abd4740feb4b",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/roles/[id]/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "b36a8d81bfa243e9f67c9166ff262649",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/docs/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "f19c390921efd581939f2d203a3e692d",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/docs/spec/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "985a44d685d446bf942fdbcabc3f374f",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/permissions/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "9992679089b8309e6de8215ade19ac58",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/permissions/[roleId]/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "3551bb48050481dde22b55f5bc2ad755",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/storage/false-calls/[...path]/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "3c73e52b067e3af9c46cfd414c206de9",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/system-settings/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "85f5ee15fe63a4e608cd8af7088524e8",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/inspection/upload-false-call/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "6511d35cde873fda28dedbf19f860ad0",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/inspection/models/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "1f407b478d853cf0043acd4d7fdcc99c",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/inspection/save-crop/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "a0846c0fb80ceacea4e4ad1f8b609393",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/inspection/action/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "3f9ea8cf32438a3dad735f45cabf8dc1",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/inspection/line-state/[lineId]/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "3b2d68205f8f77470c59dcdb5d7aa581",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/inspection/select-line-data/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "2681fb5c04ec14cd26d630371a635684",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/inspection/stats/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "83c02672d44ed5a4bd96c668f643c001",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/inspection/stats/[lineId]/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "bbb85b92871d0241f2d6e73dae74f912",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/inspection/session/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "7cc822f8d47aaa68c1aea11d2d0e5453",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/inspection/session/[id]/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "302211d007b58f10f679b7ee01aa5ace",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/inspections/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "ae7f8e7f61e3f036ba96d7a76637e17c",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/inspections/submit/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "fcd98a08664711b40dc2c617d31ee61e",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/inspections/defect-classes/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "6782ef0dbf551e59e4e2318f6eb1b50d",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/inspections/false-call-reasons/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "a78e1bb2b4f2a5090d3a27d2454876fc",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/inspections/[id]/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "6c3fa326116aac9de5b2eca3bb670a6f",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/inspections/stats/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "aea41aabf237d9e667966a69c0f660a1",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/dashboard/trend/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "a04014742fec5c4842af663fe9b742e3",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/dashboard/pareto/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "1c1a4f1cdcc219052407691c0adbadaf",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/dashboard/heatmap/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "ccf916befce38aa4b9bcafff3db7aa9a",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/dashboard/summary/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "b951dfd46e4ae2468e7c57ecf7bf0f1f",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/master-data/customers/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "f38457972a4bd17419c6e80d8e89bc3a",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/master-data/customers/[id]/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "60e4ea0dde984963c0e85de30416e2ab",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/master-data/sections/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "d872894dc7119fda43cb3a895f2e144f",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/master-data/sections/[id]/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "2eb67d18f61bcaca0d1abf987fc86e48",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/master-data/menu-items/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "fd1932b69085fff52e2b11cd929be7e1",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/master-data/batch/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "888601d8b539726b99ff84bcfc8e421c",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/master-data/boards/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "304c66964490dab83cfcb35a3df6cdbc",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/master-data/boards/[id]/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "f28223fe42cf9cb98ae84dda7a39c6c0",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/master-data/false-call-reasons/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "be3906dafda6f730e190816adef36479",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/master-data/false-call-reasons/[id]/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "4653f81b86a5520c9bd4df5246bc4bd1",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/master-data/lines/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "5a41a11578107e24d2d01073518a470d",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/master-data/lines/[id]/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "9e7d8b851349b86df576edb15d81fb00",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/system/migrations/pending/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "4179d1862735c1fe8dc3adb28d3b6150",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/system/update/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "6d64a8502fce531cdebeac7643d6d75d",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/system/update/progress/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "eea04eec7e9d48ecc62cca336cabfc1d",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/system/update/history/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "d694d31fc21d437850ba7d2b6c157443",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/system/check-update/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "180a4e1fa5244d82f2ee460ac95d3598",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/system/version/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "44a7d1b643e098832bc5a95cbb161abb",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/system-health/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "8b1cb81448845c50ee3e780bb1353233",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/ai/models/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "5cdd84a3976f58f82e248b7c5a8416fb",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/ai/models/[id]/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "3bd9f3322368185c57f4b7c419059603",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/ai/training-jobs/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "d2ca1967ea7ab031e28bd017dfb23968",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/ai/training-jobs/[id]/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "5129c191f4482da77a2b536db3e19655",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/ai/training-jobs/[id]/cancel/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "5dd6acdb021dc2aa65ca7c94856d8da9",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/ai/defect-classes/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "d5b920aa5ca9c271618cff7775249cc9",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/ai/defect-classes/[id]/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "d4a143c8483c8520364ccfc96c29eb5e",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/ai/inspections/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "74e36ee3632ca18cc761af63536e09a7",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/ai/inspections/[id]/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "b136048be8e1dece9133032713b3483d",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/ai/dataset-images/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "9103a7f6ff805dacd47b7e64724d6b06",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/ai/dataset-images/bulk/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "03177a994b2282350cc88fa9a7ca6b63",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/ai/dataset-images/[id]/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "8fba2c14c5887f76f3702fac6a2f3b33",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/ai/training-metrics/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "8d3bc8806e1aa702b34eb3745f839d8d",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/ai/training-metrics/bulk/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "8941ec8287bd53d0c0d182d8488a1a1b",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/ai/boards/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "785d7c572fa366b4c3e7633d7d980dc3",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/ai/boards/[id]/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "f1ec5c9c13a93aa0d0da49369b401151",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/ai/system-status/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "6f274f6b0118ab6745e7b0028aae8a89",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/ai/sample-images/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "a7c20117382bed367fe7040dbfc2be86",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/ai/sample-images/[id]/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "8c47414c977e6e10b866c94a0aad68f8",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/ai/false-call-reasons/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "5b081bb78732627cc9c138595a114bf8",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/ai/lines/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "1e99044557585c2aec056fbf3dbcdc4b",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/ai/lines/[id]/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "212949e9b63b2950afaa89840e992479",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/ai/training-datasets/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "99f21a1d273b52ac2a69a3be3c584eb4",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/ai/training-datasets/[id]/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "7c1360979c3e5fb666437d862d9f01f3",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/ai/training-datasets/[id]/images/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "3419446889d7de3cf1d5cb283dd133da",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/users/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "9593a93b11402729da9aef903541304c",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/users/me/avatar/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "f7d58d0d7c487810082b253d5231ef91",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/users/[id]/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "c9356869be724dd4e15649de17bbf8df",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/users/[id]/reset-password/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "5ccb245e1537e1183c8c6b82b70e30fc",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/live/[lineId]/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "bf8ce758f0c7a9f68d79053bd697112b",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/sync-queue/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "2e2fd1941c603bdd0d509477737760f1",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/sync-queue/records/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "b8c2299c705a95edd864dc943886ae23",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/sync-queue/images/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "c06a626df606220976ab689bdd5c145a",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/sync-queue/status/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "67aee71998776b1952a30e2881b520a4",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/sync-queue/history/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "d1e45b6559f6c94bb557ad7676a4f189",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/sync-queue/compare/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "40a65c769c1370962f20c9399015461a",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/sync-queue/sync/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "7c007db7f571e17756375c185334800d",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/sync-queue/session-records/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "8a4c68efadae1ed5846a47f4203d4005",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/sync-queue/summary/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "dbb152ddb441c1fa7b3d9a3d57164a7d",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/error-log/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "6385b2a53381a6d8f67d294d257df911",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/sync/force-release/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "9cfeb657e1499fbb97b9d2b671c650b1",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/sync/trigger/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "04874806128818dc270612c7f6aa3d5a",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/sync/progress/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "46bafc10a4e62564e90aed3a857b9720",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/sync/status/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "ba379146dda486b9af9ec71cf1287c98",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/sync/check-online/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "7341bcacc89c91d777bc0a9baef026c8",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/sync/cloud/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "8fcae2e25fc43432d9822bfd5d413161",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/sync/history/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "f353f095c7c239f60d3fcdc1e277e0de",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/notifications/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "025e0e22b559408031b121976fb909d1",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/api/notifications/unread-count/route.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "3b22b2534a5c516d0abdc84efc07785a",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/dev/bbox-editor/page.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "9ddcc1aaf772219476a6b1c9f8433811",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/engineering/loading.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "30c300753141638672489d2dbffbcb4e",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/engineering/work-orders/page.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "f28f4b4a0e80b1588bb58638f6a21c75",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/engineering/master-data/page.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "9ba306ef37927dd5bac5ecc0ad2d594d",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/app/login/page.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "5328ebaa0062779853b67cff160df580",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/__fixtures__/testData.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "28fb5fad59f4d33fe954ef9648e6a3a4",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/.claude/settings.json": {
+    "mtime": 1773529056.0,
+    "ast_hash": "611ca6193c8ec7c82b8b0e4eda979f64",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/.claude/settings.local.json": {
+    "mtime": 1773554342.0,
+    "ast_hash": "386e031a6c84e4dd894f9da3956ad9f4",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/.claude/skills/industrial-docs/evals/evals.json": {
+    "mtime": 1773529056.0,
+    "ast_hash": "c13f2f14a810df96607fa3022b6bbbb0",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/.claude/sql/024-system-status-seed.sql": {
+    "mtime": 1773529056.0,
+    "ast_hash": "64661a8e1cc73b5b7ea4844c3ac71a74",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/.claude/sql/014-customer-code.sql": {
+    "mtime": 1773529056.0,
+    "ast_hash": "6e9c9ac38e2f21c3b36f29b81276fda7",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/.claude/sql/016-work-order-seed.sql": {
+    "mtime": 1773529056.0,
+    "ast_hash": "ffcaf61dd85a9905703b9a11a5c40720",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/.claude/sql/007-inspection-results.sql": {
+    "mtime": 1773529056.0,
+    "ast_hash": "6a5e7780b29fcf34f9ae7b57c89af6cb",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/.claude/sql/034-boards-frame-counts.sql": {
+    "mtime": 1773529056.0,
+    "ast_hash": "31b774865627469bcd065df47e562d5b",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/.claude/sql/029-boards-cavity-count.sql": {
+    "mtime": 1773529056.0,
+    "ast_hash": "c80b4f10be75591f563c7105a6815c1d",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/.claude/sql/012-system-status.sql": {
+    "mtime": 1773529056.0,
+    "ast_hash": "76a48203896ee66983cc36ec2d9352cc",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/.claude/sql/017-work-order-complete-seed.sql": {
+    "mtime": 1773529056.0,
+    "ast_hash": "a29f8aaf24c9a938e7be3ddbfdc9c402",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/.claude/sql/indusia_seed_data.sql": {
+    "mtime": 1773529056.0,
+    "ast_hash": "762957f1d2de31a00d54e00ae416c5ee",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/.claude/sql/027-ai-backend-schema-update.sql": {
+    "mtime": 1773529056.0,
+    "ast_hash": "f6554f7b37dd4bf60cba1edeb0ba6908",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/.claude/sql/018-work-orders-complete.sql": {
+    "mtime": 1773529056.0,
+    "ast_hash": "65e2c4a70a440042e31ffce1353c0106",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/.claude/sql/009-storage-setup.sql": {
+    "mtime": 1773529056.0,
+    "ast_hash": "72dbb5f855caa5fbf9f6d0edde84478d",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/.claude/sql/011-sync-queue.sql": {
+    "mtime": 1773529056.0,
+    "ast_hash": "fee5113b40c46da0329a48ae202463bf",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/.claude/sql/015-work-order-permissions.sql": {
+    "mtime": 1773529056.0,
+    "ast_hash": "401eb7e71374bfd5b67d5e97d67c1570",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/.claude/sql/010-seed-sample-images.sql": {
+    "mtime": 1773529056.0,
+    "ast_hash": "5a2b85abb8e3fae5e9bf70369885b824",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/.claude/sql/025-submit-inspection-atomic.sql": {
+    "mtime": 1773529056.0,
+    "ast_hash": "9c65583e89e461cd43e6a945ff79d385",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/.claude/sql/phase6_inspection_tables.sql": {
+    "mtime": 1773529056.0,
+    "ast_hash": "0155aa581542eda26ec6efb399d9f00f",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/.claude/sql/031-overrides-work-order-id.sql": {
+    "mtime": 1773529056.0,
+    "ast_hash": "44535b7641247a37dc4071e71f95946c",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/.claude/sql/008-seed-defect-data.sql": {
+    "mtime": 1773529056.0,
+    "ast_hash": "8ac78518863b800da0cf7c7f5d3cd075",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/.claude/sql/026-overrides-table.sql": {
+    "mtime": 1773529056.0,
+    "ast_hash": "017a55e2e2ec82da8813d0e8172230bc",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/.claude/sql/indusia_supabase_setup.sql": {
+    "mtime": 1773529056.0,
+    "ast_hash": "b5d0654264a0f8a70ec8d56220051cb0",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/.claude/sql/030-cloud-overrides-sync-fix.sql": {
+    "mtime": 1773529056.0,
+    "ast_hash": "e12d733c5dde1757cfa2f78791174f11",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/.claude/sql/032-work-orders-on-hold-status.sql": {
+    "mtime": 1773529056.0,
+    "ast_hash": "87956ada55a4070bae9c094cedf1a32f",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/.claude/sql/013-false-call-reasons.sql": {
+    "mtime": 1773529056.0,
+    "ast_hash": "1fb8896f7b4f38eba988079041cdb3fa",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/.claude/sql/add_metadata_column_to_notifications.sql": {
+    "mtime": 1773529056.0,
+    "ast_hash": "2434333b785bbec0892b20b17ef49f6a",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/.claude/sql/indusia_truncate_all.sql": {
+    "mtime": 1773529056.0,
+    "ast_hash": "5ae306e96d63c0599cf92cc7f1486641",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/.claude/sql/create_notifications_table.sql": {
+    "mtime": 1773529056.0,
+    "ast_hash": "c890a227feecbf7fd14152307bff46cc",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/.claude/sql/033-fix-overrides-constraints.sql": {
+    "mtime": 1773529056.0,
+    "ast_hash": "cc6b47e21aa4aa6937abbbdaf6e5a5fa",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/.claude/sql/012-update-menu-permissions.sql": {
+    "mtime": 1773529056.0,
+    "ast_hash": "3f72dcbaa00895503245934eeab417e2",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/.claude/sql/022-ai-backend-indexes.sql": {
+    "mtime": 1773529056.0,
+    "ast_hash": "87353cbc3a3238b2925acc14d002cbff",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/.claude/sql/023-training-pipeline-constraints.sql": {
+    "mtime": 1773529056.0,
+    "ast_hash": "36ed44c71fd3ea956167a8a246be4eed",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/docs/migrations/add_sync_lock.sql": {
+    "mtime": 1773529058.0,
+    "ast_hash": "5ab3c935faa7a962e6df839debaed88d",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/docs/migrations/016_add_sync_lock.sql": {
+    "mtime": 1773529058.0,
+    "ast_hash": "14a38327ff8ab9a0853fb038ba6eace6",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/ErrorBoundary.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "15be72381bb8050c75fc628acfb7fc56",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/ConfirmDialog.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "b677d870b140d5410e45bb84d35fca93",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/Drawer.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "833497d11a16b5d4ebd75e158aed8239",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/OfflineBanner.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "0ca0277f146100b13a71c1869945550c",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/ui/aspect-ratio.tsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "c9bd6f611b3dc6f40286d79986f76eb1",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/ui/alert-dialog.tsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "b022a2e643c67bb9b66b93a4bc3ae901",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/ui/pagination.tsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "0f5ef0619838b9d0129b21e0aef568b4",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/ui/tabs.tsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "398914e54a426453df5b0f003534d6aa",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/ui/card.tsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "a643359b107ec8cb87b3101942513bfb",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/ui/slider.tsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "8dd0fc86ead759f356ddc47faf2777c0",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/ui/popover.tsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "563c866bb8329f024cc9a34c22905723",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/ui/progress.tsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "56a13d8cc4b498c225221db10791ab46",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/ui/toaster.tsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "e96748b387f988e3a2e72fced4fb09b6",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/ui/input-otp.tsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "4b536fb62c0fcc6c48a87329500e978c",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/ui/chart.tsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "39b01fc0ef9db80425f683055e8f94db",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/ui/hover-card.tsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "b8849ed2ba1760755d5d489e7dd4c7a1",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/ui/sheet.tsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "36709e03e85706aa58d5946e25a45e3c",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/ui/scroll-area.tsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "f1a9115b439d2e104d70f830376f9547",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/ui/resizable.tsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "06e7da3169e023ffb8e218b42bf14d4d",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/ui/label.tsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "6d094f913ef2badafae608c4e85e7c75",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/ui/sonner.tsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "98478889055e355bcb822c0c521037ab",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/ui/navigation-menu.tsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "0f1b70b0a173eeb7690a68e1fc1bc5a5",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/ui/accordion.tsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "f50df673ba30a492db90aa277cece0a6",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/ui/drawer.tsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "d5e0751e56049fa551dcd03fedcc67c4",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/ui/tooltip.tsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "f95f77243eb76740326c93c24d75eaae",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/ui/alert.tsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "5ccf056971525955a5b3fa22da604d8b",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/ui/switch.tsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "64f9e79e33758534eaa255754f421870",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/ui/calendar.tsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "d2868c73d88a73b5aa2e47fd473d50d9",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/ui/breadcrumb.tsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "d91090994da4a9b110d528294b20cbae",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/ui/radio-group.tsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "79bcd241a3944b905fd71f536bad1d03",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/ui/command.tsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "452d2ccdff8824f6902059f2c4f65742",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/ui/toggle-group.tsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "a84f552529d8e84fba5ba96a349beffb",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/ui/avatar.tsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "fa0699e512903f7efff31fc6d7877494",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/ui/ImageUploader.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "8110065c3f38809bd55f7d5ac07aea46",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/ui/menubar.tsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "4d5efdeb41684ad308675b42e63f34cb",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/ui/dialog.tsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "07c60f36a3d1dcf17598e82257e0d4c4",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/ui/badge.tsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "da750f3adfabc71d5494a33e15c07c4a",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/ui/table.tsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "d462a10c38737faaff854cc3be87b3b7",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/ui/separator.tsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "8d482bd1ce1486fe98326700b5b6eb93",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/ui/button.tsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "c767050a2eccdd11bcda10a8450a9d93",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/ui/toggle.tsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "9176a89d3374ee89ae32ecc400842158",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/ui/toast.tsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "18727017ce4104f3282311c6e4f4f545",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/ui/checkbox.tsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "d4a542d897ce07af02a5dd8cd6417fdc",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/ui/collapsible.tsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "d56a102fd513f29eec0c12e99c50707b",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/ui/dropdown-menu.tsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "7015a022f7325738ec811ea1c1dc748b",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/ui/select.tsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "2889e0674fc07392d572aa0b664259fc",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/ui/textarea.tsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "8e0b1a960b032147e68a487c60e7eb3f",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/ui/input.tsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "f53f396f688a03f94a310f369620465a",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/ui/skeleton.tsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "4c9efd1a54ddf9b11165b1287b75e0c4",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/ui/context-menu.tsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "c3017b00d996462ab4ebc2f1ac7e85bc",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/ui/form.tsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "9216e97105c72fc611540f7c51b33541",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/ui/carousel.tsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "65e7289780df23a57aa70c0dc5717d35",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/work-orders/WorkOrderStats.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "d2f3833669bf3d90c58751ff47b036fc",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/work-orders/WorkOrderStatusBadge.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "e1e215a920bb03773562c3066ecd2b29",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/work-orders/WorkOrderTable.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "d0bc988a5d5285e4d09cb9a87a98c9d3",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/work-orders/WorkOrderForm.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "fa8b7fc0c0784f0fe3d9bc11f67abad0",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/work-orders/index.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "ff4299c1cdac36b51b365fcb7d3aaa69",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/work-orders/WorkOrderFilters.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "028a9edcb5a81754bdd3b8e0730bd6e7",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/event-log/EventLogSummaryCards.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "526f7d863046be4976453f4000b389ea",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/event-log/EventLogFilters.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "6fe120b15b600d141b72426e6583ade9",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/event-log/EventLogDetailDrawer.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "e8ea2ef808a2d9872ad7409ea2e9c976",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/event-log/EventLogTable.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "e8c68fb446e1ee6f87adeb396d182157",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/override/OverrideWizard.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "9697b89566d4d00d875e1ec2a428ee89",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/override/index.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "ac003fb410e1deea1e9567445421d39b",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/override/OverrideModal.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "d0a620445fe974a763d7b8675b1b497c",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/override/AnnotationCanvas.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "b578196945edf0ff97837fe97fe110f0",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/layout/TopNav.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "9450968b4b66b42b24ccb5b4311040a8",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/layout/SideNav.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "e1fbf2af0286a6580a0b71b6446eb225",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/inspection/DetectionResultPanel.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "f7c390e994a3977a480418230f079cc5",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/inspection/HeaderInfoBar.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "ba16c57f74d539f1ff8d7c56dba5ac76",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/inspection/InspectionResult.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "2e0749e723f556068bb50dbc4a896a68",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/inspection/InspectionStage.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "8864617cc20ac656ffa3feb215a13c53",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/inspection/DetectionOverlay.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "1b59fb75c88e4aaa3f6c0c9d4921c8b9",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/inspection/CavityReviewOverlay.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "3e43aff5604066ac0b98f1cf12545d1e",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/inspection/AIDecisionPanel.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "0d6b148051c9790ab9b544c03920fb6d",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/inspection/VolumeControl.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "56e3de679077eed1b8c6436750c23c86",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/inspection/FalseCallOverrideModal.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "cd0bdfeab3525428eaf5b425a98375ff",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/inspection/NextPCBConfirmModal.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "c90c58a15197f02af3e9094256c80f8f",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/inspection/index.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "0299f26cae50a2da041785ff779fa62b",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/inspection/LiveView.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "27bcfb0d6cfb7344c6f3fd0b1ada9049",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/inspection/HMITimer.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "b03f3b36c3bb0f4e2d559755b7aaa1d7",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/inspection/BoardOverview.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "0a4dfec7552613be0053d6b951dcec78",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/inspection/DefectViewPanel.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "cdf319f0ad2b0722d005f96cebd2acec",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/inspection/FalseCallModal.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "c53e492db4f9abe848575113bd5ff430",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/inspection/HMIOperatorView.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "4240a82f30d8a11cac18d52eb1da9d68",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/inspection/HMIActionPanel.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "13881a86ffb107c962446d43f710afe2",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/inspection/OverrideReviewModal.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "93ca420b32187ef461446640d6f34e81",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/inspection/SidePanel.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "946d8057689a842997f870a8addd4c85",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/inspection/LiveViewV3.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "9b9cde84f4f09f3e64834cdc379941bd",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/dashboard/index.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "5d676dd069a8afaf38678e1fdcc244dd",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/dashboard/DefectTrendChart.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "d76d5e83d43672c6cbe9727b35b5943f",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/dashboard/KPICard.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "9e18cc06ea975c25d14b623610350f93",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/dashboard/DefectPareto.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "9a5a6b5098823a6defd640cbba2c7370",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/dashboard/KPIGrid.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "996a8af7c7ab29714af76041302f0f7f",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/dashboard/DefectHeatmap.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "b781455db33532a0538588662078368a",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/system/SystemHealthBar.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "0e6b8d5172522e06d48b12924ac4f1c7",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/system/SystemStatusChip.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "ce2bab1655ec8737c5d340ec84f519ad",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/system/SystemStatusDetailsModal.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "338464bdf3688e0d5062b6ef8a9f04ff",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/common/PageLoading.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "aabc2612f2e2010c965146fb6afea95e",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/common/CustomerLogo.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "a2c81cdd6cdf4a8d8daf67b87d438ccf",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/common/StatusBadge.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "f82b3314c5db808c48a6136df3807ea8",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/common/TableSkeleton.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "71d39fa828c4325b919d8e9d828e204a",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/common/SectionHeader.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "ee65c5b43a712fe25d87ebb14b332d9b",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/common/LanguageSwitcher.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "6c028eb1eb6568cd4bcbdb731aead9bd",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/common/ErrorBanner.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "0098c812ed0a5ee28aab3a1ca368b7d0",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/common/EmptyState.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "49249fa6cc2940be0e522b6f369ffb70",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/common/ChangePasswordModal.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "96ac53959a7bda57bc882a22b180ce2d",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/common/CompanyProfileModal.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "9990b373c8151d2e8892a3b910c17db6",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/common/Card.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "c5034a13aa5129a1e120db963a3ecbd6",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/common/StatsGrid.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "c124afb9ce83dcea1ec4a5ced558801f",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/common/ImageViewer.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "9524471f839d5e088a7acc7916e7afe9",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/common/CardSkeleton.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "6f4acfab9179c79c437c33c7ac5c45c6",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/common/DateRangePicker.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "76f1adba2fc6d067730055a2b385141e",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/__tests__/OfflineBanner.test.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "bbfa11922551bb9c79813c1028839a53",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/__tests__/ErrorBoundary.test.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "333f3a3e49f097380691f088c96ba357",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/sync/SyncDetailModal.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "d9a9f2827b8f460a5530ca35f0253724",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/sync/index.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "b80f8d52c66930d0d53b4bfc95a32bd2",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/sync/SyncProgressModal.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "03a71a20e35b244fd5fe265ab8af7b4e",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/sync/SyncSummaryCard.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "b302a5fdfb62e819624661a53ae1ae3a",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/sync/SyncQueueTable.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "5027ff64d89c644854527101da9d4f95",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/sync/SyncIndicator.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "2f9980de8a6658a71d9de405b02f4bbb",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/sync/SyncSettings.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "0ebceb9fa9d1b58fbd68528fe6e03849",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/notifications/NotificationListItem.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "a547eedd4b685c1b6fbafaad0e66aaf8",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/notifications/NotificationEmptyState.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "62368bea5c16780bc3f44ffa0eee47b3",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/notifications/NotificationDrawer.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "c99a23ebbcc00792ef689b57d15b028d",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/notifications/NotificationFilters.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "c0ce9edf3f4726f827c5e107566c072f",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/notifications/NotificationBell.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "55ea3a1426ffd02b051ff3f7cce22c81",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/help/HelpSectionCard.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "ed319792bce924cfbe12c6f54cb5feee",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/help/OverlayLegend.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "618f8e412d8a637996de64bec2235e33",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/help/HelpOverlay.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "e3dd20ee446774fe2c04d2c595ada1f6",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/help/OverlayHighlightTooltip.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "69d5ffd2a33396081e5486dfada8ba96",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/help/ShortcutCheatSheet.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "766564b064249e30a3c171a6439d2216",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/system-update/UpdateHistory.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "0d58be853fd51fe42a4e9aa3283ef855",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/system-update/PreflightCheck.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "b42240344e3a9b66b9d30a0b1420576c",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/system-update/VersionBadge.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "63b0210c0579609f2e7b598758b16af8",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/components/system-update/UpdateTerminal.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "a1132cfe18774838680bae72075e01ac",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/public/docs/swagger-ui/swagger-ui-bundle.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "464ee6214656dadb3255daa2c37db455",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/public/docs/swagger-ui/swagger-ui-standalone-preset.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "f828aa3057f71ea58cd280db7c41b263",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/hooks/useNotifications.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "180ec5efeba22f1461bf11577a9c5027",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/hooks/useSystemSettings.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "e10bcc258a8f9ccdda9112e94400131a",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/hooks/useApi.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "41e469078c50f57b23c0d1781dfd35e4",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/hooks/useDashboard.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "ac89fc0b3e1dfb6da16c0fac517e5580",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/hooks/useSync.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "46fdd274a09464b7ddf37d4c0d611b07",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/hooks/useLocalStorageCache.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "dab5b1d265b91ef7342249bfafb6a141",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/hooks/useImageUpload.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "fc7c82e10a25b8553258629d6564062e",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/hooks/useLiveInspection.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "89083ba43f20a8caa887258ba7940f0b",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/hooks/useRoles.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "28bbaa766da95ec5a56ebb99defab317",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/hooks/useUsers.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "80bff8961a55668bef61908b01e45dc5",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/hooks/useNetworkStatus.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "d437eab7e6c0f1187fb7d73ad1fc1b8f",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/hooks/useHelpOverlay.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "4ab90ab205dc2c8331fd54eb2300b9dd",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/hooks/usePermissions.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "9d77da58372f61ee2681a6cea2219072",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/hooks/useMasterData.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "d9def76403569cfda29d483984d17ec5",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/hooks/useWorkOrders.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "db75ea6f0540312047c6ce439c4b9446",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/hooks/useAudioFeedback.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "07fd4e5b20326870026b7e434a68db72",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/hooks/useSystemUpdate.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "16adaed60f68944a5b8ab5afeb416b99",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/hooks/useI18n.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "7eeea130d79885cb3ce1ee110e1b71ce",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/hooks/useModels.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "27efe1832ad5eb9534d461864c2cb671",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/hooks/useToast.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "a05a82ebfbd87c7261c121631bac588f",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/hooks/useEventLog.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "465838e653a98170900a5c1ca9b06312",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/hooks/useHMILayout.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "8994754e2f928edd0b04f29786a82a3a",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/hooks/useSystemHealth.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "d72277fe87c0a4b54760daec396fe7a0",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/hooks/useSections.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "17c5858cb80fb08672cd65546756be4a",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/hooks/useOverrides.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "b6cbca0ba654a223bfac55dcdc7d8717",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/hooks/useInspectionKeyboardShortcuts.jsx": {
+    "mtime": 1773529058.0,
+    "ast_hash": "d2ba49a2f37842f4f3e5624c36fc9896",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/hooks/__tests__/useNetworkStatus.test.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "0cf018a5f1dfe59523ea6e89db8f8f32",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/scripts/generate-local-jwt.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "aa91de1b79dcd5f9bc96e1b12f07fe04",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/scripts/mockLiveData.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "e9685cd16fbf634d5fc3787cce96e12a",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/scripts/start-hmi.ps1": {
+    "mtime": 1773529058.0,
+    "ast_hash": "780d8da963459a2fef958831902bd905",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/scripts/run-migrations.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "b745c092144f4835d8aee13273a2c975",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/scripts/generatePasswordHashes.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "928dccac25ec608a0f87c64e3217f7be",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/scripts/restart-watcher.ps1": {
+    "mtime": 1773529058.0,
+    "ast_hash": "bc05f2eba23ecc0ffd6e97fcd6d3f34d",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/scripts/copy-swagger-ui.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "0ce697922afdbd53ada24b62bb8722c8",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/scripts/docs/generate-all.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "8b4dfe4eb98b41d984d1ffb722a2a889",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/scripts/docs/generate-architecture.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "9ec9b12cc74c025f7347e4f772720b07",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/scripts/docs/doc-utils.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "34df165f499ec9adfff7c1946502d2c4",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/scripts/docs/generate-maintenance.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "9d170bc97d00611f42a85d88834f61e5",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/scripts/docs/generate-sat.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "47ae0d755bf7d8f89b2c118fa4c6290a",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/scripts/docs/generate-troubleshooting.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "5ab58324117f141982c57f35ffe48128",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/scripts/docs/generate-fat.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "58d191015de13b1c059451f8a9912d2d",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/scripts/docs/generate-operator-manual.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "dfbe0ac18777362a8802c6cfd2ff58b0",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/lib/notificationHelper.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "89d72d539c18392a421bd542b82b0259",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/lib/utils.ts": {
+    "mtime": 1773529058.0,
+    "ast_hash": "0a3d688a6c4a897d87fc887b5e421c60",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/lib/audit.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "10b4e6a45902052194f7a1d7bb13945c",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/lib/supabaseClient.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "e0e7f8a0f17f7c8b54b746195a03c5a2",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/lib/eventLogger.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "251bfe477dadc7eca88234d30b5f0f32",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/lib/repos/datasetImagesRepo.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "91e0818fb34c1f2b03307233b80bfc53",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/lib/repos/notificationsRepo.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "4f17f9b958e5c590be5299ccda4278f1",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/lib/repos/dashboardRepo.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "f3749a2b7e88e9e63b48400e604f0cb5",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/lib/repos/trainingJobsRepo.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "748d0fa48644b5441a84f93412637e73",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/lib/repos/inspectionStatsRepo.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "fde96e8b9ffadd550a96faca816fe385",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/lib/repos/permissionsRepo.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "9c4601a773408d20e36c30d2890f83bb",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/lib/repos/syncRepo.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "aef2371d82ebb763522b2e06039bfc9c",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/lib/repos/imageStorageRepo.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "fbf407cd0309312b30e1bc7e494afe68",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/lib/repos/trainingMetricsRepo.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "47ceb5806239421975ad518e725a1b0d",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/lib/repos/index.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "401a4a6121a5ae413df9be783612e6df",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/lib/repos/inspectionFramesRepo.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "464a73a5d3d1a12ab81b26edc7ab0062",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/lib/repos/updateRepo.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "2402f2377eac8b06d0c371b8407f768c",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/lib/repos/systemHealthRepo.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "cad1a39951d75ca4a89eca378592140a",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/lib/repos/inspectionRepo.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "0557c9cb25176620f0d1486977e45b73",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/lib/repos/sampleImagesRepo.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "395bdffc5f0f446a5ebe296259c79d52",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/lib/repos/syncQueueRepo.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "882d1996de1e49126de1b3d2d2897b73",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/lib/repos/datasetQueueRepo.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "2943eb238ad45dfb722c232ab0a1b54f",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/lib/repos/workOrderRepo.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "7b367c82e6954ff440221392bdce6202",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/lib/repos/overridesRepo.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "185a31339a8ed58bc7359d0a8e1cac8e",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/lib/repos/trainingDatasetsRepo.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "0a2f6eaee5c6dea38b2ee85e8dab0965",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/lib/repos/aiModelsRepo.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "d1fef11a0b5291a31d9efcb6e274c2c0",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/lib/repos/eventLogRepo.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "571079845438847129cd875910c6b96e",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/lib/repos/modelsRepo.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "27e1953a73bde3732bd4a09be4f62e76",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/lib/repos/usersRepo.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "d6fde0bf9eef77ad7b0f3d16b8fa622d",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/lib/repos/rolesRepo.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "5081d04a47532278a8971b6a25720bd1",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/lib/repos/masterDataRepo.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "cd17c0e3fe8d7a6aa6d403109c316e2a",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/lib/repos/defectClassesRepo.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "e1e68dda95c7b4f7239c2b6abfe30a09",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/lib/auth/rbac.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "26a17bdd286487ff780a1c2d0986e7ab",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/lib/auth/apiKeyAuth.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "bd437eda6c58e1d19e38ef444ca2e08e",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/lib/auth/apiAuth.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "6e21877c3888ce103a18b89c00c04264",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/lib/auth/sectionAccess.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "cd542fe9783d6e2cf1ff4a4668c7f106",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/lib/auth/__tests__/sectionAccess.test.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "4f201cd6fc0887204d9427246496f234",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/lib/auth/__tests__/rbac.test.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "e589a1ea8d5aeed1f64297712395eee9",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/lib/utils/inspectionReview.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "3c0aa658358a3bb7c8d00989155c74c0",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/lib/utils/cropImage.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "62422b259f3195f1c2337531a9c5b705",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/lib/utils/apiResponse.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "f00be511c34a9dd626bdd4e66f682508",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/lib/utils/rateLimit.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "c7ee4adb79df188534db69243e9b86a0",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/lib/utils/roleUtils.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "604196e749929475e4d97c9ce18154ca",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/lib/utils/serialNumber.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "90c330ca0538fd94a1f5d3232f4c8911",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/lib/utils/csrf.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "ceb981c280c83bee35af2cf4e2e3eecb",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/lib/utils/version.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "03d4fe72666b36ccf3eb410f69d8ea13",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/lib/utils/sanitize.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "8a8a99d7f1d06c9fce4674d51570b261",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/lib/utils/authFetch.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "e09de6ac487996809df462785487ddf0",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/lib/utils/imageNaming.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "e762d4848e340898eae13feb2509182d",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/lib/validations/workOrderSchema.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "d173254ebf2427a4d9be316a3d0834ea",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/lib/validations/aiSchemas.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "860c8547b310137cb10751d376f1a7ba",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/lib/validations/inspectionSchema.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "1434de8e6ae560c16bc25080160ecd09",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/lib/validations/schemas.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "dd0fd539b400e4ad858bfeb9126374bf",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/lib/validations/validate.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "8c07a847cebe1656aa4585ea32053126",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/lib/validations/__tests__/schemas.test.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "303e069584cd26d309696d243a33956e",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/lib/supabase/server.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "6292c77cfa7078ebbe02c3808dc68ee2",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/lib/realtime/subscriptions.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "ea7d21e72186b841f28b229cc77a244a",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/lib/sync/syncLock.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "d5d85dcaaea67f0a96a3fce073e27fd0",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/lib/sync/onlineCheck.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "4a104b96a71776d20508660f7f23b6f8",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/lib/sync/cloudImageUpload.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "c466dd954cb27e4f8c8574d4894711c8",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/lib/sync/supabaseAdmin.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "49105f64549a07f6505c73ca48f77b73",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/lib/sync/index.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "a29e0b86d659fd32d9aa5bfb3b8e6f2f",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/lib/sync/formatters.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "14425d8497c0066608274d442590002e",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/lib/sync/syncToCloud.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "e115b80c5ce758444e09054258c81d6b",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/lib/services/lineStateStore.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "347e363d34e3dca3459ab2c565700871",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/lib/services/imageService.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "e514cdebc9e549b6b7b34961044692f0",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/lib/services/inspectionService.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "7044091cc37412d2825973ff7a6da4fa",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/lib/services/plcSignal.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "7482d694606e2785e637eeb0448bc9b3",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/lib/services/updatePipeline.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "b242a32810f8385cef3ced00b3178a11",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/lib/services/aiBackendService.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "64930b4f0cc8dd0f544dacf2561f2873",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/i18n/en.json": {
+    "mtime": 1773529058.0,
+    "ast_hash": "db641a13eafa0e7603bd8c99b0d3ecc1",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/i18n/id.json": {
+    "mtime": 1773529058.0,
+    "ast_hash": "d4a95781a22614a9dea067a1d66f86b6",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/e2e/auth.spec.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "1c1eadb76f65b5eb89218b22a12f3c14",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/e2e/helpers.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "ca24afb4ea9feb9e88b4702d12de382c",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/data/mockUsers.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "734786fa7e56c62bf9cf452c748bfff9",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/data/mockEvents.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "1a374219c5d8643e234d15a7997faf7a",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/data/masterData.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "f37b2546766e8207376e25f0a59f7707",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/data/mockNotifications.js": {
+    "mtime": 1773529058.0,
+    "ast_hash": "fb3e7c28b61d602af9650ea9a2645807",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/README.md": {
+    "mtime": 1773529056.0,
+    "ast_hash": "0d10a1480c0373bd0569bd20fc8ba101",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/CLAUDE.md": {
+    "mtime": 1778936326.0,
+    "ast_hash": "57668ef1a51bb7625cd8fa001c41da13",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/.claude/agents/security-reviewer.md": {
+    "mtime": 1773529056.0,
+    "ast_hash": "195874cfbb93f63e4e5a54158b4cd076",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/.claude/agents/doc-generator.md": {
+    "mtime": 1773529056.0,
+    "ast_hash": "6883aff739325d5078fdf6258adac113",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/.claude/prompts/phase-16a-sync-foundation.md": {
+    "mtime": 1773529056.0,
+    "ast_hash": "5af397f6db76513ddc236565c030d3a5",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/.claude/prompts/phase-15-hmi-liveview-rework.md": {
+    "mtime": 1773529056.0,
+    "ast_hash": "ec432165887e8fe3a52379e014b8a2b3",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/.claude/prompts/phase-16d-sync-ui.md": {
+    "mtime": 1773529056.0,
+    "ast_hash": "1a1e1615e2c7b09adf5dc373557dbc45",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/.claude/prompts/phase-1-dashboard-backend.md": {
+    "mtime": 1773529056.0,
+    "ast_hash": "c54f055d48584c635bd65f6a9bdda309",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/.claude/prompts/phase-5-operator-page.md": {
+    "mtime": 1773529056.0,
+    "ast_hash": "1929b727b169255a73b55d269151aa7f",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/.claude/prompts/phase-9-ai-api-core.md": {
+    "mtime": 1773529056.0,
+    "ast_hash": "5f3856306d93e3d475660faa26b08b49",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/.claude/prompts/phase-6-inspection-api.md": {
+    "mtime": 1773529056.0,
+    "ast_hash": "9a884efed23428ca0ce2dd0d2a9991e4",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/.claude/prompts/phase-8-training-repos.md": {
+    "mtime": 1773529056.0,
+    "ast_hash": "a631af81beae7fb5e28f3561dd3fa1aa",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/.claude/prompts/phase-14-validation-db.md": {
+    "mtime": 1773529056.0,
+    "ast_hash": "5f142308d2f15d3a31c69391da9b892f",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/.claude/prompts/phase-12-sse-consumer.md": {
+    "mtime": 1773529056.0,
+    "ast_hash": "299a2406b854a8f689669edd6ba8364d",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/.claude/prompts/phase-3-override-annotation.md": {
+    "mtime": 1773529056.0,
+    "ast_hash": "96d33589383593351a622e172274188d",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/.claude/prompts/phase-11-ai-api-training.md": {
+    "mtime": 1773529056.0,
+    "ast_hash": "0e8f0befd9c42be8644273ca6d002da3",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/.claude/prompts/phase-7-ai-backend-auth.md": {
+    "mtime": 1773529056.0,
+    "ast_hash": "50fa9b678fbf83b2380ebed54e8d6e27",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/.claude/prompts/generate-docs.md": {
+    "mtime": 1773529056.0,
+    "ast_hash": "7c5b7a9f8713473038d4a17d1380f49f",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/.claude/prompts/ai-integration-prompt.md": {
+    "mtime": 1773529056.0,
+    "ast_hash": "c51792bd1394f4477df335301f8322e0",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/.claude/prompts/phase-16c-sync-api.md": {
+    "mtime": 1773529056.0,
+    "ast_hash": "c4ad55bd8e6b58573f5584c66ae58e16",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/.claude/prompts/phase-4-live-inspection.md": {
+    "mtime": 1773529056.0,
+    "ast_hash": "779f7e7555674532bd01e05ece0af617",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/.claude/prompts/phase-13-wo-hardening.md": {
+    "mtime": 1773529056.0,
+    "ast_hash": "4cf59edefd378b74ee68846224c6e210",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/.claude/prompts/phase-2-dashboard-frontend.md": {
+    "mtime": 1773529056.0,
+    "ast_hash": "118d574ddacfe8ab4edf07f538d1f9e9",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/.claude/prompts/phase-16b-sync-logic.md": {
+    "mtime": 1773529056.0,
+    "ast_hash": "467b09a063efefd202ee17b0044a0c4b",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/.claude/skills/industrial-docs/SKILL.md": {
+    "mtime": 1773529056.0,
+    "ast_hash": "15deee2328f2c2e126fb65e5acbb829b",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/docs/API_DOCUMENTATION.md": {
+    "mtime": 1773529058.0,
+    "ast_hash": "595d91d039d05c602b0d6de449f32be8",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/docs/DATABASE_SCHEMA.md": {
+    "mtime": 1773529058.0,
+    "ast_hash": "043106e31ae0c199df5014acb8fd3df0",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/docs/API_AI_BACKEND.md": {
+    "mtime": 1773529058.0,
+    "ast_hash": "a4f6cd5754a1de3a4975e4d945c3a858",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/docs/swagger/ai-backend-api.yaml": {
+    "mtime": 1773529058.0,
+    "ast_hash": "933233de7b39a93820c2813d255ef6c5",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/docs/plans/2026-02-26-hmi-improvements-v2-plan.md": {
+    "mtime": 1773529058.0,
+    "ast_hash": "e074ade8b0c1cd05c2f767bd3ba3a9e1",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/docs/plans/2026-02-15-ota-update-system-plan.md": {
+    "mtime": 1773529058.0,
+    "ast_hash": "8e03019c193b6ea450caeb9b32f35534",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/docs/plans/2026-02-05-hmi-improvements-design.md": {
+    "mtime": 1773529058.0,
+    "ast_hash": "da8adf8f98a59071323cfe0110b8ab78",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/docs/plans/2026-02-16-per-frame-override-review.md": {
+    "mtime": 1773529058.0,
+    "ast_hash": "eafebbe6bd8e25b378e3883c34ee8a01",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/docs/plans/2026-02-28-overlay-fixes-and-subboxes-design.md": {
+    "mtime": 1773529058.0,
+    "ast_hash": "e8d5475fff1eb299f5a916cb5244572e",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/docs/plans/2026-02-08-multi-cavity-inspection-design.md": {
+    "mtime": 1773529058.0,
+    "ast_hash": "70c697328adfb4322625b2f386162f52",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/docs/plans/2026-02-15-ota-update-system-design.md": {
+    "mtime": 1773529058.0,
+    "ast_hash": "59276bc18e635f13e7fd337836707b2b",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/docs/plans/2026-02-18-per-model-serial-simulation.md": {
+    "mtime": 1773529058.0,
+    "ast_hash": "8b07b892c74b5d95d86b4f8fd193daa9",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/public/bbox-editor.html": {
+    "mtime": 1773529058.0,
+    "ast_hash": "6c6aa2e681f53d839127b9a88aada320",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/public/docs/index.html": {
+    "mtime": 1773529058.0,
+    "ast_hash": "67243385e73e2dcea66b10e7b8eb111b",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/public/indusiaai-logo.png": {
+    "mtime": 1773529058.0,
+    "ast_hash": "96892c21b8e68e8df00cafb1fd9f3671",
+    "semantic_hash": ""
+  },
+  "/Users/alisadikin/Drive-D/Projects/indusia-ai-hmi/public/indusiaai-light.png": {
+    "mtime": 1773529058.0,
+    "ast_hash": "72b486fda8d0f878d1b79ba640fe0dd2",
+    "semantic_hash": ""
+  }
+}
